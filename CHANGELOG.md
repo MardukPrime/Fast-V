@@ -12,3 +12,4 @@ All notable changes to FastV are documented here.
 - Windows build assets and product metadata.
 - Architecture, design, ADR, API, operations and testing documentation.
 - CI workflow for Go and frontend checks.
+- Xray-core client integration documentation, including validated example configs.

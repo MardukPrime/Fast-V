@@ -51,7 +51,7 @@ FastV 是一个使用 Go + Wails v3 实现的桌面代理客户端，参考 v2ra
 | Profile | 一个代理节点配置 |
 | Subscription | 订阅，一个包含多个分享链接的远程地址 |
 | Core | 代理内核进程，例如 xray.exe |
-| Mixed Inbound | 同时支持 SOCKS5 和 HTTP 的本地代理入口 |
+| Local Inbound | Xray Socks 入站，同时兼容 SOCKS 和 HTTP 的本地代理入口 |
 | System Proxy | Windows 全局 HTTP/HTTPS 代理设置 |
 | TUN | 虚拟网卡模式，需要管理员权限 |
 | Event | Wails 后端主动推送给前端的事件 |
@@ -152,7 +152,7 @@ FastV 是一个使用 Go + Wails v3 实现的桌面代理客户端，参考 v2ra
 ┌───────────────────▼─────────────────────────────────┐
 │              Xray-core / sing-box                   │
 │                                                     │
-│  127.0.0.1:10808 Mixed Inbound                      │
+│  127.0.0.1:10808 Socks/HTTP Inbound                 │
 │         ↓ routing                                   │
 │  proxy / direct / block outbound                    │
 └─────────────────────────────────────────────────────┘
@@ -189,6 +189,8 @@ FastV 是一个使用 Go + Wails v3 实现的桌面代理客户端，参考 v2ra
 | 代理内核 | Xray-core | 协议和传输支持完整，贴近 v2rayN |
 | 第二内核 | sing-box | 支持 Hysteria2、TUIC、TUN 等扩展能力 |
 | 打包 | Wails build + Inno Setup/NSIS | Windows 安装包可控 |
+
+Xray-core 客户端集成细节见 [cores/xray/README.md](cores/xray/README.md)。
 
 ### 5.1 为什么不用 SSR
 
@@ -243,7 +245,6 @@ fastV/
 │   ├── operations/
 │   └── testing/
 ├── Taskfile.yml
-├── wails.json
 ├── go.mod
 └── README.md
 ```
@@ -571,7 +572,7 @@ Running  → Failed
 
 1. 检查当前节点是否存在且启用。
 2. 检查核心可执行文件是否存在、哈希是否匹配。
-3. 分配本地 Mixed 入站端口，默认 `127.0.0.1:10808`。
+3. 分配本地 Socks 入站端口，默认 `127.0.0.1:10808`。
 4. 解密节点凭据。
 5. 生成 Xray JSON 配置。
 6. 执行 `xray -test -config` 校验配置。
@@ -598,7 +599,7 @@ Windows 关键点：
 配置中的固定 tag：
 
 ```text
-mixed-in
+local-in
 proxy
 direct
 block
@@ -719,7 +720,7 @@ HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings
 默认：
 
 ```text
-Mixed Inbound: 127.0.0.1:10808
+Local Socks/HTTP Inbound: 127.0.0.1:10808
 ```
 
 系统代理地址：

@@ -242,13 +242,13 @@ fastV/
 │   ├── README.md
 │   ├── DESIGN.md
 │   ├── ARCHITECTURE.md
+│   ├── cores/
 │   ├── adr/
 │   ├── api/
 │   ├── operations/
 │   └── testing/
 │
 ├── Taskfile.yml
-├── wails.json
 ├── go.mod
 └── README.md
 ```

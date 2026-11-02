@@ -133,6 +133,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency rules.
 - [Documentation index](docs/README.md)
 - [Product and system design](docs/DESIGN.md)
 - [Architecture and directory rules](docs/ARCHITECTURE.md)
+- [Proxy core documentation](docs/cores/README.md)
+- [Xray-core client integration](docs/cores/xray/README.md)
 - [Architecture decision records](docs/adr/README.md)
 
 ## License
