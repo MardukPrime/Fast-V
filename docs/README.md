@@ -6,13 +6,14 @@
 
 1. [DESIGN.md](DESIGN.md)：产品目标、需求范围、系统设计和核心流程。
 2. [ARCHITECTURE.md](ARCHITECTURE.md)：代码分层、目录结构、依赖规则和包职责。
-3. [cores/README.md](cores/README.md)：代理内核文档入口。
-4. [cores/xray/README.md](cores/xray/README.md)：Xray-core 客户端集成文档。
-5. [adr/README.md](adr/README.md)：重要架构决策记录。
-6. [api/wails-services.md](api/wails-services.md)：Wails Service 接口契约。
-7. [api/events.md](api/events.md)：后端事件名和载荷。
-8. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
-9. [operations/build.md](operations/build.md)：构建、打包和发布。
+3. [ui/DESIGN_RULES.md](ui/DESIGN_RULES.md)：UI 布局、组件、交互和页面设计规则。
+4. [cores/README.md](cores/README.md)：代理内核文档入口。
+5. [cores/xray/README.md](cores/xray/README.md)：Xray-core 客户端集成文档。
+6. [adr/README.md](adr/README.md)：重要架构决策记录。
+7. [api/wails-services.md](api/wails-services.md)：Wails Service 接口契约。
+8. [api/events.md](api/events.md)：后端事件名和载荷。
+9. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
+10. [operations/build.md](operations/build.md)：构建、打包和发布。
 
 ## 文档目录
 
@@ -21,6 +22,8 @@ docs/
 ├── README.md
 ├── DESIGN.md
 ├── ARCHITECTURE.md
+├── ui/
+│   └── DESIGN_RULES.md
 ├── cores/
 │   ├── README.md
 │   └── xray/
@@ -60,6 +63,7 @@ docs/
 
 - 需求变化更新 `DESIGN.md`。
 - 分层、目录、依赖变化更新 `ARCHITECTURE.md`。
+- UI 布局、组件或交互规则变化更新 `ui/`。
 - 内核版本、配置映射或进程管理变化更新 `cores/`。
 - 重要技术选型新增 ADR，不直接改写历史 ADR。
 - Wails Service 或事件变化必须同步更新 `api/`。

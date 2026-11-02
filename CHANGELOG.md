@@ -13,3 +13,4 @@ All notable changes to FastV are documented here.
 - Architecture, design, ADR, API, operations and testing documentation.
 - CI workflow for Go and frontend checks.
 - Xray-core client integration documentation, including validated example configs.
+- UI design rules for layout, components, pages, routing editor and accessibility.

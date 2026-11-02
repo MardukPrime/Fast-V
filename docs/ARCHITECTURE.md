@@ -242,6 +242,7 @@ fastV/
 │   ├── README.md
 │   ├── DESIGN.md
 │   ├── ARCHITECTURE.md
+│   ├── ui/
 │   ├── cores/
 │   ├── adr/
 │   ├── api/
