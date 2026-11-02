@@ -36,12 +36,15 @@ fastV/
 ├── dashboardservice.go         # 仪表盘聚合数据
 ├── subscriptionservice.go      # 订阅拉取、更新、删除和节点查询
 ├── settingsservice.go          # 基础设置
+├── coreservice.go              # Xray 内核版本检测、下载和安装
 ├── models.go                   # 前端 DTO 和内部数据模型
 ├── store.go                    # 本地 JSON 持久化
 ├── parser.go                   # 订阅格式和分享链接解析
 ├── parser_test.go
 ├── subscription_service_test.go
 ├── settings_service_test.go
+├── core_service_test.go
+├── core_download_test.go
 ├── frontend/
 │   ├── index.html
 │   ├── package.json
@@ -124,6 +127,15 @@ SolidJS 页面
 - 读取、保存和重置基础设置。
 - 校验主题、语言、代理模式和订阅更新间隔。
 
+### CoreService
+
+- 检测已安装的 Xray-core 版本。
+- 查询 GitHub 最新 Release。
+- 根据平台选择对应的 Xray-core 压缩包。
+- 下载、校验 SHA-256、解压并验证新内核。
+- 安装 `xray.exe`、Geo 数据和版本记录。
+- 支持手动检查和下载，也支持启动后自动检查更新。
+
 ---
 
 ## 4. 数据流
@@ -164,6 +176,21 @@ SettingsPage
 
 ---
 
+### 检查并更新内核
+
+```text
+SettingsPage
+  -> CoreService.CheckLatest / DownloadLatest / AutoUpdate
+  -> GitHub Release API
+  -> download asset
+  -> SHA-256 verify
+  -> extract zip
+  -> run xray version
+  -> install to data/cores/xray
+  -> CoreInfo
+```
+
+---
 ## 5. 本地持久化
 
 当前使用本地 JSON：

@@ -1,7 +1,9 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
-import { AppService, SettingsService } from "../bindings/github.com/MardukPrime/Fast-V";
-import type { AppInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V";
+import { Events } from "@wailsio/runtime";
+
+import { AppService, CoreService, SettingsService } from "../bindings/github.com/MardukPrime/Fast-V";
+import type { AppInfo, CoreInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V";
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
@@ -42,19 +44,29 @@ export default function App() {
   const [active, setActive] = createSignal<PageKey>("dashboard");
   const [info, setInfo] = createSignal<AppInfo | null>(null);
   const [settings, setSettings] = createSignal<Settings | null>(null);
+  const [core, setCore] = createSignal<CoreInfo | null>(null);
 
   onMount(async () => {
     try {
-      const [appInfo, loadedSettings] = await Promise.all([
+      const [appInfo, loadedSettings, coreInfo] = await Promise.all([
         AppService.Info(),
         SettingsService.Get(),
+        CoreService.Info(),
       ]);
       setInfo(appInfo);
       setSettings(loadedSettings);
+      setCore(coreInfo);
       applyTheme(loadedSettings.theme);
     } catch (error) {
       console.error("Failed to load application state", error);
     }
+  });
+
+  onMount(() => {
+    const off = Events.On("core:state", (event) => {
+      setCore(event.data as CoreInfo);
+    });
+    onCleanup(off);
   });
 
   const handleSettingsSaved = (next: Settings) => {
@@ -94,10 +106,10 @@ export default function App() {
 
         <div class="sidebar-footer">
           <div class="footer-status">
-            <span class="status-dot idle" />
+            <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
             <div>
-              <strong>内核未启动</strong>
-              <small>Xray-core 尚未接入</small>
+              <strong>{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</strong>
+              <small>{core()?.installed ? "内核已就绪" : "可在设置中下载"}</small>
             </div>
           </div>
           <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
@@ -113,7 +125,7 @@ export default function App() {
           </div>
           <div class="topbar-actions">
             <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
-            <span class="status-chip muted"><span class="status-dot idle" />Xray 未启动</span>
+            <span classList={{ "status-chip": true, muted: !core()?.installed }}><span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</span>
           </div>
         </header>
 

@@ -5,10 +5,11 @@ import "sort"
 // DashboardService provides aggregate data for the overview page.
 type DashboardService struct {
 	store *Store
+	core  *CoreService
 }
 
-func NewDashboardService(store *Store) *DashboardService {
-	return &DashboardService{store: store}
+func NewDashboardService(store *Store, core *CoreService) *DashboardService {
+	return &DashboardService{store: store, core: core}
 }
 
 func (s *DashboardService) ServiceName() string {
@@ -40,14 +41,20 @@ func (s *DashboardService) Summary() DashboardSummary {
 		recentViews = append(recentViews, toSubscriptionView(sub))
 	}
 
+	coreInfo := s.core.Info()
+	coreVersion := coreInfo.Version
+	if coreVersion == "" {
+		coreVersion = "未安装"
+	}
+
 	return DashboardSummary{
 		App:                 NewAppService().Info(),
 		SubscriptionCount:   len(snapshot.Subscriptions),
 		NodeCount:           len(snapshot.Nodes),
 		ActiveSubscriptions: active,
 		LastUpdatedAt:       lastUpdated,
-		CoreStatus:          "not_configured",
-		CoreVersion:         "not connected",
+		CoreStatus:          coreInfo.Status,
+		CoreVersion:         coreVersion,
 		Settings:            snapshot.Settings,
 		RecentSubscriptions: recentViews,
 	}

@@ -16,3 +16,4 @@ All notable changes to FastV are documented here.
 - UI design rules for layout, components, pages, routing editor and accessibility.
 - Dashboard, subscription management and basic settings are implemented and running.
 - Liquid-glass UI refresh with restrained translucency, tighter typography, navigation icons, dashboard metrics and theme previews.
+- Xray-core version detection, GitHub release check, SHA-256 verified download, local install and optional automatic updates.

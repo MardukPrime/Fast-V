@@ -17,6 +17,19 @@ function formatTime(value: string) {
   return date.toLocaleString();
 }
 
+function coreStatusLabel(status: string) {
+  switch (status) {
+    case "ready": return "已就绪";
+    case "up_to_date": return "已是最新";
+    case "update_available": return "可更新";
+    case "checking": return "检查中";
+    case "downloading": return "下载中";
+    case "not_installed": return "未安装";
+    case "error": return "异常";
+    default: return "未安装";
+  }
+}
+
 export default function DashboardPage(props: DashboardProps) {
   const [summary, setSummary] = createSignal<DashboardSummary | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -68,8 +81,8 @@ export default function DashboardPage(props: DashboardProps) {
           </div>
           <div class="workspace-metric">
             <span>内核</span>
-            <strong class="metric-text">{summary()?.coreStatus === "not_configured" ? "未连接" : summary()?.coreStatus ?? "未连接"}</strong>
-            <small>Xray-core</small>
+            <strong class="metric-text">{coreStatusLabel(summary()?.coreStatus ?? "")}</strong>
+            <small>{summary()?.coreVersion || "Xray-core"}</small>
           </div>
         </div>
       </section>

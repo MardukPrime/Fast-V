@@ -15,6 +15,30 @@ export interface AppInfo {
 }
 
 /**
+ * CoreInfo describes the locally installed Xray-core and the latest known release.
+ */
+export interface CoreInfo {
+    "installed": boolean;
+    "version": string;
+    "latestVersion": string;
+    "assetName": string;
+    "path": string;
+    "status": string;
+    "message": string;
+    "autoUpdate": boolean;
+    "checkedAt": string;
+}
+
+/**
+ * CoreUpdateResult summarizes an automatic or manual update operation.
+ */
+export interface CoreUpdateResult {
+    "updated": boolean;
+    "info": CoreInfo;
+    "message": string;
+}
+
+/**
  * DashboardSummary is the data shown on the overview page.
  */
 export interface DashboardSummary {
@@ -50,6 +74,7 @@ export interface Settings {
     "autoUpdate": boolean;
     "updateIntervalMinutes": number;
     "proxyMode": string;
+    "coreAutoUpdate": boolean;
 }
 
 /**

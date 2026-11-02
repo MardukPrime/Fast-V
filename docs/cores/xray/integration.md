@@ -66,6 +66,28 @@ FastV must:
 - refuse to launch a binary with an unexpected hash unless the user explicitly imports a custom core
 - keep the previous working core version for rollback
 
+### Automatic version check and update
+
+FastV uses the GitHub release API:
+
+```text
+GET https://api.github.com/repos/XTLS/Xray-core/releases/latest
+```
+
+Update flow:
+
+1. Detect the installed version with `xray version`.
+2. Compare the installed version with the latest release tag.
+3. Select the asset for the current platform and architecture.
+4. Download the archive.
+5. Verify the `sha256:` digest provided by the GitHub release asset.
+6. Extract the archive into a staging directory.
+7. Run `xray version` against the staged binary.
+8. Install the binary, Geo data and version record.
+9. Emit the updated core state to the frontend.
+
+The automatic update toggle is stored in the local settings. When enabled, FastV checks after startup and downloads a newer release. Manual check and download are always available.
+
 ### Supported commands
 
 FastV uses these upstream commands:

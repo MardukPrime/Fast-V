@@ -18,7 +18,8 @@ func main() {
 	}
 
 	appService := NewAppService()
-	dashboardService := NewDashboardService(store)
+	coreService := NewCoreService(store)
+	dashboardService := NewDashboardService(store, coreService)
 	subscriptionService := NewSubscriptionService(store)
 	settingsService := NewSettingsService(store)
 
@@ -27,6 +28,7 @@ func main() {
 		Description: "A modern proxy client built with Wails v3",
 		Services: []application.Service{
 			application.NewService(appService),
+			application.NewService(coreService),
 			application.NewService(dashboardService),
 			application.NewService(subscriptionService),
 			application.NewService(settingsService),

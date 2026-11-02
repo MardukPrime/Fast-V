@@ -1,7 +1,9 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
-import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V";
-import type { Settings } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { Events } from "@wailsio/runtime";
+
+import { CoreService, SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V";
+import type { CoreInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V";
 import Icon from "../components/Icon";
 
 type SettingsProps = {
@@ -14,6 +16,7 @@ const defaults: Settings = {
   autoUpdate: false,
   updateIntervalMinutes: 360,
   proxyMode: "rule",
+  coreAutoUpdate: true,
 };
 
 const themes = [
@@ -28,17 +31,37 @@ const proxyModes = [
   { value: "direct", label: "直连", hint: "不经过代理" },
 ];
 
+function coreStatusLabel(status: string) {
+  switch (status) {
+    case "ready": return "已就绪";
+    case "up_to_date": return "已是最新";
+    case "update_available": return "可更新";
+    case "checking": return "检查中";
+    case "downloading": return "下载中";
+    case "not_installed": return "未安装";
+    case "error": return "异常";
+    default: return status || "未安装";
+  }
+}
+
 export default function SettingsPage(props: SettingsProps) {
   const [settings, setSettings] = createSignal<Settings>(defaults);
+  const [core, setCore] = createSignal<CoreInfo | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
+  const [coreBusy, setCoreBusy] = createSignal("");
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
 
   const load = async () => {
     setLoading(true);
     try {
-      setSettings(await SettingsService.Get());
+      const [loadedSettings, loadedCore] = await Promise.all([
+        SettingsService.Get(),
+        CoreService.Info(),
+      ]);
+      setSettings(loadedSettings);
+      setCore(loadedCore);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -47,6 +70,17 @@ export default function SettingsPage(props: SettingsProps) {
   };
 
   onMount(load);
+
+  onMount(() => {
+    const off = Events.On("core:state", (event) => {
+      const info = event.data as CoreInfo;
+      setCore(info);
+      if (info.status === "checking") setCoreBusy("checking");
+      else if (info.status === "downloading") setCoreBusy("downloading");
+      else setCoreBusy("");
+    });
+    onCleanup(off);
+  });
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings({ ...settings(), [key]: value });
@@ -83,6 +117,38 @@ export default function SettingsPage(props: SettingsProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const checkCore = async () => {
+    setCoreBusy("checking");
+    setError("");
+    setMessage("");
+    try {
+      const info = await CoreService.CheckLatest();
+      setCore(info);
+      setMessage(info.message);
+    } catch (err) {
+      setCore(await CoreService.Info());
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCoreBusy("");
+    }
+  };
+
+  const downloadCore = async () => {
+    setCoreBusy("downloading");
+    setError("");
+    setMessage("");
+    try {
+      const info = await CoreService.DownloadLatest();
+      setCore(info);
+      setMessage(info.message);
+    } catch (err) {
+      setCore(await CoreService.Info());
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCoreBusy("");
     }
   };
 
@@ -197,6 +263,62 @@ export default function SettingsPage(props: SettingsProps) {
                 type="checkbox"
                 checked={settings().autoUpdate}
                 onChange={(event) => update("autoUpdate", event.currentTarget.checked)}
+              />
+              <span class="switch-track"><span class="switch-thumb" /></span>
+            </span>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <div class="heading-with-icon">
+              <span class="heading-icon green"><Icon name="server" size={17} /></span>
+              <div>
+                <h3>Xray 内核</h3>
+                <span>版本检测与下载</span>
+              </div>
+            </div>
+            <span classList={{ "tag": true, success: core()?.status === "ready" || core()?.status === "up_to_date", neutral: !core() || (core()?.status !== "ready" && core()?.status !== "up_to_date"), danger: core()?.status === "error" }}>
+              {coreStatusLabel(core()?.status ?? "")}
+            </span>
+          </div>
+
+          <div class="core-summary">
+            <div class="core-version">
+              <span>当前版本</span>
+              <strong>{core()?.version || "未安装"}</strong>
+            </div>
+            <div class="core-version">
+              <span>最新版本</span>
+              <strong>{core()?.latestVersion || "未检查"}</strong>
+            </div>
+            <div class="core-version">
+              <span>更新方式</span>
+              <strong>{settings().coreAutoUpdate ? "自动检测" : "手动检查"}</strong>
+            </div>
+          </div>
+
+          <p class="core-message">{core()?.message || "可以检查最新 Xray-core 版本。"}</p>
+
+          <div class="core-actions">
+            <button class="btn secondary" type="button" onClick={checkCore} disabled={coreBusy() !== ""}>
+              <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? "检查中..." : "检查更新"}
+            </button>
+            <button class="btn primary" type="button" onClick={downloadCore} disabled={coreBusy() !== ""}>
+              <Icon name="external" size={14} /> {coreBusy() === "downloading" ? "下载中..." : "下载最新版"}
+            </button>
+          </div>
+
+          <label class="switch-row">
+            <span>
+              <strong>自动检查并下载内核更新</strong>
+              <small>启动后检查 Xray-core 新版本，并在可用时自动下载安装。</small>
+            </span>
+            <span classList={{ "switch": true, on: settings().coreAutoUpdate }}>
+              <input
+                type="checkbox"
+                checked={settings().coreAutoUpdate}
+                onChange={(event) => update("coreAutoUpdate", event.currentTarget.checked)}
               />
               <span class="switch-track"><span class="switch-thumb" /></span>
             </span>

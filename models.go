@@ -18,6 +18,7 @@ type Settings struct {
 	AutoUpdate            bool   `json:"autoUpdate"`
 	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
 	ProxyMode             string `json:"proxyMode"`
+	CoreAutoUpdate        bool   `json:"coreAutoUpdate"`
 }
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.
@@ -90,4 +91,24 @@ type UpdateAllResult struct {
 	Failed        int                `json:"failed"`
 	Subscriptions []SubscriptionView `json:"subscriptions"`
 	Errors        []string           `json:"errors"`
+}
+
+// CoreInfo describes the locally installed Xray-core and the latest known release.
+type CoreInfo struct {
+	Installed     bool   `json:"installed"`
+	Version       string `json:"version"`
+	LatestVersion string `json:"latestVersion"`
+	AssetName     string `json:"assetName"`
+	Path          string `json:"path"`
+	Status        string `json:"status"`
+	Message       string `json:"message"`
+	AutoUpdate    bool   `json:"autoUpdate"`
+	CheckedAt     string `json:"checkedAt"`
+}
+
+// CoreUpdateResult summarizes an automatic or manual update operation.
+type CoreUpdateResult struct {
+	Updated bool     `json:"updated"`
+	Info    CoreInfo `json:"info"`
+	Message string   `json:"message"`
 }

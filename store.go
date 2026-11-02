@@ -36,6 +36,7 @@ func defaultSettings() Settings {
 		AutoUpdate:            false,
 		UpdateIntervalMinutes: 360,
 		ProxyMode:             "rule",
+		CoreAutoUpdate:        true,
 	}
 }
 

@@ -16,7 +16,9 @@ Implemented:
 - Base64 subscription fetching and common share-link parsing.
 - Basic settings for theme, language, proxy mode and subscription update interval.
 - Local JSON persistence under the user data directory with a workspace fallback.
-- Unit tests for the parser, subscription service and settings service.
+- Unit tests for the parser, subscription service, settings service and core updater.
+- Xray-core version detection, latest release check, SHA-256 verified download and local installation.
+- Automatic core update setting with startup check and download.
 
 ## Quick Start
 
@@ -81,12 +83,15 @@ fastV/
 ├── dashboardservice.go         # Dashboard aggregate service
 ├── subscriptionservice.go      # Subscription fetching and node management
 ├── settingsservice.go          # Basic settings service
+├── coreservice.go              # Xray-core detection, download and install
 ├── models.go                   # Frontend-facing models
 ├── store.go                    # Local JSON persistence
 ├── parser.go                   # Subscription and share-link parser
 ├── parser_test.go
 ├── subscription_service_test.go
 ├── settings_service_test.go
+├── core_service_test.go
+├── core_download_test.go
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx
@@ -144,7 +149,7 @@ The application uses Wails v3 services as the boundary between Go and TypeScript
 SolidJS pages
   -> generated Wails bindings
   -> root Go services
-  -> Store / Parser / HTTP client
+  -> Store / Parser / HTTP client / Xray updater
 ```
 
 Services:
@@ -152,7 +157,8 @@ Services:
 - `AppService`: application metadata.
 - `DashboardService`: aggregate counts and recent subscriptions.
 - `SubscriptionService`: add, update, delete, list and inspect nodes.
-- `SettingsService`: read, save and reset basic settings.
+- SettingsService: read, save and reset basic settings.
+- CoreService: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
 
 The current store is a small local JSON file. It is intentionally isolated behind `Store` so it can be replaced with SQLite without changing the frontend contract.
 
