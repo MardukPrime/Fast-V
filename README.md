@@ -12,7 +12,7 @@ Milestone M0: project scaffold.
 - Go backend uses a thin root entrypoint and an `internal/bootstrap` composition root.
 - SolidJS frontend is integrated with generated Wails bindings.
 - Application metadata service is available to the UI.
-- Windows build assets and packaging configuration are initialized.
+- Build assets and platform packaging files are kept local and excluded from version control.
 - Product and architecture documents live under `docs/`.
 
 ## Quick Start
@@ -45,6 +45,8 @@ wails3 dev
 ```
 
 ### Production build
+
+Build assets are intentionally not tracked in this repository. A local Wails v3 build setup is required before running:
 
 ```bash
 wails3 build
@@ -81,14 +83,30 @@ fastV/
 │   ├── src/                        # SolidJS application
 │   ├── bindings/                   # Generated TypeScript bindings
 │   └── package.json
-├── build/                          # Wails platform build assets
 ├── docs/                           # Design, architecture, ADR and operations docs
 ├── go.mod
-├── Taskfile.yml
 └── README.md
 ```
 
 The root `main.go` is intentionally minimal. Wails embeds `frontend/dist` from the module root, so the entrypoint stays at the root while application wiring lives in `internal/bootstrap`.
+
+## Repository Policy
+
+This repository tracks source code and documentation only. Build configuration, platform assets, packaged binaries, generated distributions and local tooling are excluded.
+
+Not tracked:
+
+```text
+build/
+Taskfile.yml
+.github/workflows/
+bin/
+frontend/dist/
+frontend/node_modules/
+.tools/
+*.exe
+*.syso
+```
 
 ## Planned Stack
 

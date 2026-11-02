@@ -232,7 +232,6 @@ fastV/
 │   ├── bindings/                      # Wails v3 自动生成
 │   └── package.json
 │
-├── build/
 ├── scripts/
 ├── test/
 │   ├── integration/
@@ -249,10 +248,11 @@ fastV/
 │   ├── operations/
 │   └── testing/
 │
-├── Taskfile.yml
 ├── go.mod
 └── README.md
 ```
+
+> 版本库只跟踪源码和文档。build/、Taskfile.yml、.github/workflows/、bin/、frontend/dist/、frontend/node_modules/、.tools/ 等构建配置、构建产物和本地工具不纳入版本控制。
 
 ---
 

@@ -231,7 +231,6 @@ fastV/
 │   └── proto/                      # 可选：Xray Stats gRPC
 ├── configs/                        # 内置模板和默认配置
 ├── frontend/                       # SolidJS 前端和生成 bindings
-├── build/
 ├── scripts/
 ├── test/
 │   ├── integration/
@@ -244,7 +243,6 @@ fastV/
 │   ├── api/
 │   ├── operations/
 │   └── testing/
-├── Taskfile.yml
 ├── go.mod
 └── README.md
 ```

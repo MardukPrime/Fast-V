@@ -9,8 +9,8 @@ All notable changes to FastV are documented here.
 - Initial Wails v3 + Go project scaffold.
 - SolidJS frontend with generated Wails bindings.
 - Application metadata service.
-- Windows build assets and product metadata.
+- Source-only repository policy; build assets and platform packaging are local-only.
 - Architecture, design, ADR, API, operations and testing documentation.
-- CI workflow for Go and frontend checks.
+- Go and frontend verification commands documented in the README.
 - Xray-core client integration documentation, including validated example configs.
 - UI design rules for layout, components, pages, routing editor and accessibility.
