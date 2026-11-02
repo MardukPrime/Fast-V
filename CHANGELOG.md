@@ -15,3 +15,4 @@ All notable changes to FastV are documented here.
 - Xray-core client integration documentation, including validated example configs.
 - UI design rules for layout, components, pages, routing editor and accessibility.
 - Dashboard, subscription management and basic settings are implemented and running.
+- UI refresh with navigation icons, dashboard metrics, subscription cards and theme previews.

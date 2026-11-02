@@ -2,6 +2,8 @@ import { createSignal, onMount, Show } from "solid-js";
 
 import { AppService, SettingsService } from "../bindings/github.com/MardukPrime/Fast-V";
 import type { AppInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V";
+import Icon from "./components/Icon";
+import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -9,14 +11,14 @@ import SubscriptionsPage from "./pages/SubscriptionsPage";
 
 type PageKey = "dashboard" | "servers" | "subscriptions" | "routing" | "speedtest" | "logs" | "settings";
 
-const navigation: Array<{ key: PageKey; label: string; caption: string }> = [
-  { key: "dashboard", label: "概览", caption: "运行状态" },
-  { key: "servers", label: "服务器", caption: "节点列表" },
-  { key: "subscriptions", label: "订阅", caption: "远程配置" },
-  { key: "routing", label: "路由", caption: "分流规则" },
-  { key: "speedtest", label: "测速", caption: "延迟与速度" },
-  { key: "logs", label: "日志", caption: "运行记录" },
-  { key: "settings", label: "设置", caption: "应用偏好" },
+const navigation: Array<{ key: PageKey; label: string; caption: string; icon: IconName }> = [
+  { key: "dashboard", label: "概览", caption: "运行状态", icon: "dashboard" },
+  { key: "servers", label: "服务器", caption: "节点列表", icon: "server" },
+  { key: "subscriptions", label: "订阅", caption: "远程配置", icon: "subscription" },
+  { key: "routing", label: "路由", caption: "分流规则", icon: "route" },
+  { key: "speedtest", label: "测速", caption: "延迟与速度", icon: "speed" },
+  { key: "logs", label: "日志", caption: "运行记录", icon: "logs" },
+  { key: "settings", label: "设置", caption: "应用偏好", icon: "settings" },
 ];
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
@@ -71,36 +73,47 @@ export default function App() {
           </div>
         </div>
 
+        <div class="nav-section-label">工作区</div>
         <nav class="nav">
           {navigation.map((item) => (
             <button
               classList={{ "nav-item": true, active: active() === item.key }}
               onClick={() => setActive(item.key)}
             >
-              <span class="nav-label">{item.label}</span>
-              <span class="nav-caption">{item.caption}</span>
+              <span class="nav-icon"><Icon name={item.icon} size={17} /></span>
+              <span class="nav-copy">
+                <span class="nav-label">{item.label}</span>
+                <span class="nav-caption">{item.caption}</span>
+              </span>
+              <Show when={active() === item.key}>
+                <span class="nav-active-dot" />
+              </Show>
             </button>
           ))}
         </nav>
 
         <div class="sidebar-footer">
-          <span class="status-dot" />
-          <div>
-            <div>代理内核未启动</div>
-            <small>Xray-core 尚未接入</small>
+          <div class="footer-status">
+            <span class="status-dot idle" />
+            <div>
+              <strong>内核未启动</strong>
+              <small>Xray-core 尚未接入</small>
+            </div>
           </div>
+          <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
         </div>
       </aside>
 
       <main class="content">
         <header class="topbar">
-          <div>
+          <div class="topbar-title">
+            <span class="breadcrumb">FastV / {pageMeta[active()].title}</span>
             <h1>{pageMeta[active()].title}</h1>
             <p>{pageMeta[active()].subtitle}</p>
           </div>
           <div class="topbar-actions">
-            <span class="pill">Wails v{info()?.wailsVersion ?? "3.1.0"}</span>
-            <span class="pill">v{info()?.version ?? "0.1.0"}</span>
+            <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
+            <span class="status-chip muted"><span class="status-dot idle" />Xray 未启动</span>
           </div>
         </header>
 
