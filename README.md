@@ -1,19 +1,22 @@
 # FastV
 
-FastV is a desktop proxy client built with Go, Wails v3 and SolidJS. It is designed around the core workflows of v2rayN: profile management, share-link import, subscriptions, proxy lifecycle control, system proxy integration, routing, latency testing and log inspection.
+FastV is a desktop proxy client built with Go, Wails v3 and SolidJS. It follows the core workflows of v2rayN: profile management, share-link import, subscriptions, proxy lifecycle control, system proxy integration, routing, latency testing and log inspection.
 
 The project does not implement proxy protocols itself. Xray-core is used as the primary proxy core, with sing-box planned for additional protocols and TUN support.
 
 ## Status
 
-Milestone M0: project scaffold.
+Milestone M1: dashboard, subscriptions and basic settings are functional.
 
-- Wails v3 desktop shell is wired.
-- Go backend uses a thin root entrypoint and an `internal/bootstrap` composition root.
-- SolidJS frontend is integrated with generated Wails bindings.
-- Application metadata service is available to the UI.
-- Build assets and platform packaging files are kept local and excluded from version control.
-- Product and architecture documents live under `docs/`.
+Implemented:
+
+- Wails v3 application shell with a source-only repository policy.
+- Dashboard summary with subscription and node counts.
+- Subscription add, update, update-all, delete and node listing.
+- Base64 subscription fetching and common share-link parsing.
+- Basic settings for theme, language, proxy mode and subscription update interval.
+- Local JSON persistence under the user data directory with a workspace fallback.
+- Unit tests for the parser, subscription service and settings service.
 
 ## Quick Start
 
@@ -63,32 +66,45 @@ pnpm --dir frontend run build
 
 ```bash
 go build .
-go test ./internal/...
-go vet ./internal/...
+go test .
+go vet .
 ```
 
 ## Project Structure
 
+The project follows the Wails v3 service-based layout: a root `main.go`, root service files, and a Vite frontend.
+
 ```text
 fastV/
-├── main.go                         # Wails entrypoint and embedded frontend assets
-├── internal/
-│   ├── bootstrap/                  # Application assembly and composition root
-│   ├── buildinfo/                  # Product/version metadata
-│   └── transport/
-│       └── wails/
-│           ├── dto/                # Frontend-facing data transfer objects
-│           └── services/           # Wails v3 services
+├── main.go                     # Wails entrypoint and embedded frontend assets
+├── appservice.go               # Application metadata service
+├── dashboardservice.go         # Dashboard aggregate service
+├── subscriptionservice.go      # Subscription fetching and node management
+├── settingsservice.go          # Basic settings service
+├── models.go                   # Frontend-facing models
+├── store.go                    # Local JSON persistence
+├── parser.go                   # Subscription and share-link parser
+├── parser_test.go
+├── subscription_service_test.go
+├── settings_service_test.go
 ├── frontend/
-│   ├── src/                        # SolidJS application
-│   ├── bindings/                   # Generated TypeScript bindings
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── pages/
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── SubscriptionsPage.tsx
+│   │   │   ├── SettingsPage.tsx
+│   │   │   └── PlaceholderPage.tsx
+│   │   └── styles.css
+│   ├── bindings/               # Generated TypeScript bindings
 │   └── package.json
-├── docs/                           # Design, architecture, ADR and operations docs
+├── docs/
 ├── go.mod
+├── go.sum
 └── README.md
 ```
 
-The root `main.go` is intentionally minimal. Wails embeds `frontend/dist` from the module root, so the entrypoint stays at the root while application wiring lives in `internal/bootstrap`.
+Wails embeds `frontend/dist` from the module root, so `main.go` stays at the root.
 
 ## Repository Policy
 
@@ -103,6 +119,7 @@ Taskfile.yml
 bin/
 frontend/dist/
 frontend/node_modules/
+.fastv-data/
 .tools/
 *.exe
 *.syso
@@ -115,36 +132,29 @@ frontend/node_modules/
 | Desktop | Wails v3.1 |
 | Backend | Go |
 | Frontend | SolidJS + TypeScript + Vite |
-| Database | SQLite |
+| Persistence | Local JSON now, SQLite planned |
 | Proxy core | Xray-core (primary), sing-box (planned) |
 | Packaging | Wails build + Inno Setup/NSIS |
 
 ## Architecture
 
-The project uses a modular monolith with clear dependency boundaries:
+The application uses Wails v3 services as the boundary between Go and TypeScript:
 
 ```text
-main.go
-  -> internal/bootstrap
-  -> internal/transport/wails
-  -> internal/application
-  -> internal/domain
-
-internal/infrastructure -> implements application interfaces
-internal/platform       -> operating-system integrations
+SolidJS pages
+  -> generated Wails bindings
+  -> root Go services
+  -> Store / Parser / HTTP client
 ```
 
-Key rules:
+Services:
 
-- `main.go` contains only asset embedding and startup.
-- `internal/bootstrap` is the single composition root.
-- `internal/domain` contains pure business models and rules.
-- `internal/application` contains use cases and consumer-owned interfaces.
-- `internal/infrastructure` contains SQLite, proxy-core, HTTP and crypto adapters.
-- `internal/transport/wails` contains Wails services, DTOs and event mapping.
-- `internal/platform` isolates Windows-specific integrations.
+- `AppService`: application metadata.
+- `DashboardService`: aggregate counts and recent subscriptions.
+- `SubscriptionService`: add, update, delete, list and inspect nodes.
+- `SettingsService`: read, save and reset basic settings.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full dependency rules.
+The current store is a small local JSON file. It is intentionally isolated behind `Store` so it can be replaced with SQLite without changing the frontend contract.
 
 ## Documentation
 

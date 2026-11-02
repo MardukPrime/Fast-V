@@ -12,8 +12,8 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as dto$0 from "../dto/models.js";
+import * as $models from "./models.js";
 
-export function Info(): $CancellablePromise<dto$0.AppInfo> {
-    return $Call.ByID(1579782885);
+export function Info(): $CancellablePromise<$models.AppInfo> {
+    return $Call.ByID(3943185810);
 }

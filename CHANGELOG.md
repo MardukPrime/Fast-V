@@ -14,3 +14,4 @@ All notable changes to FastV are documented here.
 - Go and frontend verification commands documented in the README.
 - Xray-core client integration documentation, including validated example configs.
 - UI design rules for layout, components, pages, routing editor and accessibility.
+- Dashboard, subscription management and basic settings are implemented and running.

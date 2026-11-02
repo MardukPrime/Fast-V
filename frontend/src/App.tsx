@@ -1,21 +1,64 @@
-import { createSignal, onMount } from "solid-js";
+import { createSignal, onMount, Show } from "solid-js";
 
-import { AppService } from "../bindings/github.com/MardukPrime/Fast-V/internal/transport/wails/services";
-import type { AppInfo } from "../bindings/github.com/MardukPrime/Fast-V/internal/transport/wails/dto";
+import { AppService, SettingsService } from "../bindings/github.com/MardukPrime/Fast-V";
+import type { AppInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V";
+import DashboardPage from "./pages/DashboardPage";
+import PlaceholderPage from "./pages/PlaceholderPage";
+import SettingsPage from "./pages/SettingsPage";
+import SubscriptionsPage from "./pages/SubscriptionsPage";
 
-const navigation = ["概览", "服务器", "订阅", "路由", "测速", "日志", "设置"];
+type PageKey = "dashboard" | "servers" | "subscriptions" | "routing" | "speedtest" | "logs" | "settings";
+
+const navigation: Array<{ key: PageKey; label: string; caption: string }> = [
+  { key: "dashboard", label: "概览", caption: "运行状态" },
+  { key: "servers", label: "服务器", caption: "节点列表" },
+  { key: "subscriptions", label: "订阅", caption: "远程配置" },
+  { key: "routing", label: "路由", caption: "分流规则" },
+  { key: "speedtest", label: "测速", caption: "延迟与速度" },
+  { key: "logs", label: "日志", caption: "运行记录" },
+  { key: "settings", label: "设置", caption: "应用偏好" },
+];
+
+const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
+  dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
+  servers: { title: "服务器", subtitle: "节点管理将在后续版本接入" },
+  subscriptions: { title: "订阅", subtitle: "导入、更新和查看订阅节点" },
+  routing: { title: "路由", subtitle: "规则编辑器将在后续版本接入" },
+  speedtest: { title: "测速", subtitle: "节点测速将在后续版本接入" },
+  logs: { title: "日志", subtitle: "内核日志将在后续版本接入" },
+  settings: { title: "设置", subtitle: "应用基础偏好设置" },
+};
+
+function applyTheme(theme: string) {
+  const resolved = theme === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : theme;
+  document.documentElement.dataset.theme = resolved;
+}
 
 export default function App() {
+  const [active, setActive] = createSignal<PageKey>("dashboard");
   const [info, setInfo] = createSignal<AppInfo | null>(null);
-  const [active, setActive] = createSignal("概览");
+  const [settings, setSettings] = createSignal<Settings | null>(null);
 
   onMount(async () => {
     try {
-      setInfo(await AppService.Info());
+      const [appInfo, loadedSettings] = await Promise.all([
+        AppService.Info(),
+        SettingsService.Get(),
+      ]);
+      setInfo(appInfo);
+      setSettings(loadedSettings);
+      applyTheme(loadedSettings.theme);
     } catch (error) {
-      console.error("Failed to load application info", error);
+      console.error("Failed to load application state", error);
     }
   });
+
+  const handleSettingsSaved = (next: Settings) => {
+    setSettings(next);
+    applyTheme(next.theme);
+  };
 
   return (
     <div class="app-shell">
@@ -31,80 +74,55 @@ export default function App() {
         <nav class="nav">
           {navigation.map((item) => (
             <button
-              classList={{ "nav-item": true, active: active() === item }}
-              onClick={() => setActive(item)}
+              classList={{ "nav-item": true, active: active() === item.key }}
+              onClick={() => setActive(item.key)}
             >
-              {item}
+              <span class="nav-label">{item.label}</span>
+              <span class="nav-caption">{item.caption}</span>
             </button>
           ))}
         </nav>
 
         <div class="sidebar-footer">
           <span class="status-dot" />
-          <span>内核未启动</span>
+          <div>
+            <div>代理内核未启动</div>
+            <small>Xray-core 尚未接入</small>
+          </div>
         </div>
       </aside>
 
       <main class="content">
         <header class="topbar">
           <div>
-            <h1>{active()}</h1>
-            <p>FastV 项目基础框架</p>
+            <h1>{pageMeta[active()].title}</h1>
+            <p>{pageMeta[active()].subtitle}</p>
           </div>
           <div class="topbar-actions">
-            <span class="pill">Wails v3</span>
-            <span class="pill">SolidJS</span>
+            <span class="pill">Wails v{info()?.wailsVersion ?? "3.1.0"}</span>
+            <span class="pill">v{info()?.version ?? "0.1.0"}</span>
           </div>
         </header>
 
-        <section class="hero">
-          <div>
-            <span class="eyebrow">FASTV / FOUNDATION</span>
-            <h2>项目已初始化</h2>
-            <p>
-              Go 后端、Wails v3 桌面壳和 SolidJS 前端已经连接。下一步是节点管理、
-              订阅解析和 Xray-core 进程控制。
-            </p>
-          </div>
-          <div class="hero-badge">v{info()?.version ?? "0.1.0"}</div>
-        </section>
-
-        <section class="cards">
-          <article class="card">
-            <span class="card-label">应用名称</span>
-            <strong>{info()?.name ?? "FastV"}</strong>
-            <small>桌面代理客户端</small>
-          </article>
-          <article class="card">
-            <span class="card-label">运行平台</span>
-            <strong>{info() ? `${info()!.platform} / ${info()!.arch}` : "..."}</strong>
-            <small>Windows 优先</small>
-          </article>
-          <article class="card">
-            <span class="card-label">Wails</span>
-            <strong>{info()?.wailsVersion ?? "3.1.0"}</strong>
-            <small>Application + Service</small>
-          </article>
-          <article class="card">
-            <span class="card-label">构建版本</span>
-            <strong>{info()?.commit ?? "dev"}</strong>
-            <small>{info()?.buildDate ?? "unknown"}</small>
-          </article>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <h3>下一步</h3>
-            <span>Milestone M0</span>
-          </div>
-          <ul class="roadmap">
-            <li>建立 Profile、Subscription 和 Settings 领域模型</li>
-            <li>接入 SQLite 与 migration</li>
-            <li>实现分享链接解析与订阅更新</li>
-            <li>接入 Xray-core 配置生成与进程管理</li>
-            <li>实现系统代理设置与崩溃恢复</li>
-          </ul>
-        </section>
+        <Show when={active() === "dashboard"}>
+          <DashboardPage
+            info={info()}
+            settings={settings()}
+            onNavigate={(page) => setActive(page as PageKey)}
+          />
+        </Show>
+        <Show when={active() === "subscriptions"}>
+          <SubscriptionsPage />
+        </Show>
+        <Show when={active() === "settings"}>
+          <SettingsPage onSaved={handleSettingsSaved} />
+        </Show>
+        <Show when={active() !== "dashboard" && active() !== "subscriptions" && active() !== "settings"}>
+          <PlaceholderPage
+            title={pageMeta[active()].title}
+            description={pageMeta[active()].subtitle}
+          />
+        </Show>
       </main>
     </div>
   );

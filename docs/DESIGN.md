@@ -212,50 +212,39 @@ Wails 加载的是本地静态资源，不存在 SEO 和首屏服务端渲染需
 
 ### 6.1 目录结构
 
-项目采用模块化单体 + 六边形架构 + 按业务能力分包。完整目录规范和依赖规则见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+当前使用 Wails v3 官方推荐的服务式项目布局：根目录入口、根目录 Service、Vite 前端和自动生成 bindings。完整说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ```text
 fastV/
-├── main.go                         # 仅嵌入资源并调用 bootstrap.Run
-├── internal/
-│   ├── bootstrap/                  # 唯一组合根、Wails 组装、生命周期
-│   ├── domain/                     # 纯领域模型和规则
-│   ├── application/                # 用例编排和消费者接口
-│   ├── infrastructure/             # SQLite、Xray、HTTP、加密、日志
-│   ├── platform/                   # Windows 系统代理、Job Object、提权
-│   ├── transport/
-│   │   └── wails/                  # Wails Service、DTO、事件
-│   ├── apperr/                     # 统一错误码
-│   └── testutil/                   # 测试替身和 fixture
-├── api/
-│   └── proto/                      # 可选：Xray Stats gRPC
-├── configs/                        # 内置模板和默认配置
-├── frontend/                       # SolidJS 前端和生成 bindings
-├── scripts/
-├── test/
-│   ├── integration/
-│   └── fixtures/
+├── main.go                     # Wails 入口和资源嵌入
+├── appservice.go               # 应用元数据
+├── dashboardservice.go         # 仪表盘聚合
+├── subscriptionservice.go      # 订阅管理
+├── settingsservice.go          # 基础设置
+├── models.go                   # 数据模型
+├── store.go                    # 本地持久化
+├── parser.go                   # 分享链接和订阅解析
+├── *_test.go                   # 单元测试
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── pages/
+│   │   └── styles.css
+│   ├── bindings/               # Wails 自动生成
+│   └── package.json
 ├── docs/
-│   ├── README.md
-│   ├── DESIGN.md
-│   ├── ARCHITECTURE.md
-│   ├── adr/
-│   ├── api/
-│   ├── operations/
-│   └── testing/
 ├── go.mod
+├── go.sum
 └── README.md
 ```
 
 关键约束：
 
-- `main.go` 只负责资源嵌入和启动，不写业务。
-- `bootstrap` 是唯一依赖组装入口。
-- `domain` 不依赖 Wails、SQLite、Windows API。
-- `application` 定义自己需要的接口，不导入基础设施。
-- `infrastructure` 实现接口，不反向依赖 transport。
-- `transport/wails` 只做 DTO 转换、Service 适配和事件发送。
-- 不为未来可能的复用提前创建 `pkg/`；没有稳定外部 API 就不需要。
+- 根目录 Service 是 Go 和前端的边界。
+- 前端只通过 `frontend/bindings` 调用 Go。
+- `Store` 隔离持久化实现，后续可从 JSON 替换为 SQLite。
+- `build/`、`Taskfile.yml`、`bin/`、`frontend/dist/`、`frontend/node_modules/` 和 `.fastv-data/` 不入库。
+- 当前阶段不引入复杂 DDD 分层；业务增长后再拆分包。
 - 禁止创建 `utils`、`common`、`helpers` 这类无边界包。
 
 ### 6.2 领域模型

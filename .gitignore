@@ -61,6 +61,7 @@ dist/
 *.log
 
 # Runtime application data
+.fastv-data/
 data.db
 data.db-*
 runtime/

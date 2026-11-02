@@ -1,0 +1,93 @@
+package main
+
+// AppInfo describes the running FastV application.
+type AppInfo struct {
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Commit       string `json:"commit"`
+	BuildDate    string `json:"buildDate"`
+	Platform     string `json:"platform"`
+	Arch         string `json:"arch"`
+	WailsVersion string `json:"wailsVersion"`
+}
+
+// Settings contains the basic application settings.
+type Settings struct {
+	Theme                 string `json:"theme"`
+	Language              string `json:"language"`
+	AutoUpdate            bool   `json:"autoUpdate"`
+	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
+	ProxyMode             string `json:"proxyMode"`
+}
+
+// Subscription is the internal subscription record. URL contains a token and is never exposed directly.
+type Subscription struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	LastError string `json:"lastError"`
+	NodeCount int    `json:"nodeCount"`
+}
+
+// SubscriptionView is the frontend-safe subscription representation.
+type SubscriptionView struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Host      string `json:"host"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
+	LastError string `json:"lastError"`
+	NodeCount int    `json:"nodeCount"`
+}
+
+// SubscriptionInput is the payload for adding a subscription.
+type SubscriptionInput struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// Node is the internal parsed node record. Raw contains credentials and is never exposed directly.
+type Node struct {
+	ID             string `json:"id"`
+	SubscriptionID string `json:"subscriptionId"`
+	Name           string `json:"name"`
+	Protocol       string `json:"protocol"`
+	Address        string `json:"address"`
+	Port           int    `json:"port"`
+	Raw            string `json:"raw"`
+}
+
+// NodeView is the frontend-safe node representation.
+type NodeView struct {
+	ID             string `json:"id"`
+	SubscriptionID string `json:"subscriptionId"`
+	Name           string `json:"name"`
+	Protocol       string `json:"protocol"`
+	Address        string `json:"address"`
+	Port           int    `json:"port"`
+}
+
+// DashboardSummary is the data shown on the overview page.
+type DashboardSummary struct {
+	App                 AppInfo            `json:"app"`
+	SubscriptionCount   int                `json:"subscriptionCount"`
+	NodeCount           int                `json:"nodeCount"`
+	ActiveSubscriptions int                `json:"activeSubscriptions"`
+	LastUpdatedAt       string             `json:"lastUpdatedAt"`
+	CoreStatus          string             `json:"coreStatus"`
+	CoreVersion         string             `json:"coreVersion"`
+	Settings            Settings           `json:"settings"`
+	RecentSubscriptions []SubscriptionView `json:"recentSubscriptions"`
+}
+
+// UpdateAllResult summarizes a bulk subscription refresh.
+type UpdateAllResult struct {
+	Updated       int                `json:"updated"`
+	Failed        int                `json:"failed"`
+	Subscriptions []SubscriptionView `json:"subscriptions"`
+	Errors        []string           `json:"errors"`
+}
