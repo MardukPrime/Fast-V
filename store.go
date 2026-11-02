@@ -37,6 +37,12 @@ func defaultSettings() Settings {
 		UpdateIntervalMinutes: 360,
 		ProxyMode:             "rule",
 		CoreAutoUpdate:        true,
+		CoreType:              "xray",
+		XrayLocalPort:         10808,
+		XrayLogLevel:          "warning",
+		XrayMuxEnabled:        false,
+		XrayMuxConcurrency:    8,
+		XraySniffing:          true,
 	}
 }
 
@@ -141,6 +147,18 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.ProxyMode == "" {
 		value.ProxyMode = fallback.ProxyMode
+	}
+	if value.CoreType == "" {
+		value.CoreType = fallback.CoreType
+	}
+	if value.XrayLocalPort == 0 {
+		value.XrayLocalPort = fallback.XrayLocalPort
+	}
+	if value.XrayLogLevel == "" {
+		value.XrayLogLevel = fallback.XrayLogLevel
+	}
+	if value.XrayMuxConcurrency == 0 {
+		value.XrayMuxConcurrency = fallback.XrayMuxConcurrency
 	}
 	return value
 }

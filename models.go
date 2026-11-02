@@ -19,6 +19,12 @@ type Settings struct {
 	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
 	ProxyMode             string `json:"proxyMode"`
 	CoreAutoUpdate        bool   `json:"coreAutoUpdate"`
+	CoreType              string `json:"coreType"`
+	XrayLocalPort         int    `json:"xrayLocalPort"`
+	XrayLogLevel          string `json:"xrayLogLevel"`
+	XrayMuxEnabled        bool   `json:"xrayMuxEnabled"`
+	XrayMuxConcurrency    int    `json:"xrayMuxConcurrency"`
+	XraySniffing          bool   `json:"xraySniffing"`
 }
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.

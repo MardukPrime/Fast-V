@@ -17,6 +17,8 @@ Implemented:
 - Basic settings for theme, language, proxy mode and subscription update interval.
 - Local JSON persistence under the user data directory with a workspace fallback.
 - Unit tests for the parser, subscription service, settings service and core updater.
+- Frameless Wails window with a custom draggable title bar and window controls.
+- Client and core settings are separated; Xray-specific parameters only appear when Xray-core is selected.
 - Xray-core version detection, latest release check, SHA-256 verified download and local installation.
 - Automatic core update setting with startup check and download.
 

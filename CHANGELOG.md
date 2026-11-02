@@ -17,3 +17,5 @@ All notable changes to FastV are documented here.
 - Dashboard, subscription management and basic settings are implemented and running.
 - Liquid-glass UI refresh with restrained translucency, tighter typography, navigation icons, dashboard metrics and theme previews.
 - Xray-core version detection, GitHub release check, SHA-256 verified download, local install and optional automatic updates.
+- Frameless window mode with a custom title bar and window controls.
+- Settings split into client settings and core settings, with Xray-specific parameters shown conditionally.

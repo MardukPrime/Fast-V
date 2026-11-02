@@ -17,7 +17,9 @@ export type IconName =
   | "alert"
   | "close"
   | "edit"
-  | "external";
+  | "external"
+  | "minimize"
+  | "maximize";
 
 const iconPaths: Record<IconName, string[]> = {
   dashboard: ["M3 3h7v7H3z", "M14 3h7v7h-7z", "M3 14h7v7H3z", "M14 14h7v7h-7z"],
@@ -37,6 +39,8 @@ const iconPaths: Record<IconName, string[]> = {
   close: ["M6 6l12 12", "M18 6L6 18"],
   edit: ["M4 20h4L19 9l-4-4L4 16v4z"],
   external: ["M14 4h6v6", "M20 4l-9 9", "M18 14v5H5V6h5"],
+  minimize: ["M5 12h14"],
+  maximize: ["M6 6h12v12H6z"],
 };
 
 type IconProps = {

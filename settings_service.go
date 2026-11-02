@@ -27,6 +27,8 @@ func (s *SettingsService) Save(input Settings) (Settings, error) {
 	input.Theme = strings.TrimSpace(input.Theme)
 	input.Language = strings.TrimSpace(input.Language)
 	input.ProxyMode = strings.TrimSpace(input.ProxyMode)
+	input.CoreType = strings.TrimSpace(input.CoreType)
+	input.XrayLogLevel = strings.TrimSpace(input.XrayLogLevel)
 
 	if input.Theme != "dark" && input.Theme != "light" && input.Theme != "system" {
 		return Settings{}, errors.New("invalid theme")
@@ -36,6 +38,18 @@ func (s *SettingsService) Save(input Settings) (Settings, error) {
 	}
 	if input.ProxyMode != "rule" && input.ProxyMode != "global" && input.ProxyMode != "direct" {
 		return Settings{}, errors.New("invalid proxy mode")
+	}
+	if input.CoreType != "xray" && input.CoreType != "singbox" {
+		return Settings{}, errors.New("invalid core type")
+	}
+	if input.XrayLocalPort < 1 || input.XrayLocalPort > 65535 {
+		return Settings{}, errors.New("invalid Xray local port")
+	}
+	if input.XrayLogLevel != "debug" && input.XrayLogLevel != "info" && input.XrayLogLevel != "warning" && input.XrayLogLevel != "error" && input.XrayLogLevel != "none" {
+		return Settings{}, errors.New("invalid Xray log level")
+	}
+	if input.XrayMuxConcurrency < 1 || input.XrayMuxConcurrency > 128 {
+		return Settings{}, fmt.Errorf("Xray mux concurrency must be between 1 and 128")
 	}
 	if input.UpdateIntervalMinutes < 15 || input.UpdateIntervalMinutes > 1440 {
 		return Settings{}, fmt.Errorf("update interval must be between 15 and 1440 minutes")

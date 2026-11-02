@@ -1823,3 +1823,229 @@ label > span { font-size: 11px; }
     grid-template-columns: 1fr;
   }
 }
+/* Frameless window shell */
+body {
+  --wails-resize: all;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-shell {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.window-titlebar {
+  --wails-draggable: drag;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(30px) saturate(140%);
+  user-select: none;
+}
+
+:root[data-theme="light"] .window-titlebar {
+  border-bottom-color: rgba(15, 23, 42, 0.07);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.4));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.titlebar-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
+  color: #0a1117;
+  background: linear-gradient(145deg, rgba(230, 246, 255, 0.95), rgba(154, 196, 222, 0.9));
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.titlebar-drag {
+  flex: 1;
+  height: 100%;
+}
+
+.window-controls {
+  --wails-draggable: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.window-control {
+  --wails-draggable: no-drag;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 27px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.window-control:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.window-control.close:hover {
+  color: #fff;
+  background: #c42b3a;
+}
+
+/* Core selection and Xray parameters */
+.core-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.core-type-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.025);
+  text-align: left;
+}
+
+.core-type-option:hover {
+  border-color: var(--glass-border-strong);
+}
+
+.core-type-option.active {
+  border-color: rgba(182, 216, 239, 0.42);
+  background: rgba(182, 216, 239, 0.045);
+}
+
+.core-type-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.core-type-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.core-type-copy strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.core-type-copy small {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.core-params {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.core-param-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 9px;
+}
+
+.core-param-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.core-param-grid label small {
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.core-switch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 9px;
+}
+
+.core-switch-grid .switch-row {
+  margin-top: 0;
+}
+
+.core-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 28px 16px;
+  margin-top: 14px;
+  border: 1px dashed var(--glass-border-strong);
+  border-radius: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.core-placeholder strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.core-placeholder span {
+  max-width: 440px;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+@media (max-width: 1120px) {
+  .core-param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .core-type-options,
+  .core-switch-grid {
+    grid-template-columns: 1fr;
+  }
+}

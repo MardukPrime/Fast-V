@@ -75,6 +75,12 @@ export interface Settings {
     "updateIntervalMinutes": number;
     "proxyMode": string;
     "coreAutoUpdate": boolean;
+    "coreType": string;
+    "xrayLocalPort": number;
+    "xrayLogLevel": string;
+    "xrayMuxEnabled": boolean;
+    "xrayMuxConcurrency": number;
+    "xraySniffing": boolean;
 }
 
 /**

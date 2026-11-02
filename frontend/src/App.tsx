@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
-import { Events } from "@wailsio/runtime";
+import { Events, Window as AppWindow } from "@wailsio/runtime";
 
 import { AppService, CoreService, SettingsService } from "../bindings/github.com/MardukPrime/Fast-V";
 import type { AppInfo, CoreInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V";
@@ -30,7 +30,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   routing: { title: "路由", subtitle: "规则编辑器将在后续版本接入" },
   speedtest: { title: "测速", subtitle: "节点测速将在后续版本接入" },
   logs: { title: "日志", subtitle: "内核日志将在后续版本接入" },
-  settings: { title: "设置", subtitle: "应用基础偏好设置" },
+  settings: { title: "设置", subtitle: "客户端与内核参数分开管理" },
 };
 
 function applyTheme(theme: string) {
@@ -74,81 +74,113 @@ export default function App() {
     applyTheme(next.theme);
   };
 
+  const toggleMaximise = async () => {
+    if (await AppWindow.IsMaximised()) {
+      await AppWindow.Restore();
+    } else {
+      await AppWindow.Maximise();
+    }
+  };
+
   return (
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark">F</div>
-          <div>
-            <div class="brand-name">FastV</div>
-            <div class="brand-caption">Proxy Client</div>
-          </div>
+    <div class="app-root">
+      <header class="window-titlebar" onDblClick={toggleMaximise}>
+        <div class="titlebar-brand">
+          <span class="titlebar-mark">F</span>
+          <span>FastV</span>
         </div>
+        <div class="titlebar-drag" />
+        <div class="window-controls">
+          <button type="button" class="window-control" aria-label="最小化" onClick={() => AppWindow.Minimise()}>
+            <Icon name="minimize" size={11} />
+          </button>
+          <button type="button" class="window-control" aria-label="最大化或还原" onClick={toggleMaximise}>
+            <Icon name="maximize" size={10} />
+          </button>
+          <button type="button" class="window-control close" aria-label="关闭" onClick={() => AppWindow.Close()}>
+            <Icon name="close" size={11} />
+          </button>
+        </div>
+      </header>
 
-        <div class="nav-section-label">工作区</div>
-        <nav class="nav">
-          {navigation.map((item) => (
-            <button
-              classList={{ "nav-item": true, active: active() === item.key }}
-              onClick={() => setActive(item.key)}
-            >
-              <span class="nav-icon"><Icon name={item.icon} size={17} /></span>
-              <span class="nav-copy">
-                <span class="nav-label">{item.label}</span>
-                <span class="nav-caption">{item.caption}</span>
-              </span>
-              <Show when={active() === item.key}>
-                <span class="nav-active-dot" />
-              </Show>
-            </button>
-          ))}
-        </nav>
-
-        <div class="sidebar-footer">
-          <div class="footer-status">
-            <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
+      <div class="app-shell">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-mark">F</div>
             <div>
-              <strong>{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</strong>
-              <small>{core()?.installed ? "内核已就绪" : "可在设置中下载"}</small>
+              <div class="brand-name">FastV</div>
+              <div class="brand-caption">Proxy Client</div>
             </div>
           </div>
-          <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
-        </div>
-      </aside>
 
-      <main class="content">
-        <header class="topbar">
-          <div class="topbar-title">
-            <span class="breadcrumb">FastV / {pageMeta[active()].title}</span>
-            <h1>{pageMeta[active()].title}</h1>
-            <p>{pageMeta[active()].subtitle}</p>
-          </div>
-          <div class="topbar-actions">
-            <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
-            <span classList={{ "status-chip": true, muted: !core()?.installed }}><span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</span>
-          </div>
-        </header>
+          <div class="nav-section-label">工作区</div>
+          <nav class="nav">
+            {navigation.map((item) => (
+              <button
+                classList={{ "nav-item": true, active: active() === item.key }}
+                onClick={() => setActive(item.key)}
+              >
+                <span class="nav-icon"><Icon name={item.icon} size={17} /></span>
+                <span class="nav-copy">
+                  <span class="nav-label">{item.label}</span>
+                  <span class="nav-caption">{item.caption}</span>
+                </span>
+                <Show when={active() === item.key}>
+                  <span class="nav-active-dot" />
+                </Show>
+              </button>
+            ))}
+          </nav>
 
-        <Show when={active() === "dashboard"}>
-          <DashboardPage
-            info={info()}
-            settings={settings()}
-            onNavigate={(page) => setActive(page as PageKey)}
-          />
-        </Show>
-        <Show when={active() === "subscriptions"}>
-          <SubscriptionsPage />
-        </Show>
-        <Show when={active() === "settings"}>
-          <SettingsPage onSaved={handleSettingsSaved} />
-        </Show>
-        <Show when={active() !== "dashboard" && active() !== "subscriptions" && active() !== "settings"}>
-          <PlaceholderPage
-            title={pageMeta[active()].title}
-            description={pageMeta[active()].subtitle}
-          />
-        </Show>
-      </main>
+          <div class="sidebar-footer">
+            <div class="footer-status">
+              <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
+              <div>
+                <strong>{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</strong>
+                <small>{core()?.installed ? "内核已就绪" : "可在设置中下载"}</small>
+              </div>
+            </div>
+            <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
+          </div>
+        </aside>
+
+        <main class="content">
+          <header class="topbar">
+            <div class="topbar-title">
+              <span class="breadcrumb">FastV / {pageMeta[active()].title}</span>
+              <h1>{pageMeta[active()].title}</h1>
+              <p>{pageMeta[active()].subtitle}</p>
+            </div>
+            <div class="topbar-actions">
+              <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
+              <span classList={{ "status-chip": true, muted: !core()?.installed }}>
+                <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
+                {core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}
+              </span>
+            </div>
+          </header>
+
+          <Show when={active() === "dashboard"}>
+            <DashboardPage
+              info={info()}
+              settings={settings()}
+              onNavigate={(page) => setActive(page as PageKey)}
+            />
+          </Show>
+          <Show when={active() === "subscriptions"}>
+            <SubscriptionsPage />
+          </Show>
+          <Show when={active() === "settings"}>
+            <SettingsPage onSaved={handleSettingsSaved} />
+          </Show>
+          <Show when={active() !== "dashboard" && active() !== "subscriptions" && active() !== "settings"}>
+            <PlaceholderPage
+              title={pageMeta[active()].title}
+              description={pageMeta[active()].subtitle}
+            />
+          </Show>
+        </main>
+      </div>
     </div>
   );
 }

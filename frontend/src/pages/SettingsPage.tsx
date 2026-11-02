@@ -17,6 +17,12 @@ const defaults: Settings = {
   updateIntervalMinutes: 360,
   proxyMode: "rule",
   coreAutoUpdate: true,
+  coreType: "xray",
+  xrayLocalPort: 10808,
+  xrayLogLevel: "warning",
+  xrayMuxEnabled: false,
+  xrayMuxConcurrency: 8,
+  xraySniffing: true,
 };
 
 const themes = [
@@ -29,6 +35,19 @@ const proxyModes = [
   { value: "rule", label: "规则分流", hint: "按规则选择直连或代理" },
   { value: "global", label: "全局代理", hint: "所有流量走代理" },
   { value: "direct", label: "直连", hint: "不经过代理" },
+];
+
+const coreTypes = [
+  { value: "xray", label: "Xray-core", hint: "已接入，支持版本检测和自动更新" },
+  { value: "singbox", label: "sing-box", hint: "规划中，参数会在接入后开放" },
+];
+
+const logLevels = [
+  { value: "warning", label: "warning" },
+  { value: "info", label: "info" },
+  { value: "debug", label: "debug" },
+  { value: "error", label: "error" },
+  { value: "none", label: "none" },
 ];
 
 function coreStatusLabel(status: string) {
@@ -158,10 +177,10 @@ export default function SettingsPage(props: SettingsProps) {
         <section class="panel">
           <div class="panel-heading">
             <div class="heading-with-icon">
-              <span class="heading-icon indigo"><Icon name="dashboard" size={17} /></span>
+              <span class="heading-icon indigo"><Icon name="settings" size={17} /></span>
               <div>
-                <h3>外观</h3>
-                <span>主题和语言</span>
+                <h3>客户端设置</h3>
+                <span>只影响 FastV 的界面和使用体验</span>
               </div>
             </div>
           </div>
@@ -207,23 +226,11 @@ export default function SettingsPage(props: SettingsProps) {
               <small>语言资源将在后续版本接入。</small>
             </label>
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div class="heading-with-icon">
-              <span class="heading-icon cyan"><Icon name="route" size={17} /></span>
-              <div>
-                <h3>代理与订阅</h3>
-                <span>模式与自动更新</span>
-              </div>
-            </div>
-          </div>
 
           <div class="setting-block">
             <div class="setting-label">
-              <strong>代理模式</strong>
-              <small>代理内核接入后生效。</small>
+              <strong>默认代理模式</strong>
+              <small>代理内核启动时使用的默认模式。</small>
             </div>
             <div class="mode-options">
               {proxyModes.map((item) => (
@@ -239,43 +246,48 @@ export default function SettingsPage(props: SettingsProps) {
             </div>
           </div>
 
-          <div class="settings-grid">
-            <label>
-              <span>订阅更新间隔（分钟）</span>
-              <input
-                type="number"
-                min="15"
-                max="1440"
-                value={settings().updateIntervalMinutes}
-                onInput={(event) => update("updateIntervalMinutes", Number(event.currentTarget.value))}
-              />
-              <small>允许范围 15-1440 分钟。</small>
+          <div class="setting-block">
+            <div class="setting-label">
+              <strong>订阅更新</strong>
+              <small>控制订阅刷新间隔和启动时自动更新。</small>
+            </div>
+            <div class="settings-grid">
+              <label>
+                <span>更新间隔（分钟）</span>
+                <input
+                  type="number"
+                  min="15"
+                  max="1440"
+                  value={settings().updateIntervalMinutes}
+                  onInput={(event) => update("updateIntervalMinutes", Number(event.currentTarget.value))}
+                />
+                <small>允许范围 15-1440 分钟。</small>
+              </label>
+            </div>
+            <label class="switch-row">
+              <span>
+                <strong>自动更新订阅</strong>
+                <small>应用启动后按更新间隔检查订阅。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().autoUpdate }}>
+                <input
+                  type="checkbox"
+                  checked={settings().autoUpdate}
+                  onChange={(event) => update("autoUpdate", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
             </label>
           </div>
-
-          <label class="switch-row">
-            <span>
-              <strong>自动更新订阅</strong>
-              <small>应用启动后按更新间隔检查订阅。</small>
-            </span>
-            <span classList={{ "switch": true, on: settings().autoUpdate }}>
-              <input
-                type="checkbox"
-                checked={settings().autoUpdate}
-                onChange={(event) => update("autoUpdate", event.currentTarget.checked)}
-              />
-              <span class="switch-track"><span class="switch-thumb" /></span>
-            </span>
-          </label>
         </section>
 
         <section class="panel">
           <div class="panel-heading">
             <div class="heading-with-icon">
-              <span class="heading-icon green"><Icon name="server" size={17} /></span>
+              <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
               <div>
-                <h3>Xray 内核</h3>
-                <span>版本检测与下载</span>
+                <h3>内核设置</h3>
+                <span>不同内核只展示各自的参数</span>
               </div>
             </div>
             <span classList={{ "tag": true, success: core()?.status === "ready" || core()?.status === "up_to_date", neutral: !core() || (core()?.status !== "ready" && core()?.status !== "up_to_date"), danger: core()?.status === "error" }}>
@@ -283,46 +295,149 @@ export default function SettingsPage(props: SettingsProps) {
             </span>
           </div>
 
-          <div class="core-summary">
-            <div class="core-version">
-              <span>当前版本</span>
-              <strong>{core()?.version || "未安装"}</strong>
+          <div class="setting-block">
+            <div class="setting-label">
+              <strong>代理内核</strong>
+              <small>选择用于处理代理流量的内核。</small>
             </div>
-            <div class="core-version">
-              <span>最新版本</span>
-              <strong>{core()?.latestVersion || "未检查"}</strong>
-            </div>
-            <div class="core-version">
-              <span>更新方式</span>
-              <strong>{settings().coreAutoUpdate ? "自动检测" : "手动检查"}</strong>
+            <div class="core-type-options">
+              {coreTypes.map((item) => (
+                <button
+                  type="button"
+                  classList={{ "core-type-option": true, active: settings().coreType === item.value }}
+                  onClick={() => update("coreType", item.value)}
+                >
+                  <span class="core-type-icon"><Icon name={item.value === "xray" ? "server" : "route"} size={16} /></span>
+                  <span class="core-type-copy">
+                    <strong>{item.label}</strong>
+                    <small>{item.hint}</small>
+                  </span>
+                  <Show when={settings().coreType === item.value}>
+                    <span class="theme-check"><Icon name="check" size={12} /></span>
+                  </Show>
+                </button>
+              ))}
             </div>
           </div>
 
-          <p class="core-message">{core()?.message || "可以检查最新 Xray-core 版本。"}</p>
+          <Show when={settings().coreType === "xray"} fallback={
+            <div class="core-placeholder">
+              <div class="empty-icon"><Icon name="route" size={22} /></div>
+              <strong>sing-box 内核尚未接入</strong>
+              <span>接入后会在这里显示 sing-box 专属参数，不会和客户端设置混在一起。</span>
+            </div>
+          }>
+            <div class="core-summary">
+              <div class="core-version">
+                <span>当前版本</span>
+                <strong>{core()?.version || "未安装"}</strong>
+              </div>
+              <div class="core-version">
+                <span>最新版本</span>
+                <strong>{core()?.latestVersion || "未检查"}</strong>
+              </div>
+              <div class="core-version">
+                <span>更新方式</span>
+                <strong>{settings().coreAutoUpdate ? "自动检测" : "手动检查"}</strong>
+              </div>
+            </div>
 
-          <div class="core-actions">
-            <button class="btn secondary" type="button" onClick={checkCore} disabled={coreBusy() !== ""}>
-              <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? "检查中..." : "检查更新"}
-            </button>
-            <button class="btn primary" type="button" onClick={downloadCore} disabled={coreBusy() !== ""}>
-              <Icon name="external" size={14} /> {coreBusy() === "downloading" ? "下载中..." : "下载最新版"}
-            </button>
-          </div>
+            <p class="core-message">{core()?.message || "可以检查最新 Xray-core 版本。"}</p>
 
-          <label class="switch-row">
-            <span>
-              <strong>自动检查并下载内核更新</strong>
-              <small>启动后检查 Xray-core 新版本，并在可用时自动下载安装。</small>
-            </span>
-            <span classList={{ "switch": true, on: settings().coreAutoUpdate }}>
-              <input
-                type="checkbox"
-                checked={settings().coreAutoUpdate}
-                onChange={(event) => update("coreAutoUpdate", event.currentTarget.checked)}
-              />
-              <span class="switch-track"><span class="switch-thumb" /></span>
-            </span>
-          </label>
+            <div class="core-actions">
+              <button class="btn secondary" type="button" onClick={checkCore} disabled={coreBusy() !== ""}>
+                <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? "检查中..." : "检查更新"}
+              </button>
+              <button class="btn primary" type="button" onClick={downloadCore} disabled={coreBusy() !== ""}>
+                <Icon name="external" size={14} /> {coreBusy() === "downloading" ? "下载中..." : "下载最新版"}
+              </button>
+            </div>
+
+            <div class="core-params">
+              <div class="setting-label">
+                <strong>Xray 运行参数</strong>
+                <small>这些参数只属于 Xray-core，其他内核不会显示。</small>
+              </div>
+              <div class="core-param-grid">
+                <label>
+                  <span>本地 SOCKS/HTTP 端口</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={settings().xrayLocalPort}
+                    onInput={(event) => update("xrayLocalPort", Number(event.currentTarget.value))}
+                  />
+                  <small>默认 10808。</small>
+                </label>
+                <label>
+                  <span>日志级别</span>
+                  <select value={settings().xrayLogLevel} onChange={(event) => update("xrayLogLevel", event.currentTarget.value)}>
+                    {logLevels.map((level) => <option value={level.value}>{level.label}</option>)}
+                  </select>
+                  <small>调试时使用 debug，日常使用 warning。</small>
+                </label>
+                <label>
+                  <span>Mux 并发数</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="128"
+                    value={settings().xrayMuxConcurrency}
+                    disabled={!settings().xrayMuxEnabled}
+                    onInput={(event) => update("xrayMuxConcurrency", Number(event.currentTarget.value))}
+                  />
+                  <small>仅在 Mux 开启时生效。</small>
+                </label>
+              </div>
+
+              <div class="core-switch-grid">
+                <label class="switch-row">
+                  <span>
+                    <strong>启用 Mux</strong>
+                    <small>减少握手次数，但可能影响大流量吞吐。</small>
+                  </span>
+                  <span classList={{ "switch": true, on: settings().xrayMuxEnabled }}>
+                    <input
+                      type="checkbox"
+                      checked={settings().xrayMuxEnabled}
+                      onChange={(event) => update("xrayMuxEnabled", event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+                <label class="switch-row">
+                  <span>
+                    <strong>启用流量嗅探</strong>
+                    <small>用于域名分流和协议识别。</small>
+                  </span>
+                  <span classList={{ "switch": true, on: settings().xraySniffing }}>
+                    <input
+                      type="checkbox"
+                      checked={settings().xraySniffing}
+                      onChange={(event) => update("xraySniffing", event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <label class="switch-row">
+              <span>
+                <strong>自动检查并下载 Xray 内核更新</strong>
+                <small>启动后检查新版本，并在可用时自动下载安装。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().coreAutoUpdate }}>
+                <input
+                  type="checkbox"
+                  checked={settings().coreAutoUpdate}
+                  onChange={(event) => update("coreAutoUpdate", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+          </Show>
         </section>
 
         <Show when={message()}>
