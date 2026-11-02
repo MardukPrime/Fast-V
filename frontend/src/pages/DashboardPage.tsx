@@ -38,27 +38,39 @@ export default function DashboardPage(props: DashboardProps) {
 
   return (
     <div class="page-stack">
-      <section class="hero dashboard-hero">
-        <div class="hero-content">
-          <span class="eyebrow">FASTV / DASHBOARD</span>
-          <h2>准备开始配置</h2>
+      <section class="glass-panel workspace-hero">
+        <div class="workspace-copy">
+          <span class="status-inline"><span class="status-dot online" /> 本地工作区已就绪</span>
+          <h2>工作区概览</h2>
           <p>
-            订阅和设置已经可以本地保存。添加一个订阅地址，FastV 会自动拉取并解析节点信息。
+            订阅、节点和基础设置都保存在本机。添加订阅地址后，FastV 会自动解析节点并汇总到仪表盘。
           </p>
-          <div class="hero-actions">
+          <div class="workspace-actions">
             <button class="btn primary" onClick={() => props.onNavigate("subscriptions")}>
               <Icon name="plus" size={15} /> 添加订阅
             </button>
-            <button class="btn secondary" onClick={() => props.onNavigate("settings")}>
-              <Icon name="settings" size={15} /> 基础设置
+            <button class="btn glass" onClick={() => props.onNavigate("settings")}>
+              <Icon name="settings" size={15} /> 打开设置
             </button>
           </div>
         </div>
-        <div class="hero-metric">
-          <div class="hero-metric-value">{summary()?.nodeCount ?? 0}</div>
-          <div class="hero-metric-label">当前节点</div>
-          <div class="hero-metric-line" />
-          <div class="hero-metric-note">来自 {summary()?.subscriptionCount ?? 0} 个订阅</div>
+
+        <div class="workspace-metrics">
+          <div class="workspace-metric">
+            <span>订阅</span>
+            <strong>{loading() ? "—" : summary()?.subscriptionCount ?? 0}</strong>
+            <small>{summary()?.activeSubscriptions ?? 0} 个启用</small>
+          </div>
+          <div class="workspace-metric">
+            <span>节点</span>
+            <strong>{loading() ? "—" : summary()?.nodeCount ?? 0}</strong>
+            <small>已解析</small>
+          </div>
+          <div class="workspace-metric">
+            <span>内核</span>
+            <strong class="metric-text">{summary()?.coreStatus === "not_configured" ? "未连接" : summary()?.coreStatus ?? "未连接"}</strong>
+            <small>Xray-core</small>
+          </div>
         </div>
       </section>
 
@@ -69,127 +81,87 @@ export default function DashboardPage(props: DashboardProps) {
         </div>
       </Show>
 
-      <section class="stats-grid">
-        <article class="stat-card">
-          <div class="stat-icon cyan"><Icon name="subscription" size={18} /></div>
-          <div class="stat-content">
-            <span class="card-label">订阅数量</span>
-            <strong>{loading() ? "..." : summary()?.subscriptionCount ?? 0}</strong>
-            <small>{summary()?.activeSubscriptions ?? 0} 个启用</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-icon indigo"><Icon name="nodes" size={18} /></div>
-          <div class="stat-content">
-            <span class="card-label">节点数量</span>
-            <strong>{loading() ? "..." : summary()?.nodeCount ?? 0}</strong>
-            <small>来自所有订阅</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-icon green"><Icon name="refresh" size={18} /></div>
-          <div class="stat-content">
-            <span class="card-label">最近更新</span>
-            <strong class="card-date">{formatTime(summary()?.lastUpdatedAt ?? "")}</strong>
-            <small>订阅更新时间</small>
-          </div>
-        </article>
-        <article class="stat-card">
-          <div class="stat-icon amber"><Icon name="server" size={18} /></div>
-          <div class="stat-content">
-            <span class="card-label">代理内核</span>
-            <strong>{summary()?.coreStatus === "not_configured" ? "未配置" : summary()?.coreStatus ?? "未配置"}</strong>
-            <small>{summary()?.coreVersion ?? "Xray-core 尚未接入"}</small>
-          </div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid">
-        <div class="panel">
+      <div class="dashboard-layout">
+        <section class="glass-panel recent-panel">
           <div class="panel-heading">
             <div>
-              <h3>快速操作</h3>
-              <span>QUICK START</span>
+              <h3>最近订阅</h3>
+              <span>{summary()?.lastUpdatedAt ? `最近更新 ${formatTime(summary()!.lastUpdatedAt)}` : "还没有更新记录"}</span>
             </div>
+            <button class="btn ghost" onClick={() => props.onNavigate("subscriptions")}>查看全部</button>
           </div>
-          <div class="quick-actions">
-            <button class="quick-action" onClick={() => props.onNavigate("subscriptions")}>
-              <span class="quick-icon cyan"><Icon name="plus" size={17} /></span>
-              <span class="quick-copy">
-                <strong>添加订阅</strong>
-                <small>导入远程节点列表</small>
-              </span>
-              <Icon name="chevron" size={15} class="quick-chevron" />
-            </button>
-            <button class="quick-action" onClick={() => props.onNavigate("settings")}>
-              <span class="quick-icon indigo"><Icon name="settings" size={17} /></span>
-              <span class="quick-copy">
-                <strong>基础设置</strong>
-                <small>调整主题和更新策略</small>
-              </span>
-              <Icon name="chevron" size={15} class="quick-chevron" />
-            </button>
-            <button class="quick-action" onClick={() => props.onNavigate("servers")}>
-              <span class="quick-icon green"><Icon name="server" size={17} /></span>
-              <span class="quick-copy">
-                <strong>查看节点</strong>
-                <small>节点管理即将接入</small>
-              </span>
-              <Icon name="chevron" size={15} class="quick-chevron" />
-            </button>
-          </div>
-        </div>
 
-        <div class="panel">
-          <div class="panel-heading">
-            <div>
-              <h3>当前配置</h3>
-              <span>SETTINGS</span>
+          <Show when={(summary()?.recentSubscriptions ?? []).length > 0} fallback={
+            <div class="empty-state">
+              <div class="empty-icon"><Icon name="subscription" size={22} /></div>
+              <strong>还没有订阅</strong>
+              <span>添加第一个订阅后，节点和更新状态会显示在这里。</span>
             </div>
-          </div>
-          <div class="config-list">
-            <div class="config-row"><span>应用版本</span><strong>{props.info?.version ?? "0.1.0"}</strong></div>
-            <div class="config-row"><span>运行平台</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
-            <div class="config-row"><span>界面主题</span><strong>{props.settings?.theme ?? "dark"}</strong></div>
-            <div class="config-row"><span>代理模式</span><strong>{props.settings?.proxyMode ?? "rule"}</strong></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-heading">
-          <div>
-            <h3>最近订阅</h3>
-            <span>RECENT SUBSCRIPTIONS</span>
-          </div>
-          <button class="btn ghost" onClick={() => props.onNavigate("subscriptions")}>查看全部</button>
-        </div>
-        <Show when={(summary()?.recentSubscriptions ?? []).length > 0} fallback={
-          <div class="empty-state">
-            <div class="empty-icon"><Icon name="subscription" size={24} /></div>
-            <strong>还没有订阅</strong>
-            <span>先添加一个订阅地址，节点会自动出现在这里。</span>
-          </div>
-        }>
-          <div class="recent-list">
-            <For each={summary()?.recentSubscriptions ?? []}>
-              {(sub) => (
-                <div class="recent-item">
-                  <div class="recent-avatar"><Icon name="subscription" size={16} /></div>
-                  <div class="recent-copy">
-                    <strong>{sub.name}</strong>
-                    <small>{sub.host}</small>
+          }>
+            <div class="recent-list">
+              <For each={summary()?.recentSubscriptions ?? []}>
+                {(sub) => (
+                  <div class="recent-row">
+                    <div class="recent-avatar"><Icon name="subscription" size={16} /></div>
+                    <div class="recent-copy">
+                      <strong>{sub.name}</strong>
+                      <small>{sub.host}</small>
+                    </div>
+                    <span class="recent-count">{sub.nodeCount} 节点</span>
+                    <span classList={{ "status-label": true, error: Boolean(sub.lastError), ok: !sub.lastError }}>
+                      <span class="status-dot" />
+                      {sub.lastError ? "异常" : "正常"}
+                    </span>
                   </div>
-                  <span class="tag neutral">{sub.nodeCount} 节点</span>
-                  <span classList={{ "tag": true, danger: Boolean(sub.lastError), success: !sub.lastError }}>
-                    {sub.lastError ? "更新失败" : "正常"}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-      </section>
+                )}
+              </For>
+            </div>
+          </Show>
+        </section>
+
+        <aside class="dashboard-side">
+          <section class="glass-panel side-card">
+            <div class="panel-heading">
+              <div>
+                <h3>快捷操作</h3>
+                <span>常用入口</span>
+              </div>
+            </div>
+            <div class="quick-actions">
+              <button class="quick-action" onClick={() => props.onNavigate("subscriptions")}>
+                <span class="quick-icon"><Icon name="plus" size={16} /></span>
+                <span class="quick-copy"><strong>添加订阅</strong><small>导入远程节点列表</small></span>
+                <Icon name="chevron" size={14} class="quick-chevron" />
+              </button>
+              <button class="quick-action" onClick={() => props.onNavigate("settings")}>
+                <span class="quick-icon"><Icon name="settings" size={16} /></span>
+                <span class="quick-copy"><strong>基础设置</strong><small>主题、代理模式和更新间隔</small></span>
+                <Icon name="chevron" size={14} class="quick-chevron" />
+              </button>
+              <button class="quick-action" onClick={() => props.onNavigate("servers")}>
+                <span class="quick-icon"><Icon name="server" size={16} /></span>
+                <span class="quick-copy"><strong>节点管理</strong><small>即将在后续版本接入</small></span>
+                <Icon name="chevron" size={14} class="quick-chevron" />
+              </button>
+            </div>
+          </section>
+
+          <section class="glass-panel side-card">
+            <div class="panel-heading">
+              <div>
+                <h3>当前配置</h3>
+                <span>本地状态</span>
+              </div>
+            </div>
+            <div class="config-list">
+              <div class="config-row"><span>应用版本</span><strong>{props.info?.version ?? "0.1.0"}</strong></div>
+              <div class="config-row"><span>运行平台</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
+              <div class="config-row"><span>界面主题</span><strong>{props.settings?.theme ?? "dark"}</strong></div>
+              <div class="config-row"><span>代理模式</span><strong>{props.settings?.proxyMode ?? "rule"}</strong></div>
+            </div>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }
