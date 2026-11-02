@@ -35,6 +35,7 @@ fastV/
 ├── appservice.go               # 应用元数据
 ├── dashboardservice.go         # 仪表盘聚合数据
 ├── subscriptionservice.go      # 订阅拉取、更新、删除和节点查询
+├── nodeservice.go              # 节点筛选、当前节点、启停和 TCP 测试
 ├── settingsservice.go          # 基础设置
 ├── coreservice.go              # Xray 内核版本检测、下载和安装
 ├── models.go                   # 前端 DTO 和内部数据模型
@@ -42,6 +43,7 @@ fastV/
 ├── parser.go                   # 订阅格式和分享链接解析
 ├── parser_test.go
 ├── subscription_service_test.go
+├── node_service_test.go
 ├── settings_service_test.go
 ├── core_service_test.go
 ├── core_download_test.go
@@ -121,6 +123,15 @@ SolidJS 页面
 - 更新单个订阅或全部订阅。
 - 删除订阅及其节点。
 - 返回前端安全的 `NodeView`，不暴露原始凭据。
+
+### NodeService
+
+- 搜索、按协议和订阅筛选节点。
+- 设置当前节点。
+- 启用或禁用单个节点。
+- 删除节点并同步订阅节点计数。
+- 提供直接 TCP 连通性测试。
+- 订阅更新时按稳定 source key 保留节点 ID 和启用状态。
 
 ### SettingsService
 

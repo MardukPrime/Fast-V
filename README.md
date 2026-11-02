@@ -84,6 +84,7 @@ fastV/
 ├── appservice.go               # Application metadata service
 ├── dashboardservice.go         # Dashboard aggregate service
 ├── subscriptionservice.go      # Subscription fetching and node management
+├── nodeservice.go               # Node listing, selection, enablement and TCP checks
 ├── settingsservice.go          # Basic settings service
 ├── coreservice.go              # Xray-core detection, download and install
 ├── models.go                   # Frontend-facing models
@@ -93,6 +94,7 @@ fastV/
 ├── subscription_service_test.go
 ├── settings_service_test.go
 ├── core_service_test.go
+├── node_service_test.go
 ├── core_download_test.go
 ├── frontend/
 │   ├── src/
@@ -158,7 +160,8 @@ Services:
 
 - `AppService`: application metadata.
 - `DashboardService`: aggregate counts and recent subscriptions.
-- `SubscriptionService`: add, update, delete, list and inspect nodes.
+- SubscriptionService: add, update, delete, list and inspect nodes.
+- NodeService: search/filter nodes, select the active node, toggle enabled state, delete nodes and run direct TCP latency checks.
 - SettingsService: read, save and reset basic settings.
 - CoreService: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
 
@@ -173,6 +176,7 @@ The current store is a small local JSON file. It is intentionally isolated behin
 - [Proxy core documentation](docs/cores/README.md)
 - [Xray-core client integration](docs/cores/xray/README.md)
 - [Architecture decision records](docs/adr/README.md)
+- [Subscription and node testing](docs/testing/subscription-test.md)
 
 ## License
 

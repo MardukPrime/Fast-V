@@ -21,6 +21,7 @@ func main() {
 	coreService := NewCoreService(store)
 	dashboardService := NewDashboardService(store, coreService)
 	subscriptionService := NewSubscriptionService(store)
+	nodeService := NewNodeService(store)
 	settingsService := NewSettingsService(store)
 
 	app := application.New(application.Options{
@@ -31,6 +32,7 @@ func main() {
 			application.NewService(coreService),
 			application.NewService(dashboardService),
 			application.NewService(subscriptionService),
+			application.NewService(nodeService),
 			application.NewService(settingsService),
 		},
 		Assets: application.AssetOptions{

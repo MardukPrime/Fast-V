@@ -153,7 +153,7 @@ export default function DashboardPage(props: DashboardProps) {
               </button>
               <button class="quick-action" onClick={() => props.onNavigate("servers")}>
                 <span class="quick-icon"><Icon name="server" size={16} /></span>
-                <span class="quick-copy"><strong>节点管理</strong><small>即将在后续版本接入</small></span>
+                <span class="quick-copy"><strong>节点管理</strong><small>选择当前节点和测试连通性</small></span>
                 <Icon name="chevron" size={14} class="quick-chevron" />
               </button>
             </div>
@@ -167,6 +167,7 @@ export default function DashboardPage(props: DashboardProps) {
               </div>
             </div>
             <div class="config-list">
+              <div class="config-row"><span>当前节点</span><strong>{summary()?.activeNode?.name ?? "未选择"}</strong></div>
               <div class="config-row"><span>应用版本</span><strong>{props.info?.version ?? "0.1.0"}</strong></div>
               <div class="config-row"><span>运行平台</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
               <div class="config-row"><span>界面主题</span><strong>{props.settings?.theme ?? "dark"}</strong></div>

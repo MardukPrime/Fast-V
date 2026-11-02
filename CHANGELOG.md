@@ -19,4 +19,6 @@ All notable changes to FastV are documented here.
 - Xray-core version detection, GitHub release check, SHA-256 verified download, local install and optional automatic updates.
 - Frameless window mode with a custom title bar and window controls.
 - Liquid-glass surface refinement with first-class light and dark themes and improved dark-mode text contrast.
+- Node management with search, filters, active node selection, enable/disable, deletion and direct TCP latency testing.
+- Subscription updates preserve node identity and enabled state through stable source keys.
 - Settings split into client settings and core settings, with Xray-specific parameters shown conditionally.

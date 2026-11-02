@@ -47,6 +47,16 @@ func (s *DashboardService) Summary() DashboardSummary {
 		coreVersion = "未安装"
 	}
 
+	var activeNode *NodeView
+	if node, ok := s.store.ActiveNode(); ok {
+		subscriptionName := ""
+		if sub, err := s.store.FindSubscription(node.SubscriptionID); err == nil {
+			subscriptionName = sub.Name
+		}
+		view := toNodeView(node, subscriptionName, node.ID)
+		activeNode = &view
+	}
+
 	return DashboardSummary{
 		App:                 NewAppService().Info(),
 		SubscriptionCount:   len(snapshot.Subscriptions),
@@ -57,5 +67,6 @@ func (s *DashboardService) Summary() DashboardSummary {
 		CoreVersion:         coreVersion,
 		Settings:            snapshot.Settings,
 		RecentSubscriptions: recentViews,
+		ActiveNode:          activeNode,
 	}
 }

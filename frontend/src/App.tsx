@@ -8,6 +8,7 @@ import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
+import ServersPage from "./pages/ServersPage";
 import SettingsPage from "./pages/SettingsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
 
@@ -25,7 +26,7 @@ const navigation: Array<{ key: PageKey; label: string; caption: string; icon: Ic
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
-  servers: { title: "服务器", subtitle: "节点管理将在后续版本接入" },
+  servers: { title: "服务器", subtitle: "查看节点、切换当前节点和测试连通性" },
   subscriptions: { title: "订阅", subtitle: "导入、更新和查看订阅节点" },
   routing: { title: "路由", subtitle: "规则编辑器将在后续版本接入" },
   speedtest: { title: "测速", subtitle: "节点测速将在后续版本接入" },
@@ -167,13 +168,16 @@ export default function App() {
               onNavigate={(page) => setActive(page as PageKey)}
             />
           </Show>
+          <Show when={active() === "servers"}>
+            <ServersPage onNavigate={(page) => setActive(page as PageKey)} />
+          </Show>
           <Show when={active() === "subscriptions"}>
             <SubscriptionsPage />
           </Show>
           <Show when={active() === "settings"}>
             <SettingsPage onSaved={handleSettingsSaved} />
           </Show>
-          <Show when={active() !== "dashboard" && active() !== "subscriptions" && active() !== "settings"}>
+          <Show when={active() !== "dashboard" && active() !== "servers" && active() !== "subscriptions" && active() !== "settings"}>
             <PlaceholderPage
               title={pageMeta[active()].title}
               description={pageMeta[active()].subtitle}

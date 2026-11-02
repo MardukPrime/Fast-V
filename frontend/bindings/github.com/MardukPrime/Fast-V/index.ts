@@ -4,12 +4,14 @@
 import * as AppService from "./appservice.js";
 import * as CoreService from "./coreservice.js";
 import * as DashboardService from "./dashboardservice.js";
+import * as NodeService from "./nodeservice.js";
 import * as SettingsService from "./settingsservice.js";
 import * as SubscriptionService from "./subscriptionservice.js";
 export {
     AppService,
     CoreService,
     DashboardService,
+    NodeService,
     SettingsService,
     SubscriptionService
 };
@@ -19,6 +21,8 @@ export type {
     CoreInfo,
     CoreUpdateResult,
     DashboardSummary,
+    NodeFilter,
+    NodeLatency,
     NodeView,
     Settings,
     SubscriptionInput,

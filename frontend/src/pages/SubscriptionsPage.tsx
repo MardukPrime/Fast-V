@@ -1,6 +1,6 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 
-import { SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { NodeService, SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V";
 import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V";
 import Icon from "../components/Icon";
 
@@ -107,6 +107,17 @@ export default function SubscriptionsPage() {
       await SubscriptionService.Delete(sub.id);
       setMessage("订阅已删除。");
       await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const setActiveNode = async (node: NodeView) => {
+    setError("");
+    try {
+      await NodeService.SetActive(node.id);
+      setNodes((current) => (current ?? []).map((item) => ({ ...item, active: item.id === node.id })));
+      setMessage(`已将「${node.name}」设为当前节点。`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -243,7 +254,7 @@ export default function SubscriptionsPage() {
               <Show when={(nodes() ?? []).length > 0} fallback={<div class="empty-state">没有解析到节点。</div>}>
                 <table class="node-table">
                   <thead>
-                    <tr><th>名称</th><th>协议</th><th>地址</th><th>端口</th></tr>
+                    <tr><th>名称</th><th>协议</th><th>地址</th><th>端口</th><th>操作</th></tr>
                   </thead>
                   <tbody>
                     <For each={nodes() ?? []}>
@@ -253,6 +264,15 @@ export default function SubscriptionsPage() {
                           <td><span class="tag neutral">{node.protocol}</span></td>
                           <td>{node.address}</td>
                           <td>{node.port}</td>
+                          <td>
+                            <Show when={node.active} fallback={
+                              <button class="btn ghost compact" onClick={() => setActiveNode(node)} disabled={!node.enabled}>
+                                {node.enabled ? "设为当前" : "已禁用"}
+                              </button>
+                            }>
+                              <span class="status-label ok"><span class="status-dot" />当前</span>
+                            </Show>
+                          </td>
                         </tr>
                       )}
                     </For>

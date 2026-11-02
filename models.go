@@ -66,16 +66,21 @@ type Node struct {
 	Address        string `json:"address"`
 	Port           int    `json:"port"`
 	Raw            string `json:"raw"`
+	Enabled        bool   `json:"enabled"`
+	SourceKey      string `json:"sourceKey"`
 }
 
 // NodeView is the frontend-safe node representation.
 type NodeView struct {
-	ID             string `json:"id"`
-	SubscriptionID string `json:"subscriptionId"`
-	Name           string `json:"name"`
-	Protocol       string `json:"protocol"`
-	Address        string `json:"address"`
-	Port           int    `json:"port"`
+	ID               string `json:"id"`
+	SubscriptionID   string `json:"subscriptionId"`
+	SubscriptionName string `json:"subscriptionName"`
+	Name             string `json:"name"`
+	Protocol         string `json:"protocol"`
+	Address          string `json:"address"`
+	Port             int    `json:"port"`
+	Enabled          bool   `json:"enabled"`
+	Active           bool   `json:"active"`
 }
 
 // DashboardSummary is the data shown on the overview page.
@@ -89,6 +94,7 @@ type DashboardSummary struct {
 	CoreVersion         string             `json:"coreVersion"`
 	Settings            Settings           `json:"settings"`
 	RecentSubscriptions []SubscriptionView `json:"recentSubscriptions"`
+	ActiveNode          *NodeView          `json:"activeNode"`
 }
 
 // UpdateAllResult summarizes a bulk subscription refresh.
@@ -117,4 +123,19 @@ type CoreUpdateResult struct {
 	Updated bool     `json:"updated"`
 	Info    CoreInfo `json:"info"`
 	Message string   `json:"message"`
+}
+
+// NodeFilter controls the node management list.
+type NodeFilter struct {
+	Search         string `json:"search"`
+	Protocol       string `json:"protocol"`
+	SubscriptionID string `json:"subscriptionId"`
+}
+
+// NodeLatency is the result of a direct TCP reachability check.
+type NodeLatency struct {
+	NodeID    string `json:"nodeId"`
+	LatencyMS int64  `json:"latencyMs"`
+	Error     string `json:"error"`
+	CheckedAt string `json:"checkedAt"`
 }

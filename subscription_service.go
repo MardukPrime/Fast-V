@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -138,17 +140,18 @@ func (s *SubscriptionService) Delete(id string) error {
 }
 
 func (s *SubscriptionService) Nodes(id string) ([]NodeView, error) {
-	if _, err := s.store.FindSubscription(id); err != nil {
+	sub, err := s.store.FindSubscription(id)
+	if err != nil {
 		return nil, err
 	}
+	activeID := s.store.snapshot().ActiveNodeID
 	nodes := s.store.NodesForSubscription(id)
 	out := make([]NodeView, 0, len(nodes))
 	for _, node := range nodes {
-		out = append(out, toNodeView(node))
+		out = append(out, toNodeView(node, sub.Name, activeID))
 	}
 	return out, nil
 }
-
 func fetchSubscription(rawURL string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -184,6 +187,11 @@ func fetchSubscription(rawURL string) (string, error) {
 func buildNodes(subscriptionID string, parsed []parsedNode) []Node {
 	nodes := make([]Node, 0, len(parsed))
 	for _, item := range parsed {
+		sourceKey := item.Raw
+		if sourceKey == "" {
+			sourceKey = fmt.Sprintf("%s|%s|%d|%s", item.Protocol, item.Address, item.Port, item.Name)
+		}
+		hash := sha256.Sum256([]byte(sourceKey))
 		nodes = append(nodes, Node{
 			ID:             newID(),
 			SubscriptionID: subscriptionID,
@@ -192,6 +200,8 @@ func buildNodes(subscriptionID string, parsed []parsedNode) []Node {
 			Address:        item.Address,
 			Port:           item.Port,
 			Raw:            item.Raw,
+			Enabled:        true,
+			SourceKey:      hex.EncodeToString(hash[:]),
 		})
 	}
 	return nodes
@@ -214,13 +224,24 @@ func toSubscriptionView(sub Subscription) SubscriptionView {
 	}
 }
 
-func toNodeView(node Node) NodeView {
+func toNodeView(node Node, subscriptionName string, activeID string) NodeView {
 	return NodeView{
-		ID:             node.ID,
-		SubscriptionID: node.SubscriptionID,
-		Name:           node.Name,
-		Protocol:       node.Protocol,
-		Address:        node.Address,
-		Port:           node.Port,
+		ID:               node.ID,
+		SubscriptionID:   node.SubscriptionID,
+		SubscriptionName: subscriptionName,
+		Name:             node.Name,
+		Protocol:         node.Protocol,
+		Address:          node.Address,
+		Port:             node.Port,
+		Enabled:          node.Enabled,
+		Active:           node.ID == activeID,
 	}
+}
+
+func nodeSourceKey(value string) string {
+	if value == "" {
+		value = newID()
+	}
+	hash := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(hash[:])
 }

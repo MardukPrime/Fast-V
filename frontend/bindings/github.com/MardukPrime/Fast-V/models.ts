@@ -51,6 +51,26 @@ export interface DashboardSummary {
     "coreVersion": string;
     "settings": Settings;
     "recentSubscriptions": SubscriptionView[] | null;
+    "activeNode": NodeView | null;
+}
+
+/**
+ * NodeFilter controls the node management list.
+ */
+export interface NodeFilter {
+    "search": string;
+    "protocol": string;
+    "subscriptionId": string;
+}
+
+/**
+ * NodeLatency is the result of a direct TCP reachability check.
+ */
+export interface NodeLatency {
+    "nodeId": string;
+    "latencyMs": number;
+    "error": string;
+    "checkedAt": string;
 }
 
 /**
@@ -59,10 +79,13 @@ export interface DashboardSummary {
 export interface NodeView {
     "id": string;
     "subscriptionId": string;
+    "subscriptionName": string;
     "name": string;
     "protocol": string;
     "address": string;
     "port": number;
+    "enabled": boolean;
+    "active": boolean;
 }
 
 /**

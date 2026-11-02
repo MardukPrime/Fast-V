@@ -1,4 +1,4 @@
-﻿# 测试策略
+# 测试策略
 
 ## 测试分层
 
@@ -27,3 +27,7 @@
 - Xray 配置期望放 `test/fixtures/xray/`。
 - 测试样本不包含真实凭据。
 - 所有 fixture 使用固定假数据。
+
+## 订阅测试
+
+本地订阅测试步骤、fixture 和代理链路测试说明见 [subscription-test.md](subscription-test.md)。

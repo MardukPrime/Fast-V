@@ -19,6 +19,7 @@ type storeData struct {
 	Settings      Settings       `json:"settings"`
 	Subscriptions []Subscription `json:"subscriptions"`
 	Nodes         []Node         `json:"nodes"`
+	ActiveNodeID  string         `json:"activeNodeId"`
 }
 
 // Store persists subscriptions, nodes and settings in a user-local JSON file.
@@ -123,6 +124,18 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Nodes == nil {
 		loaded.Nodes = []Node{}
 	}
+
+	for i := range loaded.Nodes {
+		if loaded.Nodes[i].SourceKey == "" {
+			key := loaded.Nodes[i].Raw
+			if key == "" {
+				key = loaded.Nodes[i].ID
+			}
+			loaded.Nodes[i].SourceKey = nodeSourceKey(key)
+			loaded.Nodes[i].Enabled = true
+		}
+	}
+
 	for i := range loaded.Subscriptions {
 		if loaded.Subscriptions[i].NodeCount == 0 {
 			for _, node := range loaded.Nodes {
@@ -134,7 +147,6 @@ func mergeStoreData(loaded storeData) storeData {
 	}
 	return loaded
 }
-
 func normalizeSettings(value, fallback Settings) Settings {
 	if value.Theme == "" {
 		value.Theme = fallback.Theme
@@ -241,6 +253,9 @@ func (s *Store) AddSubscription(sub Subscription, nodes []Node) error {
 		sub.NodeCount = len(nodes)
 		data.Subscriptions = append(data.Subscriptions, sub)
 		data.Nodes = append(data.Nodes, nodes...)
+		if data.ActiveNodeID == "" && len(nodes) > 0 {
+			data.ActiveNodeID = nodes[0].ID
+		}
 		return nil
 	})
 }
@@ -261,13 +276,41 @@ func (s *Store) ReplaceSubscriptionNodes(id string, nodes []Node) error {
 		if !found {
 			return errors.New("subscription not found")
 		}
-		filtered := data.Nodes[:0]
+
+		oldBySource := make(map[string]Node)
+		for _, node := range data.Nodes {
+			if node.SubscriptionID == id && node.SourceKey != "" {
+				oldBySource[node.SourceKey] = node
+			}
+		}
+		for i := range nodes {
+			if old, ok := oldBySource[nodes[i].SourceKey]; ok {
+				nodes[i].ID = old.ID
+				nodes[i].Enabled = old.Enabled
+			}
+		}
+
+		filtered := make([]Node, 0, len(data.Nodes))
 		for _, node := range data.Nodes {
 			if node.SubscriptionID != id {
 				filtered = append(filtered, node)
 			}
 		}
 		data.Nodes = append(filtered, nodes...)
+
+		activeExists := false
+		firstEnabled := ""
+		for _, node := range nodes {
+			if node.ID == data.ActiveNodeID {
+				activeExists = true
+			}
+			if firstEnabled == "" && node.Enabled {
+				firstEnabled = node.ID
+			}
+		}
+		if !activeExists {
+			data.ActiveNodeID = firstEnabled
+		}
 		return nil
 	})
 }
@@ -287,7 +330,7 @@ func (s *Store) SetSubscriptionError(id string, message string) error {
 func (s *Store) DeleteSubscription(id string) error {
 	return s.update(func(data *storeData) error {
 		found := false
-		subs := data.Subscriptions[:0]
+		subs := make([]Subscription, 0, len(data.Subscriptions))
 		for _, sub := range data.Subscriptions {
 			if sub.ID == id {
 				found = true
@@ -299,13 +342,22 @@ func (s *Store) DeleteSubscription(id string) error {
 			return errors.New("subscription not found")
 		}
 		data.Subscriptions = subs
-		nodes := data.Nodes[:0]
+
+		nodes := make([]Node, 0, len(data.Nodes))
+		removedActive := false
 		for _, node := range data.Nodes {
-			if node.SubscriptionID != id {
-				nodes = append(nodes, node)
+			if node.SubscriptionID == id {
+				if node.ID == data.ActiveNodeID {
+					removedActive = true
+				}
+				continue
 			}
+			nodes = append(nodes, node)
 		}
 		data.Nodes = nodes
+		if removedActive {
+			data.ActiveNodeID = ""
+		}
 		return nil
 	})
 }
@@ -322,6 +374,99 @@ func (s *Store) NodesForSubscription(id string) []Node {
 	return out
 }
 
+func (s *Store) ListNodes() []Node {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]Node(nil), s.data.Nodes...)
+}
+
+func (s *Store) FindNode(id string) (Node, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, node := range s.data.Nodes {
+		if node.ID == id {
+			return node, nil
+		}
+	}
+	return Node{}, errors.New("node not found")
+}
+
+func (s *Store) SetNodeEnabled(id string, enabled bool) (Node, error) {
+	var updated Node
+	err := s.update(func(data *storeData) error {
+		for i := range data.Nodes {
+			if data.Nodes[i].ID != id {
+				continue
+			}
+			data.Nodes[i].Enabled = enabled
+			updated = data.Nodes[i]
+			if !enabled && data.ActiveNodeID == id {
+				data.ActiveNodeID = ""
+			}
+			return nil
+		}
+		return errors.New("node not found")
+	})
+	return updated, err
+}
+
+func (s *Store) DeleteNode(id string) error {
+	return s.update(func(data *storeData) error {
+		removedSubID := ""
+		nodes := make([]Node, 0, len(data.Nodes))
+		for _, node := range data.Nodes {
+			if node.ID == id {
+				removedSubID = node.SubscriptionID
+				continue
+			}
+			nodes = append(nodes, node)
+		}
+		if removedSubID == "" {
+			return errors.New("node not found")
+		}
+		data.Nodes = nodes
+		for i := range data.Subscriptions {
+			if data.Subscriptions[i].ID == removedSubID {
+				data.Subscriptions[i].NodeCount--
+				break
+			}
+		}
+		if data.ActiveNodeID == id {
+			data.ActiveNodeID = ""
+		}
+		return nil
+	})
+}
+
+func (s *Store) SetActiveNode(id string) (Node, error) {
+	var active Node
+	err := s.update(func(data *storeData) error {
+		for _, node := range data.Nodes {
+			if node.ID != id {
+				continue
+			}
+			if !node.Enabled {
+				return errors.New("node is disabled")
+			}
+			data.ActiveNodeID = id
+			active = node
+			return nil
+		}
+		return errors.New("node not found")
+	})
+	return active, err
+}
+
+func (s *Store) ActiveNode() (Node, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, node := range s.data.Nodes {
+		if node.ID == s.data.ActiveNodeID {
+			return node, true
+		}
+	}
+	return Node{}, false
+}
 func newID() string {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

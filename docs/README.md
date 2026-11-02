@@ -13,6 +13,7 @@
 7. [api/wails-services.md](api/wails-services.md)：Wails Service 接口契约。
 8. [api/events.md](api/events.md)：后端事件名和载荷。
 9. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
+    ├── subscription-test.md
 10. [operations/build.md](operations/build.md)：构建、打包和发布。
 
 ## 文档目录
@@ -49,7 +50,8 @@ docs/
 │   ├── release.md
 │   └── troubleshooting.md
 └── testing/
-    └── strategy.md
+    ├── strategy.md
+    └── subscription-test.md
 ```
 
 ## 内核文档规则
