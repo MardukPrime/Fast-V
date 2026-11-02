@@ -1,4 +1,4 @@
-﻿# If you prefer the allow list template instead of the deny list, see community template:
+# If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 
 # Binaries for programs and plugins
@@ -65,3 +65,14 @@ proxy_backup.json
 # Wails generated artifacts that can be regenerated
 # frontend/bindings/
 # frontend/wailsjs/
+
+# Wails local state
+.task/
+.wails/
+bin/
+frontend/dist/
+frontend/node_modules/
+
+# Wails build intermediates
+*.syso
+*.manifest

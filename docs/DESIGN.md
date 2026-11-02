@@ -1,4 +1,4 @@
-﻿# FastV 设计文档
+# FastV 设计文档
 
 | 项目 | 内容 |
 |---|---|
@@ -214,9 +214,7 @@ Wails 加载的是本地静态资源，不存在 SEO 和首屏服务端渲染需
 
 ```text
 fastV/
-├── cmd/
-│   └── fastv/
-│       └── main.go                 # 仅调用 bootstrap.Run
+├── main.go                         # 仅嵌入资源并调用 bootstrap.Run
 ├── internal/
 │   ├── bootstrap/                  # 唯一组合根、Wails 组装、生命周期
 │   ├── domain/                     # 纯领域模型和规则
@@ -252,7 +250,7 @@ fastV/
 
 关键约束：
 
-- `cmd` 只负责启动，不写业务。
+- `main.go` 只负责资源嵌入和启动，不写业务。
 - `bootstrap` 是唯一依赖组装入口。
 - `domain` 不依赖 Wails、SQLite、Windows API。
 - `application` 定义自己需要的接口，不导入基础设施。

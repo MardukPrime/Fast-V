@@ -1,4 +1,4 @@
-﻿# FastV 架构与目录设计
+# FastV 架构与目录设计
 
 | 项目 | 内容 |
 |---|---|
@@ -39,8 +39,8 @@
 
 ```text
 ┌──────────────────────────────────────────────┐
-│ cmd/fastv                                    │
-│ 只负责调用 bootstrap.Run                     │
+│ main.go                                      │
+│ 仅嵌入前端资源并调用 bootstrap.Run           │
 └───────────────────┬──────────────────────────┘
                     │
 ┌───────────────────▼──────────────────────────┐
@@ -72,7 +72,7 @@
 必须遵守以下方向：
 
 ```text
-cmd        -> bootstrap
+main.go    -> bootstrap
 bootstrap  -> transport, application, infrastructure, platform
 transport  -> application, domain
 application-> domain
@@ -99,9 +99,7 @@ FastV 是单机桌面应用，不需要微服务。所有模块在同一进程�
 
 ```text
 fastV/
-├── cmd/
-│   └── fastv/
-│       └── main.go                    # 仅调用 bootstrap.Run
+├── main.go                            # 仅嵌入前端资源并调用 bootstrap.Run
 │
 ├── internal/
 │   ├── bootstrap/
@@ -261,7 +259,7 @@ fastV/
 
 | 路径 | 职责 | 允许依赖 |
 |---|---|---|
-| `cmd/fastv` | 程序入口，解析最少量启动参数 | `bootstrap` |
+| `main.go` | Wails 入口，嵌入 frontend/dist 并调用 bootstrap | `bootstrap` |
 | `internal/bootstrap` | 组合根、依赖创建、Wails Application 组装、生命周期 | 所有内部包 |
 | `internal/domain` | 实体、值对象、枚举、领域校验、纯业务规则 | 标准库 |
 | `internal/application` | 用例编排、事务边界、消费者接口定义 | `domain`、`apperr` |
@@ -738,7 +736,7 @@ DTO 与 domain 实体之间使用显式转换函数，禁止直接序列化 doma
 
 FastV 的架构基线是：
 
-> 以 `cmd` 为入口，以 `internal/bootstrap` 为唯一组合根，以 `domain` 表达业务规则，以 `application` 编排用例，以 `infrastructure` 实现外部能力，以 `transport/wails` 暴露桌面 API，以 `platform` 隔离操作系统差异。
+> 以根目录 `main.go` 为 Wails 入口，以 `internal/bootstrap` 为唯一组合根，以 `domain` 表达业务规则，以 `application` 编排用例，以 `infrastructure` 实现外部能力，以 `transport/wails` 暴露桌面 API，以 `platform` 隔离操作系统差异。
 
 目录设计遵循 Go 社区常用实践，但不照搬所有模板。对于 FastV 这种单机桌面应用，关键是保持：
 
