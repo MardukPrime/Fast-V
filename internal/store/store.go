@@ -51,6 +51,7 @@ func DefaultSettings() Settings {
 		XrayMuxEnabled:        false,
 		XrayMuxConcurrency:    8,
 		XraySniffing:          true,
+		TestURL:               "https://www.gstatic.com/generate_204",
 	}
 }
 
@@ -175,6 +176,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.XrayLogLevel == "" {
 		value.XrayLogLevel = fallback.XrayLogLevel
+	}
+	if value.TestURL == "" {
+		value.TestURL = fallback.TestURL
 	}
 	if value.XrayMuxConcurrency == 0 {
 		value.XrayMuxConcurrency = fallback.XrayMuxConcurrency

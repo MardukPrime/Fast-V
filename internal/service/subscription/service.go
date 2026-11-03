@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -14,7 +18,9 @@ import (
 
 // Service manages remote subscription sources and their parsed nodes.
 type Service struct {
-	store *store.Store
+	store  *store.Store
+	mu     sync.Mutex
+	cancel context.CancelFunc
 }
 
 func New(store *store.Store) *Service {
@@ -23,6 +29,60 @@ func New(store *store.Store) *Service {
 
 func (s *Service) ServiceName() string {
 	return "SubscriptionService"
+}
+
+func (s *Service) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	serviceCtx, cancel := context.WithCancel(ctx)
+	s.mu.Lock()
+	s.cancel = cancel
+	s.mu.Unlock()
+	go s.autoUpdateLoop(serviceCtx)
+	return nil
+}
+
+func (s *Service) ServiceShutdown() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+	return nil
+}
+
+func (s *Service) autoUpdateLoop(ctx context.Context) {
+	wait := 5 * time.Second
+	lastRun := time.Time{}
+	for {
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+
+		settings := s.store.Settings()
+		interval := time.Duration(settings.UpdateIntervalMinutes) * time.Minute
+		if settings.AutoUpdate && (lastRun.IsZero() || time.Since(lastRun) >= interval) {
+			_, _ = s.UpdateAll()
+			lastRun = time.Now()
+			if app := application.Get(); app != nil {
+				app.Event.Emit("subscriptions:changed")
+			}
+		}
+
+		wait = time.Minute
+		if settings.AutoUpdate && !lastRun.IsZero() {
+			remaining := interval - time.Since(lastRun)
+			if remaining < wait {
+				wait = remaining
+			}
+			if wait < 10*time.Second {
+				wait = 10 * time.Second
+			}
+		}
+	}
 }
 
 func (s *Service) List() []model.SubscriptionView {

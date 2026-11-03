@@ -6,7 +6,7 @@ The project does not implement proxy protocols itself. Xray-core is used as the 
 
 ## Status
 
-Milestone M2: dashboard, subscriptions, node management, settings and Xray-core updates are functional.
+Milestone M3: dashboard, subscriptions, node management, Xray-core updates, local proxy start/stop and proxy testing are functional.
 
 Implemented:
 
@@ -21,6 +21,10 @@ Implemented:
 - Client and core settings are separated; Xray-specific parameters only appear when Xray-core is selected.
 - Xray-core version detection, latest release check, SHA-256 verified download and local installation.
 - Automatic core update setting with startup check and download.
+- Xray config generation from the active node, proxy mode and Xray runtime settings.
+- Xray process start/stop with Windows Job Object cleanup.
+- Local SOCKS/HTTP inbound and proxy test through the local inbound.
+- Settings now drive the generated config: local port, log level, Mux, sniffing and routing mode.
 
 ## Quick Start
 
@@ -98,11 +102,17 @@ fastV/
 │   │   ├── manager.go              # Xray version detection and update lifecycle
 │   │   ├── release.go              # GitHub release and asset selection
 │   │   └── installer.go            # Download, SHA-256, unzip and install
+│   ├── proxy/
+│   │   ├── builder.go              # Active node/share-link to Xray config
+│   │   ├── manager.go              # Process lifecycle, local inbound and proxy test
+│   │   ├── process_windows.go      # Windows Job Object integration
+│   │   └── process_other.go        # Non-Windows process stubs
 │   └── service/
 │       ├── app/service.go          # AppService
 │       ├── core/service.go         # CoreService Wails adapter
 │       ├── dashboard/service.go    # DashboardService
 │       ├── node/service.go         # NodeService
+│       ├── proxy/service.go        # ProxyService
 │       ├── settings/service.go     # SettingsService
 │       └── subscription/service.go # SubscriptionService
 ├── frontend/
@@ -169,6 +179,7 @@ SolidJS pages
 - `SubscriptionService`: add, update, delete, list and inspect nodes.
 - `NodeService`: search/filter nodes, select the active node, toggle enabled state, delete nodes and run direct TCP latency checks.
 - `SettingsService`: read, save and reset client and core settings.
+- `ProxyService`: start/stop Xray, expose proxy state and test the local inbound.
 - `CoreService`: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
 
 ### Internal modules
@@ -178,6 +189,7 @@ SolidJS pages
 - `internal/store`: persistence boundary; currently JSON, replaceable with SQLite.
 - `internal/subscription`: parser, fetcher and node builder.
 - `internal/core`: Xray version detection, release lookup and installer.
+- `internal/proxy`: share-link to Xray config builder, process lifecycle and local proxy testing.
 - `internal/service`: thin Wails adapters, one package per feature.
 
 The service adapter layer does not contain protocol parsing or file-format details. `internal/core` does not import Wails.

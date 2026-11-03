@@ -224,11 +224,13 @@ fastV/
 │   ├── store/              # 本地持久化
 │   ├── subscription/       # 订阅抓取、解析和节点构建
 │   ├── core/               # Xray 检测、发布查询和安装
+│   ├── proxy/              # Xray 配置生成、进程和本地代理
 │   └── service/            # Wails Service 适配层
 │       ├── app/
 │       ├── core/
 │       ├── dashboard/
 │       ├── node/
+│       ├── proxy/
 │       ├── settings/
 │       └── subscription/
 ├── frontend/

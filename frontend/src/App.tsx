@@ -4,8 +4,9 @@ import { Events, Window as AppWindow } from "@wailsio/runtime";
 
 import { AppService } from "../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
 import { CoreService } from "../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
+import { ProxyService } from "../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { SettingsService } from "../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { AppInfo, CoreInfo, Settings } from "../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { AppInfo, CoreInfo, ProxyState, ProxyTestResult, Settings } from "../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
@@ -48,17 +49,23 @@ export default function App() {
   const [info, setInfo] = createSignal<AppInfo | null>(null);
   const [settings, setSettings] = createSignal<Settings | null>(null);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
+  const [proxy, setProxy] = createSignal<ProxyState>({ status: "stopped", nodeId: "", nodeName: "", localAddr: "", startedAt: "", error: "", pid: 0 });
+  const [proxyBusy, setProxyBusy] = createSignal(false);
+  const [proxyError, setProxyError] = createSignal("");
+  const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
 
   onMount(async () => {
     try {
-      const [appInfo, loadedSettings, coreInfo] = await Promise.all([
+      const [appInfo, loadedSettings, coreInfo, proxyState] = await Promise.all([
         AppService.Info(),
         SettingsService.Get(),
         CoreService.Info(),
+        ProxyService.State(),
       ]);
       setInfo(appInfo);
       setSettings(loadedSettings);
       setCore(coreInfo);
+      setProxy(proxyState);
       applyTheme(loadedSettings.theme);
     } catch (error) {
       console.error("Failed to load application state", error);
@@ -66,12 +73,57 @@ export default function App() {
   });
 
   onMount(() => {
-    const off = Events.On("core:state", (event) => {
+    const offCore = Events.On("core:state", (event) => {
       setCore(event.data as CoreInfo);
     });
-    onCleanup(off);
+    const offProxy = Events.On("proxy:state", (event) => {
+      setProxy(event.data as ProxyState);
+    });
+    onCleanup(() => {
+      offCore();
+      offProxy();
+    });
   });
 
+  const handleStartProxy = async () => {
+    setProxyBusy(true);
+    setProxyError("");
+    setProxyTest(null);
+    try {
+      setProxy(await ProxyService.Start());
+    } catch (error) {
+      setProxyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProxyBusy(false);
+    }
+  };
+
+  const handleStopProxy = async () => {
+    setProxyBusy(true);
+    setProxyError("");
+    setProxyTest(null);
+    try {
+      setProxy(await ProxyService.Stop());
+    } catch (error) {
+      setProxyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProxyBusy(false);
+    }
+  };
+
+  const handleTestProxy = async () => {
+    setProxyBusy(true);
+    setProxyError("");
+    try {
+      const result = await ProxyService.Test();
+      setProxyTest(result);
+      if (!result.success) setProxyError(result.error);
+    } catch (error) {
+      setProxyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProxyBusy(false);
+    }
+  };
   const handleSettingsSaved = (next: Settings) => {
     setSettings(next);
     applyTheme(next.theme);
@@ -160,6 +212,10 @@ export default function App() {
                 <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
                 {core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}
               </span>
+              <span classList={{ "status-chip": true, "proxy-running": proxy().status === "running" }}>
+                <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
+                {proxy().status === "running" ? `代理 ${proxy().localAddr}` : proxy().status === "starting" ? "代理启动中" : proxy().status === "error" ? "代理异常" : "代理未启动"}
+              </span>
             </div>
           </header>
 
@@ -167,6 +223,13 @@ export default function App() {
             <DashboardPage
               info={info()}
               settings={settings()}
+              proxyState={proxy()}
+              proxyBusy={proxyBusy()}
+              proxyError={proxyError()}
+              proxyTest={proxyTest()}
+              onStartProxy={handleStartProxy}
+              onStopProxy={handleStopProxy}
+              onTestProxy={handleTestProxy}
               onNavigate={(page) => setActive(page as PageKey)}
             />
           </Show>

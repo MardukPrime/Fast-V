@@ -1,4 +1,6 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+
+import { Events } from "@wailsio/runtime";
 
 import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
 import { Service as SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/subscription";
@@ -40,7 +42,11 @@ export default function SubscriptionsPage() {
     }
   };
 
-  onMount(load);
+  onMount(() => {
+    load();
+    const off = Events.On("subscriptions:changed", load);
+    onCleanup(off);
+  });
 
   const addSubscription = async (event: Event) => {
     event.preventDefault();

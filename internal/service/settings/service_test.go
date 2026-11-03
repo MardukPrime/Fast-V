@@ -27,6 +27,7 @@ func validSettings() model.Settings {
 		XrayLocalPort:         10808,
 		XrayLogLevel:          "warning",
 		XrayMuxConcurrency:    8,
+		TestURL:               "https://www.gstatic.com/generate_204",
 	}
 }
 

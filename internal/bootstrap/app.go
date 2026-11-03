@@ -11,6 +11,7 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/service/core"
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
 	"github.com/MardukPrime/Fast-V/internal/service/node"
+	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
 	"github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/service/subscription"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -25,6 +26,7 @@ func Run(assets embed.FS) error {
 
 	appSvc := appservice.New()
 	coreSvc := core.NewCoreService(st)
+	proxySvc := proxyservice.New(st, coreSvc)
 	dashboardSvc := dashboard.New(st, coreSvc)
 	subSvc := subscription.New(st)
 	nodeSvc := node.New(st)
@@ -36,6 +38,7 @@ func Run(assets embed.FS) error {
 		Services: []application.Service{
 			application.NewService(appSvc),
 			application.NewService(coreSvc),
+			application.NewService(proxySvc),
 			application.NewService(dashboardSvc),
 			application.NewService(subSvc),
 			application.NewService(nodeSvc),

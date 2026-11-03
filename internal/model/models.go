@@ -32,6 +32,7 @@ type Settings struct {
 	XrayMuxEnabled        bool   `json:"xrayMuxEnabled"`
 	XrayMuxConcurrency    int    `json:"xrayMuxConcurrency"`
 	XraySniffing          bool   `json:"xraySniffing"`
+	TestURL               string `json:"testUrl"`
 }
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.
@@ -196,4 +197,25 @@ func NewID() string {
 // NowRFC3339 returns the current time in the format used by local records.
 func NowRFC3339() string {
 	return time.Now().Format(time.RFC3339)
+}
+
+// ProxyState describes the running local proxy process.
+type ProxyState struct {
+	Status    string `json:"status"`
+	NodeID    string `json:"nodeId"`
+	NodeName  string `json:"nodeName"`
+	LocalAddr string `json:"localAddr"`
+	StartedAt string `json:"startedAt"`
+	Error     string `json:"error"`
+	PID       int    `json:"pid"`
+}
+
+// ProxyTestResult is the result of a request through the local proxy.
+type ProxyTestResult struct {
+	Success    bool   `json:"success"`
+	StatusCode int    `json:"statusCode"`
+	LatencyMS  int64  `json:"latencyMs"`
+	TargetURL  string `json:"targetUrl"`
+	Error      string `json:"error"`
+	CheckedAt  string `json:"checkedAt"`
 }

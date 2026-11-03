@@ -89,6 +89,31 @@ export interface NodeView {
 }
 
 /**
+ * ProxyState describes the running local proxy process.
+ */
+export interface ProxyState {
+    "status": string;
+    "nodeId": string;
+    "nodeName": string;
+    "localAddr": string;
+    "startedAt": string;
+    "error": string;
+    "pid": number;
+}
+
+/**
+ * ProxyTestResult is the result of a request through the local proxy.
+ */
+export interface ProxyTestResult {
+    "success": boolean;
+    "statusCode": number;
+    "latencyMs": number;
+    "targetUrl": string;
+    "error": string;
+    "checkedAt": string;
+}
+
+/**
  * Settings contains the basic application settings.
  */
 export interface Settings {
@@ -104,6 +129,7 @@ export interface Settings {
     "xrayMuxEnabled": boolean;
     "xrayMuxConcurrency": number;
     "xraySniffing": boolean;
+    "testUrl": string;
 }
 
 /**

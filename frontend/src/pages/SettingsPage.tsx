@@ -24,6 +24,7 @@ const defaults: Settings = {
   xrayMuxEnabled: false,
   xrayMuxConcurrency: 8,
   xraySniffing: true,
+  testUrl: "https://www.gstatic.com/generate_204",
 };
 
 const themes = [
@@ -231,7 +232,7 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="setting-block">
             <div class="setting-label">
               <strong>默认代理模式</strong>
-              <small>代理内核启动时使用的默认模式。</small>
+              <small>生成 Xray 路由规则时使用：规则分流、全局代理或全部直连。</small>
             </div>
             <div class="mode-options">
               {proxyModes.map((item) => (
@@ -244,6 +245,17 @@ export default function SettingsPage(props: SettingsProps) {
                   <small>{item.hint}</small>
                 </button>
               ))}
+            </div>
+            <div class="settings-grid compact">
+              <label>
+                <span>代理测试地址</span>
+                <input
+                  value={settings().testUrl}
+                  onInput={(event) => update("testUrl", event.currentTarget.value)}
+                  placeholder="https://www.gstatic.com/generate_204"
+                />
+                <small>启动代理后使用本地 SOCKS/HTTP 入站访问此地址。</small>
+              </label>
             </div>
           </div>
 
@@ -357,7 +369,7 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="core-params">
               <div class="setting-label">
                 <strong>Xray 运行参数</strong>
-                <small>这些参数只属于 Xray-core，其他内核不会显示。</small>
+                <small>这些参数只属于 Xray-core，修改后重新启动代理即可生效。</small>
               </div>
               <div class="core-param-grid">
                 <label>
@@ -369,14 +381,14 @@ export default function SettingsPage(props: SettingsProps) {
                     value={settings().xrayLocalPort}
                     onInput={(event) => update("xrayLocalPort", Number(event.currentTarget.value))}
                   />
-                  <small>默认 10808。</small>
+                  <small>启动代理时监听 127.0.0.1 的 SOCKS/HTTP 端口。</small>
                 </label>
                 <label>
                   <span>日志级别</span>
                   <select value={settings().xrayLogLevel} onChange={(event) => update("xrayLogLevel", event.currentTarget.value)}>
                     {logLevels.map((level) => <option value={level.value}>{level.label}</option>)}
                   </select>
-                  <small>调试时使用 debug，日常使用 warning。</small>
+                  <small>写入 Xray 配置的 log.loglevel。</small>
                 </label>
                 <label>
                   <span>Mux 并发数</span>
@@ -388,7 +400,7 @@ export default function SettingsPage(props: SettingsProps) {
                     disabled={!settings().xrayMuxEnabled}
                     onInput={(event) => update("xrayMuxConcurrency", Number(event.currentTarget.value))}
                   />
-                  <small>仅在 Mux 开启时生效。</small>
+                  <small>写入 outbound.mux.concurrency，仅在 Mux 开启时生效。</small>
                 </label>
               </div>
 
@@ -410,7 +422,7 @@ export default function SettingsPage(props: SettingsProps) {
                 <label class="switch-row">
                   <span>
                     <strong>启用流量嗅探</strong>
-                    <small>用于域名分流和协议识别。</small>
+                    <small>写入 inbound.sniffing，用于域名分流和协议识别。</small>
                   </span>
                   <span classList={{ "switch": true, on: settings().xraySniffing }}>
                     <input

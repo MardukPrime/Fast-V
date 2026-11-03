@@ -9,6 +9,8 @@ export type {
     NodeFilter,
     NodeLatency,
     NodeView,
+    ProxyState,
+    ProxyTestResult,
     Settings,
     SubscriptionInput,
     SubscriptionView,

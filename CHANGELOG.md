@@ -23,3 +23,7 @@ All notable changes to FastV are documented here.
 - Subscription updates preserve node identity and enabled state through stable source keys.
 - Settings split into client settings and core settings, with Xray-specific parameters shown conditionally.
 - Backend refactored into a root entrypoint, composition root, feature packages and Wails service adapters.
+- Added Xray config generation for VMess, VLESS, Trojan and Shadowsocks nodes.
+- Added Xray start/stop, local SOCKS/HTTP inbound, Windows Job Object cleanup and proxy testing through the local inbound.
+- Wired proxy mode, local port, log level, Mux and sniffing settings into the generated Xray config.
+- Added subscription auto-update scheduler driven by settings.

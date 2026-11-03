@@ -20,7 +20,9 @@ export type IconName =
   | "external"
   | "minimize"
   | "maximize"
-  | "search";
+  | "search"
+  | "play"
+  | "stop";
 
 const iconPaths: Record<IconName, string[]> = {
   dashboard: ["M3 3h7v7H3z", "M14 3h7v7h-7z", "M3 14h7v7H3z", "M14 14h7v7h-7z"],
@@ -43,6 +45,8 @@ const iconPaths: Record<IconName, string[]> = {
   minimize: ["M5 12h14"],
   maximize: ["M6 6h12v12H6z"],
   search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z", "M16.5 16.5L21 21"],
+  play: ["M8 5v14l11-7z"],
+  stop: ["M6 6h12v12H6z"],
 };
 
 type IconProps = {

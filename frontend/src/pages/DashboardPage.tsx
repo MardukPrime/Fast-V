@@ -1,14 +1,31 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 
 import { DashboardService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/dashboard";
-import type { AppInfo, DashboardSummary, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { AppInfo, DashboardSummary, ProxyState, ProxyTestResult, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type DashboardProps = {
   info: AppInfo | null;
   settings: Settings | null;
+  proxyState: ProxyState;
+  proxyBusy: boolean;
+  proxyError: string;
+  proxyTest: ProxyTestResult | null;
+  onStartProxy: () => void;
+  onStopProxy: () => void;
+  onTestProxy: () => void;
   onNavigate: (page: string) => void;
 };
+
+function proxyStatusLabel(status: string) {
+  switch (status) {
+    case "running": return "本地代理运行中";
+    case "starting": return "正在启动本地代理";
+    case "stopping": return "正在停止本地代理";
+    case "error": return "本地代理异常";
+    default: return "本地代理未启动";
+  }
+}
 
 function formatTime(value: string) {
   if (!value) return "尚未更新";
@@ -53,19 +70,55 @@ export default function DashboardPage(props: DashboardProps) {
     <div class="page-stack">
       <section class="glass-panel workspace-hero">
         <div class="workspace-copy">
-          <span class="status-inline"><span class="status-dot online" /> 本地工作区已就绪</span>
+          <span classList={{ "status-inline": true, error: props.proxyState.status === "error" }}>
+            <span classList={{ "status-dot": true, online: props.proxyState.status === "running", idle: props.proxyState.status !== "running" }} />
+            {proxyStatusLabel(props.proxyState.status)}
+          </span>
+          <Show when={props.proxyState.status === "running"}>
+            <div class="proxy-runtime-line">
+              <Icon name="route" size={13} />
+              <span>SOCKS/HTTP {props.proxyState.localAddr}</span>
+              <span class="proxy-runtime-node">{props.proxyState.nodeName}</span>
+            </div>
+          </Show>
           <h2>工作区概览</h2>
           <p>
             订阅、节点和基础设置都保存在本机。添加订阅地址后，FastV 会自动解析节点并汇总到仪表盘。
           </p>
           <div class="workspace-actions">
-            <button class="btn primary" onClick={() => props.onNavigate("subscriptions")}>
+            <Show when={props.proxyState.status === "running"} fallback={
+              <button class="btn primary" onClick={props.onStartProxy} disabled={props.proxyBusy || !summary()?.activeNode || summary()?.coreStatus === "not_installed" || summary()?.coreStatus === "error"}>
+                <Icon name="play" size={15} /> {props.proxyBusy ? "启动中..." : "启动代理"}
+              </button>
+            }>
+              <button class="btn primary danger-action" onClick={props.onStopProxy} disabled={props.proxyBusy}>
+                <Icon name="stop" size={15} /> {props.proxyBusy ? "停止中..." : "停止代理"}
+              </button>
+            </Show>
+            <button class="btn glass" onClick={props.onTestProxy} disabled={props.proxyBusy || props.proxyState.status !== "running"}>
+              <Icon name="speed" size={15} /> 测试代理
+            </button>
+            <button class="btn ghost" onClick={() => props.onNavigate("subscriptions")}>
               <Icon name="plus" size={15} /> 添加订阅
             </button>
-            <button class="btn glass" onClick={() => props.onNavigate("settings")}>
-              <Icon name="settings" size={15} /> 打开设置
+            <button class="btn ghost" onClick={() => props.onNavigate("settings")}>
+              <Icon name="settings" size={15} /> 设置
             </button>
           </div>
+          <Show when={props.proxyError}>
+            <div class="proxy-inline-alert error">
+              <Icon name="alert" size={13} /> {props.proxyError}
+            </div>
+          </Show>
+          <Show when={props.proxyTest}>
+            <div classList={{ "proxy-inline-alert": true, ok: props.proxyTest?.success, error: !props.proxyTest?.success }}>
+              <Icon name={props.proxyTest?.success ? "check" : "alert"} size={13} />
+              {props.proxyTest?.success ? `代理可用 · ${props.proxyTest?.latencyMs} ms · HTTP ${props.proxyTest?.statusCode}` : `代理测试失败${props.proxyTest?.error ? ` · ${props.proxyTest.error}` : ""}`}
+            </div>
+          </Show>
+          <Show when={!summary()?.activeNode}>
+            <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> 请先在服务器页面选择一个当前节点。</div>
+          </Show>
         </div>
 
         <div class="workspace-metrics">
@@ -168,6 +221,9 @@ export default function DashboardPage(props: DashboardProps) {
             </div>
             <div class="config-list">
               <div class="config-row"><span>当前节点</span><strong>{summary()?.activeNode?.name ?? "未选择"}</strong></div>
+              <div class="config-row"><span>代理状态</span><strong>{props.proxyState.status === "running" ? "运行中" : props.proxyState.status === "error" ? "异常" : "已停止"}</strong></div>
+              <div class="config-row"><span>本地入站</span><strong>{props.proxyState.status === "running" ? props.proxyState.localAddr : "未监听"}</strong></div>
+              <div class="config-row"><span>测试地址</span><strong class="config-url">{props.settings?.testUrl ?? "未设置"}</strong></div>
               <div class="config-row"><span>应用版本</span><strong>{props.info?.version ?? "0.1.0"}</strong></div>
               <div class="config-row"><span>运行平台</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
               <div class="config-row"><span>界面主题</span><strong>{props.settings?.theme ?? "dark"}</strong></div>

@@ -1,22 +1,26 @@
-﻿# 事件契约
+# 事件契约
 
-后端通过 Wails v3 Event Bus 向前端推送状态。事件名在 `internal/transport/wails/events/names.go` 中集中定义。
+后端通过 Wails v3 Event Bus 向前端推送状态。
+
+## 已实现事件
 
 | 事件 | 载荷 | 频率 | 说明 |
 |---|---|---|---|
-| proxy:state | ProxyStateDTO | 状态变化 | 代理状态机变化 |
-| proxy:traffic | TrafficSnapshotDTO | 1 秒 | 上下行流量 |
-| core:log | LogBatchDTO | 100-250ms | 批量日志 |
-| core:error | CoreErrorDTO | 异常时 | 内核错误 |
-| profiles:changed | ProfileChangeDTO | 数据变化 | 节点列表变化 |
-| subscriptions:changed | SubscriptionSummaryDTO | 更新后 | 订阅变化 |
-| speedtest:progress | SpeedTestProgressDTO | 200-500ms | 测速进度 |
-| app:notification | NotificationDTO | 按需 | 系统通知 |
+| core:state | CoreInfo | 状态变化 | 内核检测、检查、下载和安装状态 |
+| proxy:state | ProxyState | 状态变化 | 代理启动、运行、停止和异常状态 |
+| subscriptions:changed | 无 | 自动更新后 | 订阅自动更新完成 |
+
+## 计划事件
+
+| 事件 | 载荷 | 说明 |
+|---|---|---|
+| core:log | LogBatch | 内核日志批量推送 |
+| proxy:traffic | TrafficSnapshot | 流量统计 |
+| speedtest:progress | SpeedTestProgress | 测速进度 |
 
 ## 规则
 
 - 事件载荷必须可 JSON 序列化。
-- 高频事件必须批量发送。
 - 不发送密码、UUID、私钥或完整订阅 URL。
 - 前端事件监听器必须在页面卸载时取消。
-- 新增事件时同步更新本文档。
+- 新增事件时同步更新本文档和 `CHANGELOG.md`。

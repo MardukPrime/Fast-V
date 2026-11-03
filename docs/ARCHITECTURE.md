@@ -48,6 +48,11 @@ fastV/
 │   │   ├── manager.go
 │   │   ├── release.go
 │   │   └── installer.go
+│   ├── proxy/
+│   │   ├── builder.go
+│   │   ├── manager.go
+│   │   ├── process_windows.go
+│   │   └── process_other.go
 │   └── service/
 │       ├── app/
 │       │   └── service.go
@@ -56,6 +61,8 @@ fastV/
 │       ├── dashboard/
 │       │   └── service.go
 │       ├── node/
+│       │   └── service.go
+│       ├── proxy/
 │       │   └── service.go
 │       ├── settings/
 │       │   └── service.go
@@ -166,6 +173,21 @@ frontend/node_modules/
 
 该包不导入 Wails。内核状态变化通过回调通知服务适配层。
 
+### 3.6.1 代理运行模块
+
+`internal/proxy` 负责：
+
+- 将当前节点和设置转换为 Xray JSON 配置
+- 支持 VMess、VLESS、Trojan、Shadowsocks 分享链接
+- 根据代理模式生成路由规则
+- 将 Xray 参数写入配置
+- 校验配置
+- 启动和停止 Xray 进程
+- Windows Job Object 进程树清理
+- 本地 SOCKS/HTTP 入站
+- 通过本地代理访问测试地址
+
+该包不依赖 Wails。
 ### 3.7 Wails 服务适配层
 
 `internal/service/*` 只负责：
@@ -199,16 +221,17 @@ main.go
   -> internal/model
 
 internal/core          -> internal/model, standard library
+internal/proxy         -> internal/model, standard library
 internal/subscription  -> internal/model, standard library
 internal/store         -> internal/model, standard library
-internal/service/*     -> internal/core, internal/subscription, internal/store, internal/model, Wails
+internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/store, internal/model, Wails
 internal/bootstrap     -> all concrete implementations
 ```
 
 禁止：
 
 - `internal/model` 导入 Wails 或 infrastructure。
-- `internal/core` 或 `internal/subscription` 导入 Wails。
+- `internal/core`、`internal/proxy` 或 `internal/subscription` 导入 Wails。
 - `internal/store` 直接向 Wails Event 发送消息。
 - Service 中直接操作 SQLite、ZIP、注册表或系统 API。
 - 在 `main.go` 中写依赖组装。
@@ -255,7 +278,23 @@ ServersPage
 
 `NodeService.TestLatency` 执行直接 TCP 连通性检查，不经过代理链路。
 
+### 启动代理
+
+```text
+DashboardPage
+  -> ProxyService.Start
+  -> proxy.Manager
+  -> proxy.BuildConfig
+  -> xray -test
+  -> xray run
+  -> 等待 127.0.0.1:<port> 可连接
+  -> ProxyState
+```
+
+本地入站使用 SOCKS 协议并同时兼容 HTTP 代理请求。代理测试通过该本地入站访问设置中的测试地址。
+
 ### 更新内核
+
 
 ```text
 SettingsPage

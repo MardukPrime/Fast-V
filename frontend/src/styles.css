@@ -2753,3 +2753,100 @@ input::placeholder {
     min-width: 760px;
   }
 }
+/* Proxy runtime controls */
+.proxy-runtime-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: max-content;
+  max-width: 100%;
+  margin: 8px 0 2px;
+  padding: 5px 9px;
+  border: 1px solid rgba(185, 220, 242, 0.16);
+  border-radius: 999px;
+  color: var(--accent);
+  background: rgba(185, 220, 242, 0.055);
+  font-size: 10px;
+}
+
+.proxy-runtime-node {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxy-inline-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 560px;
+  margin-top: 9px;
+  padding: 6px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.proxy-inline-alert.ok {
+  color: var(--success);
+  border-color: rgba(146, 223, 180, 0.18);
+  background: rgba(146, 223, 180, 0.06);
+}
+
+.proxy-inline-alert.error {
+  color: var(--danger);
+  border-color: rgba(240, 163, 163, 0.18);
+  background: rgba(240, 163, 163, 0.06);
+}
+
+.proxy-inline-alert.muted {
+  color: var(--muted);
+}
+
+.status-inline.error {
+  color: var(--danger);
+}
+
+.status-inline.error .status-dot {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(240, 163, 163, 0.35);
+}
+
+.btn.danger-action {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 8px 24px rgba(220, 92, 92, 0.14);
+}
+
+.config-row strong.config-url {
+  max-width: 150px;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-chip.proxy-running {
+  border-color: rgba(146, 223, 180, 0.2);
+  color: var(--success);
+  background: rgba(146, 223, 180, 0.055);
+}
+
+@media (max-width: 1180px) {
+  .topbar-actions {
+    gap: 5px;
+  }
+
+  .topbar-actions .status-chip {
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

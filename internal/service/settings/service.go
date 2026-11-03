@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
@@ -32,6 +33,7 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	input.ProxyMode = strings.TrimSpace(input.ProxyMode)
 	input.CoreType = strings.TrimSpace(input.CoreType)
 	input.XrayLogLevel = strings.TrimSpace(input.XrayLogLevel)
+	input.TestURL = strings.TrimSpace(input.TestURL)
 
 	if input.Theme != "dark" && input.Theme != "light" && input.Theme != "system" {
 		return model.Settings{}, errors.New("invalid theme")
@@ -50,6 +52,10 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	}
 	if input.XrayLogLevel != "debug" && input.XrayLogLevel != "info" && input.XrayLogLevel != "warning" && input.XrayLogLevel != "error" && input.XrayLogLevel != "none" {
 		return model.Settings{}, errors.New("invalid Xray log level")
+	}
+	testURL, err := url.Parse(input.TestURL)
+	if err != nil || testURL.Hostname() == "" || (testURL.Scheme != "http" && testURL.Scheme != "https") {
+		return model.Settings{}, errors.New("invalid proxy test URL")
 	}
 	if input.XrayMuxConcurrency < 1 || input.XrayMuxConcurrency > 128 {
 		return model.Settings{}, fmt.Errorf("Xray mux concurrency must be between 1 and 128")
