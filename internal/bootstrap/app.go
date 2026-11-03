@@ -54,8 +54,7 @@ func Run(assets embed.FS) error {
 			UniqueID: buildinfo.ProductID,
 		},
 		Windows: application.WindowsOptions{
-			WebviewUserDataPath:   filepath.Join(st.DataDir(), "webview2"),
-			AdditionalBrowserArgs: []string{"--disable-gpu"},
+			WebviewUserDataPath: filepath.Join(st.DataDir(), "webview2"),
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

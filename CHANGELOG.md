@@ -36,3 +36,5 @@ All notable changes to FastV are documented here.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.
+- Enabled WebView2 GPU acceleration by default and raised small typography/contrast for clearer rendering.
+- Reduced glass blur and edge blending to improve panel and text edge crispness.

@@ -3775,3 +3775,204 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+/* Clarity and edge crispness pass */
+:root {
+  --text: #f7f9fc;
+  --text-secondary: #c6d0dc;
+  --muted: #b1bdca;
+  --faint: #8795a6;
+}
+
+:root[data-theme="light"] {
+  --text: #0f1720;
+  --text-secondary: #3f4e5f;
+  --muted: #59697b;
+  --faint: #7b8999;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+body {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+small {
+  font-size: 11px !important;
+  line-height: 1.45;
+}
+
+.brand-caption,
+.nav-caption,
+.nav-section-label,
+.breadcrumb,
+.topbar p,
+.status-chip,
+.footer-status small,
+.footer-version,
+.status-inline,
+.workspace-copy p,
+.workspace-metric span,
+.workspace-metric small,
+.mini-stat span,
+.mini-stat small,
+.recent-copy small,
+.recent-count,
+.subscription-host,
+.subscription-meta,
+.node-hint,
+.node-table-head,
+.node-name small,
+.node-address,
+.tag,
+.latency,
+.state-pill,
+.config-row span,
+.config-row strong,
+.setting-label small,
+.switch-row small,
+.theme-option-copy small,
+.mode-option small,
+.core-type-copy small,
+.core-message,
+.core-version span,
+.about-grid span,
+.network-card-head h3,
+.network-mode-tag,
+.network-ip-row span,
+.network-facts span,
+.network-facts strong,
+.network-note,
+.compare-exit span,
+.compare-exit small,
+.compare-colo,
+.network-disclaimer,
+.node-editor-grid label > span,
+.node-json-editor textarea,
+.node-config-preview,
+.node-editor-note,
+.node-editor-shortcut,
+.settings-section-summary > .heading-with-icon > div > span {
+  font-size: 11px;
+}
+
+.nav-label {
+  font-size: 13px;
+}
+
+.nav-caption {
+  margin-top: 2px;
+  font-size: 10.5px;
+}
+
+.panel-heading h3 {
+  font-size: 15px;
+}
+
+.panel-heading span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.node-table-head {
+  font-size: 10px;
+}
+
+.node-name strong {
+  font-size: 12px;
+}
+
+.node-address {
+  font-size: 11px;
+}
+
+.node-name small {
+  font-size: 10.5px;
+}
+
+.tag,
+.latency,
+.state-pill {
+  font-size: 10px;
+}
+
+.node-hint {
+  font-size: 10.5px;
+}
+
+input,
+select {
+  font-size: 12px;
+}
+
+.workspace-copy h2 {
+  letter-spacing: -0.035em;
+}
+
+/* Cleaner glass edges: less blur, less blend, stronger border alignment. */
+.glass-panel,
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.155);
+  backdrop-filter: blur(24px) saturate(155%) contrast(1.025);
+  -webkit-backdrop-filter: blur(24px) saturate(155%) contrast(1.025);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    0 16px 42px rgba(0, 0, 0, 0.24);
+}
+
+:root[data-theme="light"] .glass-panel,
+:root[data-theme="light"] .panel {
+  border-color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(42, 65, 88, 0.06),
+    0 16px 42px rgba(41, 63, 85, 0.11);
+}
+
+.glass-panel::after,
+.panel::after {
+  mix-blend-mode: normal;
+  opacity: 0.32;
+}
+
+.glass-panel::before,
+.panel::before {
+  opacity: 0.9;
+}
+
+.sidebar,
+.window-titlebar {
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.window-titlebar {
+  border-bottom-width: 1px;
+}
+
+/* Keep small labels readable without changing component geometry. */
+.modal-heading span,
+.modal-heading h3,
+.alert,
+.empty-state span,
+.node-config-preview,
+.node-json-editor textarea {
+  line-height: 1.55;
+}
+
+.node-editor-grid input,
+.node-editor-grid select {
+  font-size: 11.5px;
+}
+
+@media (max-width: 720px) {
+  .nav-caption,
+  .status-chip,
+  .node-table-head {
+    font-size: 10.5px;
+  }
+}
