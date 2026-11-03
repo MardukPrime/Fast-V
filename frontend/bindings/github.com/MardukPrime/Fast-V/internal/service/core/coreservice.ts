@@ -26,6 +26,14 @@ export function DownloadLatest(): $CancellablePromise<model$0.CoreInfo> {
     return $Call.ByID(3283396910);
 }
 
+export function GeoData(): $CancellablePromise<model$0.GeoDataInfo> {
+    return $Call.ByID(219100702);
+}
+
 export function Info(): $CancellablePromise<model$0.CoreInfo> {
     return $Call.ByID(3563641097);
+}
+
+export function UpdateGeoData(): $CancellablePromise<model$0.GeoDataInfo> {
+    return $Call.ByID(2056915981);
 }

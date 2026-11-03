@@ -33,6 +33,7 @@ Xray-core is the first and primary proxy core used by FastV. It handles VMess, V
 | [routing-dns.md](routing-dns.md) | Routing and built-in DNS integration |
 | [tun.md](tun.md) | Windows Xray TUN, Wintun and route setup |
 | [node-editor.md](node-editor.md) | Share-link extraction, form editing and advanced Xray outbound JSON |
+| [geodata.md](geodata.md) | GeoIP/GeoSite assets, XRAY_LOCATION_ASSET and updates |
 | [operations.md](operations.md) | Commands, validation, logs and troubleshooting |
 | [examples.md](examples.md) | Minimal client configurations and JSON examples |
 | [upstream.md](upstream.md) | Official documentation index and references |

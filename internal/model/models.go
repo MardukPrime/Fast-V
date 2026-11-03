@@ -34,6 +34,8 @@ type Settings struct {
 	XraySniffing          bool   `json:"xraySniffing"`
 	TunMode               bool   `json:"tunMode"`
 	TestURL               string `json:"testUrl"`
+	XrayAPIEnabled        bool   `json:"xrayApiEnabled"`
+	XrayAPIPort           int    `json:"xrayApiPort"`
 }
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.
@@ -305,4 +307,19 @@ type LogEntry struct {
 	Level     string `json:"level"`
 	Source    string `json:"source"`
 	Message   string `json:"message"`
+}
+
+// GeoDataFile describes one Xray geo asset file.
+type GeoDataFile struct {
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	UpdatedAt string `json:"updatedAt"`
+}
+
+// GeoDataInfo describes the geo assets installed next to Xray-core.
+type GeoDataInfo struct {
+	Directory string        `json:"directory"`
+	GeoIP     *GeoDataFile  `json:"geoIp"`
+	GeoSite   *GeoDataFile  `json:"geoSite"`
+	Files     []GeoDataFile `json:"files"`
 }

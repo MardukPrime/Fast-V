@@ -4,7 +4,7 @@ import { Events } from "@wailsio/runtime";
 
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { CoreInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { CoreInfo, GeoDataInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type SettingsProps = {
@@ -27,6 +27,8 @@ const defaults: Settings = {
   xraySniffing: true,
   tunMode: false,
   testUrl: "https://www.gstatic.com/generate_204",
+  xrayApiEnabled: false,
+  xrayApiPort: 10085,
 };
 
 const themes = [
@@ -67,6 +69,13 @@ function coreStatusLabel(status: string) {
   }
 }
 
+function formatBytes(size: number) {
+  if (!size) return "0 B";
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${size} B`;
+}
+
 function readSectionState(key: string, fallback: boolean) {
   try {
     const value = localStorage.getItem(key);
@@ -89,6 +98,8 @@ export default function SettingsPage(props: SettingsProps) {
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [coreBusy, setCoreBusy] = createSignal("");
+  const [geoBusy, setGeoBusy] = createSignal("");
+  const [geoData, setGeoData] = createSignal<GeoDataInfo | null>(null);
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
   const [clientExpanded, setClientExpanded] = createSignal(readSectionState("fastv.settings.clientOpen", false));
@@ -97,12 +108,14 @@ export default function SettingsPage(props: SettingsProps) {
   const load = async () => {
     setLoading(true);
     try {
-      const [loadedSettings, loadedCore] = await Promise.all([
+      const [loadedSettings, loadedCore, loadedGeoData] = await Promise.all([
         SettingsService.Get(),
         CoreService.Info(),
+        CoreService.GeoData(),
       ]);
       setSettings(loadedSettings);
       setCore(loadedCore);
+      setGeoData(loadedGeoData);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -161,6 +174,34 @@ export default function SettingsPage(props: SettingsProps) {
     }
   };
 
+  const refreshGeoData = async () => {
+    setGeoBusy("refresh");
+    setError("");
+    setMessage("");
+    try {
+      setGeoData(await CoreService.GeoData());
+      setMessage("GeoData 状态已刷新。");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeoBusy("");
+    }
+  };
+
+  const updateGeoData = async () => {
+    setGeoBusy("update");
+    setError("");
+    setMessage("");
+    try {
+      const info = await CoreService.UpdateGeoData();
+      setGeoData(info);
+      setMessage("GeoData 已更新。");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeoBusy("");
+    }
+  };
   const checkCore = async () => {
     setCoreBusy("checking");
     setError("");
@@ -473,6 +514,18 @@ export default function SettingsPage(props: SettingsProps) {
                   />
                   <small>写入 outbound.mux.concurrency，仅在 Mux 开启时生效。</small>
                 </label>
+                <label>
+                  <span>API / 统计端口</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={settings().xrayApiPort}
+                    disabled={!settings().xrayApiEnabled}
+                    onInput={(event) => update("xrayApiPort", Number(event.currentTarget.value))}
+                  />
+                  <small>仅监听 127.0.0.1，不能和本地 SOCKS/HTTP 端口相同。</small>
+                </label>
               </div>
 
               <div class="core-switch-grid">
@@ -504,9 +557,55 @@ export default function SettingsPage(props: SettingsProps) {
                     <span class="switch-track"><span class="switch-thumb" /></span>
                   </span>
                 </label>
+                <label class="switch-row">
+                  <span>
+                    <strong>启用 Xray API 与本地统计</strong>
+                    <small>启动本地 API、StatsService 和统计策略，为流量统计和内核管理功能提供支持。</small>
+                  </span>
+                  <span classList={{ "switch": true, on: settings().xrayApiEnabled }}>
+                    <input
+                      type="checkbox"
+                      checked={settings().xrayApiEnabled}
+                      onChange={(event) => update("xrayApiEnabled", event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
               </div>
             </div>
 
+            <div class="geodata-block">
+              <div class="setting-label">
+                <strong>GeoData 资源</strong>
+                <small>路由中的 geoip/geosite 规则依赖这些资源。FastV 会通过 XRAY_LOCATION_ASSET 指向内核目录。</small>
+              </div>
+              <div class="geodata-files">
+                <div class="geodata-file">
+                  <span>GeoIP</span>
+                  <strong>{geoData()?.geoIp ? "已安装" : "缺失"}</strong>
+                  <small>{geoData()?.geoIp ? `${formatBytes(geoData()!.geoIp!.size)} · ${geoData()!.geoIp!.name}` : "geoip.dat"}</small>
+                </div>
+                <div class="geodata-file">
+                  <span>GeoSite</span>
+                  <strong>{geoData()?.geoSite ? "已安装" : "缺失"}</strong>
+                  <small>{geoData()?.geoSite ? `${formatBytes(geoData()!.geoSite!.size)} · ${geoData()!.geoSite!.name}` : "geosite.dat"}</small>
+                </div>
+                <div class="geodata-file">
+                  <span>资源文件</span>
+                  <strong>{geoData()?.files?.length ?? 0}</strong>
+                  <small>{geoData()?.directory ?? "内核目录"}</small>
+                </div>
+              </div>
+              <div class="core-actions">
+                <button class="btn secondary" type="button" onClick={refreshGeoData} disabled={geoBusy() !== ""}>
+                  <Icon name="refresh" size={14} /> {geoBusy() === "refresh" ? "刷新中..." : "刷新状态"}
+                </button>
+                <button class="btn primary" type="button" onClick={updateGeoData} disabled={geoBusy() !== ""}>
+                  <Icon name="external" size={14} /> {geoBusy() === "update" ? "更新中..." : "下载/更新 GeoData"}
+                </button>
+              </div>
+              <p class="core-message">支持 geoip.dat、geosite.dat 以及额外的 .dat 资源文件；更新 GeoData 不会替换 Xray 可执行文件。</p>
+            </div>
             <label class="switch-row">
               <span>
                 <strong>自动检查并下载 Xray 内核更新</strong>

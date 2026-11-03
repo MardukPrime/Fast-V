@@ -53,6 +53,8 @@ func DefaultSettings() Settings {
 		XrayMuxConcurrency:    8,
 		XraySniffing:          true,
 		TestURL:               "https://www.gstatic.com/generate_204",
+		XrayAPIEnabled:        false,
+		XrayAPIPort:           10085,
 	}
 }
 
@@ -177,6 +179,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.XrayLogLevel == "" {
 		value.XrayLogLevel = fallback.XrayLogLevel
+	}
+	if value.XrayAPIPort == 0 {
+		value.XrayAPIPort = fallback.XrayAPIPort
 	}
 	if value.TestURL == "" {
 		value.TestURL = fallback.TestURL

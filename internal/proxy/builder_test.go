@@ -267,3 +267,60 @@ func TestCustomRoutingPassesXrayValidation(t *testing.T) {
 		t.Fatalf("xray routing config validation failed: %v\n%s", err, output)
 	}
 }
+
+func TestBuildConfigIncludesXrayAPI(t *testing.T) {
+	settings := testSettings()
+	settings.XrayAPIEnabled = true
+	settings.XrayAPIPort = 10085
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#API"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	api, ok := config["api"].(map[string]any)
+	if !ok || api["tag"] != "api" {
+		t.Fatalf("unexpected api config: %+v", config["api"])
+	}
+	if _, ok := config["stats"]; !ok {
+		t.Fatal("stats config is missing")
+	}
+	if _, ok := config["policy"]; !ok {
+		t.Fatal("policy config is missing")
+	}
+	inbounds := config["inbounds"].([]any)
+	if len(inbounds) != 2 || inbounds[1].(map[string]any)["tag"] != "api-in" {
+		t.Fatalf("unexpected inbounds: %+v", inbounds)
+	}
+	rules := config["routing"].(map[string]any)["rules"].([]any)
+	if rules[0].(map[string]any)["outboundTag"] != "api" {
+		t.Fatalf("api routing rule is missing: %+v", rules)
+	}
+}
+
+func TestAPIConfigPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	settings := testSettings()
+	settings.XrayAPIEnabled = true
+	settings.XrayAPIPort = 10085
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#API"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "api-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("xray API config validation failed: %v\n%s", err, output)
+	}
+}

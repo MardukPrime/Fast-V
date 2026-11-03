@@ -24,7 +24,7 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 		return nil, err
 	}
 
-	inbounds := make([]any, 0, 2)
+	inbounds := make([]any, 0, 3)
 	if settings.TunMode {
 		inbounds = append(inbounds, map[string]any{
 			"tag":      "tun-in",
@@ -53,6 +53,17 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			"destOverride": []string{"http", "tls", "quic"},
 		},
 	})
+	if settings.XrayAPIEnabled {
+		inbounds = append(inbounds, map[string]any{
+			"tag":      "api-in",
+			"listen":   "127.0.0.1",
+			"port":     settings.XrayAPIPort,
+			"protocol": "dokodemo-door",
+			"settings": map[string]any{
+				"address": "127.0.0.1",
+			},
+		})
+	}
 
 	config := map[string]any{
 		"log": map[string]any{
@@ -64,11 +75,41 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			map[string]any{"tag": "direct", "protocol": "freedom"},
 			map[string]any{"tag": "block", "protocol": "blackhole"},
 		},
-		"routing": buildRouting(settings.ProxyMode, customRules),
+		"routing": buildRouting(settings.ProxyMode, customRules, settings.XrayAPIEnabled),
 		"dns": map[string]any{
 			"servers":       []string{"1.1.1.1", "8.8.8.8"},
 			"queryStrategy": "UseIP",
 		},
+	}
+	if settings.XrayAPIEnabled {
+		config["api"] = map[string]any{
+			"tag": "api",
+			"services": []string{
+				"HandlerService",
+				"LoggerService",
+				"StatsService",
+				"RoutingService",
+			},
+		}
+		config["stats"] = map[string]any{}
+		config["policy"] = map[string]any{
+			"levels": map[string]any{
+				"0": map[string]any{
+					"handshake":         4,
+					"connIdle":          300,
+					"uplinkOnly":        2,
+					"downlinkOnly":      5,
+					"statsUserUplink":   true,
+					"statsUserDownlink": true,
+				},
+			},
+			"system": map[string]any{
+				"statsInboundUplink":    true,
+				"statsInboundDownlink":  true,
+				"statsOutboundUplink":   true,
+				"statsOutboundDownlink": true,
+			},
+		}
 	}
 
 	return json.MarshalIndent(config, "", "  ")
@@ -103,9 +144,17 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 	return outbound, nil
 }
 
-func buildRouting(proxyMode string, customRules []model.RoutingRule) map[string]any {
+func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled bool) map[string]any {
+	rules := routing.BuildXrayRules(customRules, proxyMode)
+	if apiEnabled {
+		rules = append([]any{map[string]any{
+			"type":        "field",
+			"inboundTag":  []string{"api-in"},
+			"outboundTag": "api",
+		}}, rules...)
+	}
 	return map[string]any{
 		"domainStrategy": "IPIfNonMatch",
-		"rules":          routing.BuildXrayRules(customRules, proxyMode),
+		"rules":          rules,
 	}
 }

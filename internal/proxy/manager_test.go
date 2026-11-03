@@ -32,6 +32,18 @@ func TestManagerStartAndStop(t *testing.T) {
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	_ = listener.Close()
+	var apiPort int
+	for {
+		apiListener, listenErr := net.Listen("tcp", "127.0.0.1:0")
+		if listenErr != nil {
+			t.Fatal(listenErr)
+		}
+		apiPort = apiListener.Addr().(*net.TCPAddr).Port
+		_ = apiListener.Close()
+		if apiPort != port {
+			break
+		}
+	}
 
 	st, err := store.NewStoreAt(filepath.Join(t.TempDir(), "data.json"))
 	if err != nil {
@@ -40,6 +52,8 @@ func TestManagerStartAndStop(t *testing.T) {
 	settings := store.DefaultSettings()
 	settings.CoreType = "xray"
 	settings.XrayLocalPort = port
+	settings.XrayAPIEnabled = true
+	settings.XrayAPIPort = apiPort
 	settings.XrayLogLevel = "warning"
 	settings.ProxyMode = "rule"
 	settings.TestURL = "https://www.gstatic.com/generate_204"
@@ -64,7 +78,7 @@ func TestManagerStartAndStop(t *testing.T) {
 
 	state, err := manager.Start(ctx)
 	if err != nil {
-		t.Fatalf("start failed: %v", err)
+		t.Fatalf("start failed: %v logs=%+v", err, manager.Logs())
 	}
 	if state.Status != "running" {
 		t.Fatalf("unexpected state: %+v", state)

@@ -33,6 +33,7 @@ docs/
 │       ├── integration.md
 │       ├── tun.md
 │       ├── node-editor.md
+│       ├── geodata.md
 │       ├── profile-mapping.md
 │       ├── transports.md
 │       ├── routing-dns.md

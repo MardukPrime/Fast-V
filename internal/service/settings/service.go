@@ -57,6 +57,12 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if err != nil || testURL.Hostname() == "" || (testURL.Scheme != "http" && testURL.Scheme != "https") {
 		return model.Settings{}, errors.New("invalid proxy test URL")
 	}
+	if input.XrayAPIPort < 1 || input.XrayAPIPort > 65535 {
+		return model.Settings{}, errors.New("invalid Xray API port")
+	}
+	if input.XrayAPIEnabled && input.XrayAPIPort == input.XrayLocalPort {
+		return model.Settings{}, errors.New("Xray API port must differ from local proxy port")
+	}
 	if input.XrayMuxConcurrency < 1 || input.XrayMuxConcurrency > 128 {
 		return model.Settings{}, fmt.Errorf("Xray mux concurrency must be between 1 and 128")
 	}

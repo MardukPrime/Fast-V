@@ -65,6 +65,15 @@ func (s *CoreService) Info() model.CoreInfo {
 	return s.manager.Info()
 }
 
+func (s *CoreService) GeoData() model.GeoDataInfo {
+	return s.manager.GeoDataInfo()
+}
+
+func (s *CoreService) UpdateGeoData() (model.GeoDataInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	return s.manager.UpdateGeoData(ctx)
+}
 func (s *CoreService) CheckLatest() (model.CoreInfo, error) {
 	s.manager.SetAutoUpdate(s.store.Settings().CoreAutoUpdate)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

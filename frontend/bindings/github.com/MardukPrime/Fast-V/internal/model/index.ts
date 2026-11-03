@@ -6,6 +6,8 @@ export type {
     CoreInfo,
     CoreUpdateResult,
     DashboardSummary,
+    GeoDataFile,
+    GeoDataInfo,
     LogEntry,
     NetworkProbe,
     NodeConfig,

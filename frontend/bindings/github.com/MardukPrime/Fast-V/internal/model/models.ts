@@ -55,6 +55,25 @@ export interface DashboardSummary {
 }
 
 /**
+ * GeoDataFile describes one Xray geo asset file.
+ */
+export interface GeoDataFile {
+    "name": string;
+    "size": number;
+    "updatedAt": string;
+}
+
+/**
+ * GeoDataInfo describes the geo assets installed next to Xray-core.
+ */
+export interface GeoDataInfo {
+    "directory": string;
+    "geoIp": GeoDataFile | null;
+    "geoSite": GeoDataFile | null;
+    "files": GeoDataFile[] | null;
+}
+
+/**
  * LogEntry is a line of runtime output captured from Xray-core.
  */
 export interface LogEntry {
@@ -226,6 +245,8 @@ export interface Settings {
     "xraySniffing": boolean;
     "tunMode": boolean;
     "testUrl": string;
+    "xrayApiEnabled": boolean;
+    "xrayApiPort": number;
 }
 
 /**

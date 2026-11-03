@@ -28,6 +28,8 @@ func validSettings() model.Settings {
 		XrayLogLevel:          "warning",
 		XrayMuxConcurrency:    8,
 		TestURL:               "https://www.gstatic.com/generate_204",
+		XrayAPIEnabled:        true,
+		XrayAPIPort:           10085,
 	}
 }
 
@@ -35,7 +37,7 @@ func TestSaveAndReset(t *testing.T) {
 	service := newService(t)
 
 	defaults := service.Get()
-	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 {
+	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 {
 		t.Fatalf("unexpected defaults: %+v", defaults)
 	}
 

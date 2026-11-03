@@ -207,6 +207,7 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.appendLog("info", "core", "正在校验 Xray 配置")
 	testCmd := exec.CommandContext(ctx, coreInfo.Path, "run", "-test", "-config", configPath)
 	hideWindow(testCmd)
+	testCmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
 	if output, err := testCmd.CombinedOutput(); err != nil {
 		return m.fail(fmt.Sprintf("Xray config validation failed: %s", strings.TrimSpace(string(output))))
 	}
@@ -214,6 +215,7 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 
 	cmd := exec.Command(coreInfo.Path, "run", "-config", configPath)
 	hideWindow(cmd)
+	cmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return m.fail(fmt.Sprintf("failed to open Xray stdout: %v", err))

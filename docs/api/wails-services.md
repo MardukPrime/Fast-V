@@ -55,6 +55,8 @@
 | CheckLatest | - | CoreInfo | 检查 GitHub 最新版本 |
 | DownloadLatest | - | CoreInfo | 下载、校验并安装最新版 |
 | AutoUpdate | - | CoreUpdateResult | 检查并按需更新 |
+| GeoData | - | GeoDataInfo | 获取 geoip.dat / geosite.dat 状态 |
+| UpdateGeoData | - | GeoDataInfo | 下载并更新 GeoData 文件 |
 
 ## ProxyService
 
@@ -103,6 +105,8 @@
 | xraySniffing | 入站流量嗅探 |
 | tunMode | TUN 模式开关；Windows 下使用 Xray TUN inbound + Wintun，需要管理员权限和 wintun.dll |
 | testUrl | 代理测试地址 |
+| xrayApiEnabled | 启用本地 Xray API 和 StatsService |
+| xrayApiPort | Xray API 监听端口，仅绑定 127.0.0.1 |
 
 ## 契约规则
 
@@ -176,3 +180,11 @@
 | level | debug、info、warning、error |
 | source | stdout、stderr、core、tun、system |
 | message | 原始日志内容 |
+## GeoDataInfo 字段
+
+| 字段 | 说明 |
+|---|---|
+| directory | GeoData 所在内核目录 |
+| geoIp | geoip.dat 文件状态 |
+| geoSite | geosite.dat 文件状态 |
+| files | 目录内全部 .dat 文件 |
