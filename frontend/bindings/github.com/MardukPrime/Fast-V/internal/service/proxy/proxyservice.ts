@@ -14,6 +14,18 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as model$0 from "../../model/models.js";
 
+export function ClearLogs(): $CancellablePromise<void> {
+    return $Call.ByID(3490591215);
+}
+
+export function Logs(): $CancellablePromise<model$0.LogEntry[] | null> {
+    return $Call.ByID(1723247224);
+}
+
+export function Restart(): $CancellablePromise<model$0.ProxyState> {
+    return $Call.ByID(108640834);
+}
+
 export function Start(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(813748713);
 }

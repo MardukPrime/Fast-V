@@ -246,9 +246,10 @@ internal/core          -> internal/model, standard library
 internal/proxy         -> internal/model, standard library
 internal/subscription  -> internal/model, standard library
 internal/nodeconfig    -> internal/model, standard library
+internal/routing       -> internal/model, standard library
 internal/diagnostics   -> internal/model, standard library
 internal/store         -> internal/model, standard library
-internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/diagnostics, internal/store, internal/model, Wails
+internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/diagnostics, internal/routing, internal/store, internal/model, Wails
 internal/bootstrap     -> all concrete implementations
 ```
 

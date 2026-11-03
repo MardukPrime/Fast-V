@@ -287,3 +287,22 @@ type NodeConfigPreview struct {
 	RawLink      string `json:"rawLink"`
 	OutboundJSON string `json:"outboundJson"`
 }
+
+// RoutingRule is a user-defined Xray routing rule.
+type RoutingRule struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	Action  string `json:"action"`
+	Enabled bool   `json:"enabled"`
+}
+
+// LogEntry is a line of runtime output captured from Xray-core.
+type LogEntry struct {
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	Source    string `json:"source"`
+	Message   string `json:"message"`
+}

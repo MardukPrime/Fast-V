@@ -65,7 +65,19 @@
 | State | - | ProxyState | 获取代理状态 |
 | SwitchNode | id | ProxyState | 切换当前节点；代理运行中时自动重启 |
 | Test | - | ProxyTestResult | 通过本地 SOCKS/HTTP 入站访问测试地址 |
+| Restart | - | ProxyState | 重启正在运行的代理 |
+| Logs | - | []LogEntry | 获取捕获的 Xray 运行日志 |
+| ClearLogs | - | - | 清空运行日志 |
 
+## RoutingService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| List | - | []RoutingRule | 按优先级获取路由规则 |
+| Save | RoutingRule | RoutingRule | 校验并保存规则 |
+| Delete | id | - | 删除规则 |
+| Reorder | ids | - | 按给定顺序重排规则 |
+| Reset | - | []RoutingRule | 恢复默认规则 |
 ## DiagnosticsService
 
 | 方法 | 输入 | 输出 | 说明 |
@@ -145,3 +157,22 @@
 | outboundJson | 高级 Xray outbound JSON 覆盖；为空时由表单生成 |
 
 `NodeConfigPreview` 同时返回重新生成的分享链接和 Xray outbound JSON。保存高级 JSON 后，代理配置会优先使用该 outbound。
+## RoutingRule 字段
+
+| 字段 | 说明 |
+|---|---|
+| id / name | 规则标识和名称 |
+| type | domain_suffix、domain_keyword、domain_regex、ip、geosite、geoip、port、network |
+| value | 规则内容；部分类型支持逗号或换行分隔多个值 |
+| action | proxy、direct、block |
+| enabled | 是否参与匹配 |
+
+## LogEntry 字段
+
+| 字段 | 说明 |
+|---|---|
+| id | 日志序号 |
+| timestamp | 采集时间 |
+| level | debug、info、warning、error |
+| source | stdout、stderr、core、tun、system |
+| message | 原始日志内容 |

@@ -8,6 +8,7 @@
 |---|---|---|---|
 | core:state | CoreInfo | 状态变化 | 内核检测、检查、下载和安装状态 |
 | proxy:state | ProxyState | 状态变化 | 代理启动、运行、停止和异常状态 |
+| proxy:log | LogEntry | 日志行 | Xray stdout/stderr 和运行状态日志 |
 | subscriptions:changed | 无 | 自动更新后 | 订阅自动更新完成 |
 
 ## 计划事件

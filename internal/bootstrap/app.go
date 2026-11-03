@@ -13,6 +13,7 @@ import (
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
 	"github.com/MardukPrime/Fast-V/internal/service/node"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
+	routingservice "github.com/MardukPrime/Fast-V/internal/service/routing"
 	"github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/service/subscription"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -33,6 +34,7 @@ func Run(assets embed.FS) error {
 	subSvc := subscription.New(st)
 	nodeSvc := node.New(st)
 	settingsSvc := settings.New(st)
+	routingSvc := routingservice.New(st)
 
 	app := application.New(application.Options{
 		Name:        buildinfo.ProductName,
@@ -46,6 +48,7 @@ func Run(assets embed.FS) error {
 			application.NewService(subSvc),
 			application.NewService(nodeSvc),
 			application.NewService(settingsSvc),
+			application.NewService(routingSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

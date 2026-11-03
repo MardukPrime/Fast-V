@@ -10,8 +10,9 @@ import type { AppInfo, CoreInfo, ProxyState, ProxyTestResult, Settings } from ".
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
+import LogsPage from "./pages/LogsPage";
 import NetworkPage from "./pages/NetworkPage";
-import PlaceholderPage from "./pages/PlaceholderPage";
+import RoutingPage from "./pages/RoutingPage";
 import ServersPage from "./pages/ServersPage";
 import SettingsPage from "./pages/SettingsPage";
 import SubscriptionsPage from "./pages/SubscriptionsPage";
@@ -32,9 +33,9 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
   servers: { title: "服务器", subtitle: "查看节点、切换当前节点和测试连通性" },
   subscriptions: { title: "订阅", subtitle: "导入、更新和查看订阅节点" },
-  routing: { title: "路由", subtitle: "规则编辑器将在后续版本接入" },
+  routing: { title: "路由", subtitle: "按顺序编辑域名、IP、端口和网络规则" },
   speedtest: { title: "网络诊断", subtitle: "检测出口 IP、归属地、延迟和下载速度" },
-  logs: { title: "日志", subtitle: "内核日志将在后续版本接入" },
+  logs: { title: "日志", subtitle: "查看、筛选和复制 Xray 运行日志" },
   settings: { title: "设置", subtitle: "客户端与内核参数分开管理" },
 };
 
@@ -249,15 +250,16 @@ export default function App() {
           <Show when={active() === "speedtest"}>
             <NetworkPage proxyState={proxy()} />
           </Show>
+          <Show when={active() === "routing"}>
+            <RoutingPage proxyState={proxy()} proxyMode={settings()?.proxyMode ?? "rule"} />
+          </Show>
+          <Show when={active() === "logs"}>
+            <LogsPage proxyState={proxy()} />
+          </Show>
           <Show when={active() === "settings"}>
             <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
           </Show>
-          <Show when={active() !== "dashboard" && active() !== "servers" && active() !== "subscriptions" && active() !== "speedtest" && active() !== "settings"}>
-            <PlaceholderPage
-              title={pageMeta[active()].title}
-              description={pageMeta[active()].subtitle}
-            />
-          </Show>
+
         </main>
       </div>
     </div>

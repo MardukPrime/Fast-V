@@ -8,12 +8,13 @@ import (
 
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/nodeconfig"
+	"github.com/MardukPrime/Fast-V/internal/routing"
 )
 
 const tunInterfaceName = "FastV-TUN"
 
 // BuildConfig creates a complete Xray JSON configuration for the selected node and settings.
-func BuildConfig(node model.Node, settings model.Settings) ([]byte, error) {
+func BuildConfig(node model.Node, settings model.Settings, customRules ...model.RoutingRule) ([]byte, error) {
 	if settings.CoreType != "xray" {
 		return nil, errors.New("only Xray-core is currently supported")
 	}
@@ -63,7 +64,7 @@ func BuildConfig(node model.Node, settings model.Settings) ([]byte, error) {
 			map[string]any{"tag": "direct", "protocol": "freedom"},
 			map[string]any{"tag": "block", "protocol": "blackhole"},
 		},
-		"routing": buildRouting(settings.ProxyMode),
+		"routing": buildRouting(settings.ProxyMode, customRules),
 		"dns": map[string]any{
 			"servers":       []string{"1.1.1.1", "8.8.8.8"},
 			"queryStrategy": "UseIP",
@@ -102,43 +103,9 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 	return outbound, nil
 }
 
-func buildRouting(proxyMode string) map[string]any {
-	rules := make([]any, 0)
-	switch proxyMode {
-	case "direct":
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"network":     "tcp,udp",
-			"outboundTag": "direct",
-		})
-	case "global":
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"network":     "tcp,udp",
-			"outboundTag": "proxy",
-		})
-	default:
-		rules = append(rules,
-			map[string]any{
-				"type":        "field",
-				"ip":          []string{"geoip:private"},
-				"outboundTag": "direct",
-			},
-			map[string]any{
-				"type":        "field",
-				"domain":      []string{"geosite:category-ads-all"},
-				"outboundTag": "block",
-			},
-			map[string]any{
-				"type":        "field",
-				"network":     "tcp,udp",
-				"outboundTag": "proxy",
-			},
-		)
-	}
-
+func buildRouting(proxyMode string, customRules []model.RoutingRule) map[string]any {
 	return map[string]any{
 		"domainStrategy": "IPIfNonMatch",
-		"rules":          rules,
+		"rules":          routing.BuildXrayRules(customRules, proxyMode),
 	}
 }

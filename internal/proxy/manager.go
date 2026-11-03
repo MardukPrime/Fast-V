@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -35,6 +36,10 @@ type Manager struct {
 	state         model.ProxyState
 	onStateChange func(model.ProxyState)
 	tunCleanup    func() error
+	logsMu        sync.Mutex
+	logs          []model.LogEntry
+	logSeq        int64
+	onLog         func(model.LogEntry)
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -57,6 +62,73 @@ func (m *Manager) State() model.ProxyState {
 	return m.state
 }
 
+func (m *Manager) SetOnLog(callback func(model.LogEntry)) {
+	m.logsMu.Lock()
+	defer m.logsMu.Unlock()
+	m.onLog = callback
+}
+
+func (m *Manager) Logs() []model.LogEntry {
+	m.logsMu.Lock()
+	defer m.logsMu.Unlock()
+	return append([]model.LogEntry(nil), m.logs...)
+}
+
+func (m *Manager) ClearLogs() {
+	m.logsMu.Lock()
+	m.logs = nil
+	m.logsMu.Unlock()
+}
+
+func (m *Manager) appendLog(level string, source string, message string) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	m.logsMu.Lock()
+	m.logSeq++
+	entry := model.LogEntry{
+		ID:        strconv.FormatInt(m.logSeq, 10),
+		Timestamp: model.NowRFC3339(),
+		Level:     level,
+		Source:    source,
+		Message:   message,
+	}
+	m.logs = append(m.logs, entry)
+	if len(m.logs) > 1500 {
+		m.logs = append([]model.LogEntry(nil), m.logs[len(m.logs)-1500:]...)
+	}
+	callback := m.onLog
+	m.logsMu.Unlock()
+	if callback != nil {
+		callback(entry)
+	}
+}
+
+func (m *Manager) captureLogStream(stream io.Reader, source string) {
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 64*1024), 256*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		m.appendLog(logLevel(line), source, line)
+	}
+}
+
+func logLevel(line string) string {
+	lower := strings.ToLower(line)
+	switch {
+	case strings.Contains(lower, "[debug]"):
+		return "debug"
+	case strings.Contains(lower, "[warning]"), strings.Contains(lower, "[warn]"):
+		return "warning"
+	case strings.Contains(lower, "[error]"):
+		return "error"
+	case strings.Contains(lower, "failed"), strings.Contains(lower, "fatal"):
+		return "error"
+	default:
+		return "info"
+	}
+}
 func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.mu.Lock()
 	if m.cmd != nil {
@@ -86,7 +158,7 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		}
 	}
 
-	config, err := BuildConfig(node, settings)
+	config, err := BuildConfig(node, settings, m.store.ListRoutingRules()...)
 	if err != nil {
 		m.mu.Unlock()
 		return m.fail(err.Error())
@@ -132,21 +204,30 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.mu.Unlock()
 	m.emit(state)
 
+	m.appendLog("info", "core", "正在校验 Xray 配置")
 	testCmd := exec.CommandContext(ctx, coreInfo.Path, "run", "-test", "-config", configPath)
 	hideWindow(testCmd)
 	if output, err := testCmd.CombinedOutput(); err != nil {
 		return m.fail(fmt.Sprintf("Xray config validation failed: %s", strings.TrimSpace(string(output))))
 	}
+	m.appendLog("info", "core", "Xray 配置校验通过")
 
 	cmd := exec.Command(coreInfo.Path, "run", "-config", configPath)
 	hideWindow(cmd)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return m.fail(fmt.Sprintf("failed to open Xray stdout: %v", err))
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return m.fail(fmt.Sprintf("failed to open Xray stderr: %v", err))
+	}
 	if err := cmd.Start(); err != nil {
 		return m.fail(fmt.Sprintf("failed to start Xray-core: %v", err))
 	}
-
+	go m.captureLogStream(stdout, "stdout")
+	go m.captureLogStream(stderr, "stderr")
+	m.appendLog("info", "core", fmt.Sprintf("Xray-core 已启动，PID %d", cmd.Process.Pid))
 	job, err := newProcessJob()
 	if err != nil {
 		_ = cmd.Process.Kill()
@@ -176,6 +257,7 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		return m.fail(fmt.Sprintf("Xray-core did not become ready: %v", err))
 	}
 
+	m.appendLog("info", "core", "本地入站已就绪: "+state.LocalAddr)
 	if settings.TunMode {
 		cleanup, routeErr := setupTunRoutes(tunInterfaceName, resolvedIP)
 		if routeErr != nil {
@@ -187,12 +269,14 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Lock()
 		m.tunCleanup = cleanup
 		m.mu.Unlock()
+		m.appendLog("info", "tun", "TUN 适配器与系统路由已配置")
 	}
 
 	m.mu.Lock()
 	m.state.Status = "running"
 	state = m.state
 	m.mu.Unlock()
+	m.appendLog("info", "core", "代理已进入运行状态")
 	m.emit(state)
 	return state, nil
 }
@@ -214,6 +298,7 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.state.Status = "stopping"
 	m.mu.Unlock()
 	m.emit(m.State())
+	m.appendLog("info", "core", "正在停止 Xray-core")
 	if cleanup := m.takeTunCleanup(); cleanup != nil {
 		_ = cleanup()
 	}
@@ -283,6 +368,11 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	err := cmd.Wait()
 	close(done)
 	_ = job.Close()
+	if err != nil {
+		m.appendLog("error", "core", "Xray-core 已退出: "+err.Error())
+	} else {
+		m.appendLog("info", "core", "Xray-core 已退出")
+	}
 	if cleanup := m.takeTunCleanup(); cleanup != nil {
 		_ = cleanup()
 	}
@@ -314,6 +404,7 @@ func (m *Manager) takeTunCleanup() func() error {
 	return cleanup
 }
 func (m *Manager) fail(message string) (model.ProxyState, error) {
+	m.appendLog("error", "system", message)
 	m.mu.Lock()
 	m.state = model.ProxyState{Status: "error", Error: message}
 	state := m.state

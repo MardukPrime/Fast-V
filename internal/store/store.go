@@ -22,11 +22,12 @@ type Subscription = model.Subscription
 type Node = model.Node
 
 type storeData struct {
-	Version       int            `json:"version"`
-	Settings      Settings       `json:"settings"`
-	Subscriptions []Subscription `json:"subscriptions"`
-	Nodes         []Node         `json:"nodes"`
-	ActiveNodeID  string         `json:"activeNodeId"`
+	Version       int                 `json:"version"`
+	Settings      Settings            `json:"settings"`
+	Subscriptions []Subscription      `json:"subscriptions"`
+	Nodes         []Node              `json:"nodes"`
+	ActiveNodeID  string              `json:"activeNodeId"`
+	RoutingRules  []model.RoutingRule `json:"routingRules"`
 }
 
 // Store persists subscriptions, nodes and settings in a user-local JSON file.
@@ -425,6 +426,84 @@ func (s *Store) SetNodeEnabled(id string, enabled bool) (Node, error) {
 	return updated, err
 }
 
+func (s *Store) ListRoutingRules() []model.RoutingRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]model.RoutingRule(nil), s.data.RoutingRules...)
+}
+
+func (s *Store) SaveRoutingRule(rule model.RoutingRule) (model.RoutingRule, error) {
+	var saved model.RoutingRule
+	err := s.update(func(data *storeData) error {
+		if rule.ID == "" {
+			rule.ID = model.NewID()
+			if !rule.Enabled {
+				rule.Enabled = true
+			}
+		}
+		for i := range data.RoutingRules {
+			if data.RoutingRules[i].ID == rule.ID {
+				data.RoutingRules[i] = rule
+				saved = rule
+				return nil
+			}
+		}
+		data.RoutingRules = append(data.RoutingRules, rule)
+		saved = rule
+		return nil
+	})
+	return saved, err
+}
+
+func (s *Store) DeleteRoutingRule(id string) error {
+	return s.update(func(data *storeData) error {
+		found := false
+		rules := make([]model.RoutingRule, 0, len(data.RoutingRules))
+		for _, rule := range data.RoutingRules {
+			if rule.ID == id {
+				found = true
+				continue
+			}
+			rules = append(rules, rule)
+		}
+		if !found {
+			return errors.New("routing rule not found")
+		}
+		data.RoutingRules = rules
+		return nil
+	})
+}
+
+func (s *Store) ReorderRoutingRules(ids []string) error {
+	return s.update(func(data *storeData) error {
+		byID := make(map[string]model.RoutingRule, len(data.RoutingRules))
+		for _, rule := range data.RoutingRules {
+			byID[rule.ID] = rule
+		}
+		ordered := make([]model.RoutingRule, 0, len(data.RoutingRules))
+		seen := make(map[string]struct{}, len(ids))
+		for _, id := range ids {
+			if rule, ok := byID[id]; ok {
+				ordered = append(ordered, rule)
+				seen[id] = struct{}{}
+			}
+		}
+		for _, rule := range data.RoutingRules {
+			if _, ok := seen[rule.ID]; !ok {
+				ordered = append(ordered, rule)
+			}
+		}
+		data.RoutingRules = ordered
+		return nil
+	})
+}
+
+func (s *Store) ReplaceRoutingRules(rules []model.RoutingRule) error {
+	return s.update(func(data *storeData) error {
+		data.RoutingRules = append([]model.RoutingRule(nil), rules...)
+		return nil
+	})
+}
 func (s *Store) UpdateNode(id string, name string, protocol string, address string, port int, raw string, outboundJSON string) (Node, error) {
 	var updated Node
 	err := s.update(func(data *storeData) error {

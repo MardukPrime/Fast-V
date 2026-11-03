@@ -217,3 +217,53 @@ func TestBuildConfigUsesAdvancedOutboundJSON(t *testing.T) {
 		t.Fatalf("advanced outbound was not used: %+v", settings)
 	}
 }
+
+func TestBuildConfigIncludesCustomRoutingRules(t *testing.T) {
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Trojan"}
+	rule := model.RoutingRule{ID: "rule-1", Name: "Direct Example", Type: "domain_suffix", Value: "example.com", Action: "direct", Enabled: true}
+	raw, err := BuildConfig(node, testSettings(), rule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	rules := config["routing"].(map[string]any)["rules"].([]any)
+	if len(rules) < 2 {
+		t.Fatalf("expected custom rule and catch-all: %+v", rules)
+	}
+	first := rules[0].(map[string]any)
+	if first["outboundTag"] != "direct" {
+		t.Fatalf("unexpected custom rule action: %+v", first)
+	}
+	domains := first["domain"].([]any)
+	if len(domains) != 1 || domains[0] != "suffix:example.com" {
+		t.Fatalf("unexpected custom rule domain: %+v", first)
+	}
+}
+
+func TestCustomRoutingPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Routing"}
+	rules := []model.RoutingRule{
+		{ID: "r1", Name: "Direct", Type: "domain_suffix", Value: "example.com", Action: "direct", Enabled: true},
+		{ID: "r2", Name: "Block Ads", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true},
+	}
+	raw, err := BuildConfig(node, testSettings(), rules...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "routing-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("xray routing config validation failed: %v\n%s", err, output)
+	}
+}

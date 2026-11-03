@@ -33,6 +33,8 @@ All notable changes to FastV are documented here.
 - Theme selection now previews immediately and follows system theme changes when set to system mode.
 - Settings major sections are now collapsible and remember their open/closed state.
 - Added node config extraction/editing, Xray outbound JSON preview, advanced JSON override, quick node switching and save-and-apply.
+- Added ordered routing rule editing mapped to Xray routing rules, with automatic proxy restart.
+- Added Xray runtime log capture, live streaming, filtering, pause, auto-scroll, copy and clear.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.

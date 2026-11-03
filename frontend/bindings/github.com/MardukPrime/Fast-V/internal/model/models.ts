@@ -55,6 +55,17 @@ export interface DashboardSummary {
 }
 
 /**
+ * LogEntry is a line of runtime output captured from Xray-core.
+ */
+export interface LogEntry {
+    "id": string;
+    "timestamp": string;
+    "level": string;
+    "source": string;
+    "message": string;
+}
+
+/**
  * NetworkProbe describes the public exit and basic network quality for one mode.
  */
 export interface NetworkProbe {
@@ -183,6 +194,18 @@ export interface ProxyTestResult {
     "targetUrl": string;
     "error": string;
     "checkedAt": string;
+}
+
+/**
+ * RoutingRule is a user-defined Xray routing rule.
+ */
+export interface RoutingRule {
+    "id": string;
+    "name": string;
+    "type": string;
+    "value": string;
+    "action": string;
+    "enabled": boolean;
 }
 
 /**

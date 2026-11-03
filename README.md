@@ -122,6 +122,7 @@ fastV/
 │       ├── diagnostics/service.go  # DiagnosticsService
 │       ├── node/service.go         # NodeService
 │       ├── proxy/service.go        # ProxyService
+│       ├── routing/service.go      # RoutingService
 │       ├── settings/service.go     # SettingsService
 │       └── subscription/service.go # SubscriptionService
 ├── frontend/
@@ -188,6 +189,8 @@ SolidJS pages
 - `SubscriptionService`: add, update, delete, list and inspect nodes.
 - `NodeService`: search/filter nodes, select the active node, edit node configs, preview Xray outbound JSON, toggle enabled state, delete nodes and run direct TCP latency checks.
 - `ProxyService.SwitchNode`: switch the active node and automatically restart the running proxy.
+- `RoutingService`: list, validate, save, delete, reorder and reset user routing rules.
+- `ProxyService.Logs`: read and clear captured Xray runtime logs.
 - `SettingsService`: read, save and reset client and core settings.
 - `ProxyService`: start/stop Xray, expose proxy state and test the local inbound.
 - `CoreService`: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
