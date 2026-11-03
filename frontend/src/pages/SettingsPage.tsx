@@ -67,6 +67,22 @@ function coreStatusLabel(status: string) {
   }
 }
 
+function readSectionState(key: string, fallback: boolean) {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSectionState(key: string, value: boolean) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Ignore storage failures; collapse state is non-critical.
+  }
+}
 export default function SettingsPage(props: SettingsProps) {
   const [settings, setSettings] = createSignal<Settings>(defaults);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
@@ -75,6 +91,8 @@ export default function SettingsPage(props: SettingsProps) {
   const [coreBusy, setCoreBusy] = createSignal("");
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
+  const [clientExpanded, setClientExpanded] = createSignal(readSectionState("fastv.settings.clientOpen", false));
+  const [coreExpanded, setCoreExpanded] = createSignal(readSectionState("fastv.settings.coreOpen", false));
 
   const load = async () => {
     setLoading(true);
@@ -178,8 +196,16 @@ export default function SettingsPage(props: SettingsProps) {
   return (
     <form class="page-stack settings-page" onSubmit={save}>
       <Show when={!loading()} fallback={<div class="empty-state">正在读取设置...</div>}>
-        <section class="panel">
-          <div class="panel-heading">
+        <details
+          class="panel settings-section"
+          open={clientExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setClientExpanded(open);
+            writeSectionState("fastv.settings.clientOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
             <div class="heading-with-icon">
               <span class="heading-icon indigo"><Icon name="settings" size={17} /></span>
               <div>
@@ -187,8 +213,9 @@ export default function SettingsPage(props: SettingsProps) {
                 <span>只影响 FastV 的界面和使用体验</span>
               </div>
             </div>
-          </div>
-
+            <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+          </summary>
+          <div class="settings-section-body">
           <div class="setting-block">
             <div class="setting-label">
               <strong>界面主题</strong>
@@ -324,10 +351,19 @@ export default function SettingsPage(props: SettingsProps) {
               </span>
             </label>
           </div>
-        </section>
+          </div>
+        </details>
 
-        <section class="panel">
-          <div class="panel-heading">
+        <details
+          class="panel settings-section"
+          open={coreExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setCoreExpanded(open);
+            writeSectionState("fastv.settings.coreOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
             <div class="heading-with-icon">
               <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
               <div>
@@ -335,11 +371,14 @@ export default function SettingsPage(props: SettingsProps) {
                 <span>不同内核只展示各自的参数</span>
               </div>
             </div>
-            <span classList={{ "tag": true, success: core()?.status === "ready" || core()?.status === "up_to_date", neutral: !core() || (core()?.status !== "ready" && core()?.status !== "up_to_date"), danger: core()?.status === "error" }}>
-              {coreStatusLabel(core()?.status ?? "")}
+            <span class="settings-section-meta">
+              <span classList={{ "tag": true, success: core()?.status === "ready" || core()?.status === "up_to_date", neutral: !core() || (core()?.status !== "ready" && core()?.status !== "up_to_date"), danger: core()?.status === "error" }}>
+                {coreStatusLabel(core()?.status ?? "")}
+              </span>
+              <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
             </span>
-          </div>
-
+          </summary>
+          <div class="settings-section-body">
           <div class="setting-block">
             <div class="setting-label">
               <strong>代理内核</strong>
@@ -483,7 +522,8 @@ export default function SettingsPage(props: SettingsProps) {
               </span>
             </label>
           </Show>
-        </section>
+          </div>
+        </details>
 
         <Show when={message()}>
           <div class="alert success"><span class="alert-message"><Icon name="check" size={15} /> {message()}</span></div>

@@ -3372,3 +3372,102 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+/* Collapsible settings sections */
+.settings-section {
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-section > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-section > summary::marker {
+  content: "";
+}
+
+.settings-section > summary:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-section > summary:focus-visible {
+  outline: 2px solid rgba(185, 220, 242, 0.55);
+  outline-offset: -2px;
+}
+
+.settings-section[open] > summary {
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.settings-section-summary .heading-with-icon {
+  min-width: 0;
+}
+
+.settings-section-summary .heading-with-icon > div {
+  min-width: 0;
+}
+
+.settings-section-chevron {
+  display: grid !important;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-top: 0 !important;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.035);
+  transition: transform 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.settings-section-chevron:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.settings-section[open] .settings-section-chevron {
+  transform: rotate(90deg);
+}
+
+.settings-section-meta {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-top: 0 !important;
+}
+
+.settings-section-meta .tag {
+  margin-top: 0 !important;
+}
+
+.settings-section-body {
+  padding: 18px 20px 20px;
+}
+
+@media (max-width: 720px) {
+  .settings-section > summary {
+    align-items: flex-start;
+    padding: 15px 16px;
+  }
+
+  .settings-section-body {
+    padding: 15px 16px 17px;
+  }
+
+  .settings-section-meta .tag {
+    display: none;
+  }
+}
