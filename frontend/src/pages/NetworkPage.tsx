@@ -1,6 +1,5 @@
 import { createSignal, onMount, Show } from "solid-js";
 
-import { Browser } from "@wailsio/runtime";
 
 import { DiagnosticsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
 import type { NetworkProbe, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
@@ -10,13 +9,6 @@ type NetworkPageProps = {
   proxyState: ProxyState;
 };
 
-const externalTools = [
-  { name: "IPCheck.ing", url: "https://ipcheck.ing/", description: "IPv4/IPv6、ASN、WebRTC、DNS 泄漏、网速" },
-  { name: "ip.skk.moe", url: "https://ip.skk.moe/", description: "本机 IP、递归 DNS 出口、CDN 命中节点" },
-  { name: "IPPure", url: "https://ippure.com/", description: "IP 纯净度、地理位置、运营商和风险检测" },
-  { name: "IP看看", url: "https://ip.ping0.cc/", description: "公网 IP、ASN、原生 IP 和风险值" },
-  { name: "Whoer.net", url: "https://whoer.net/", description: "匿名性、DNS、WebRTC 泄漏和代理状态" },
-];
 
 function flagEmoji(countryCode: string) {
   const code = (countryCode || "").toUpperCase();
@@ -27,7 +19,6 @@ function flagEmoji(countryCode: string) {
 function modeLabel(mode: string) {
   return mode === "proxy" ? "代理出口" : "直连出口";
 }
-const tools = externalTools;
 
 function ProbeCard(props: {
   mode: "direct" | "proxy";
@@ -196,21 +187,20 @@ export default function NetworkPage(props: NetworkPageProps) {
       <section class="panel network-tools-panel">
         <div class="panel-heading">
           <div>
-            <h3>扩展检测工具</h3>
-            <span>需要更深入的 WebRTC、DNS 泄漏、IP 纯净度或匿名性评分时，打开外部工具。</span>
+            <h3>内置检测范围</h3>
+            <span>只保留可以直接集成进 FastV 的检测能力，不跳转外部网站。</span>
           </div>
         </div>
-        <div class="network-tool-grid">
-          {tools.map((tool) => (
-            <button class="network-tool" onClick={() => Browser.OpenURL(tool.url)}>
-              <span class="network-tool-icon"><Icon name="external" size={15} /></span>
-              <span><strong>{tool.name}</strong><small>{tool.description}</small></span>
-              <Icon name="chevron" size={13} />
-            </button>
-          ))}
+        <div class="network-capability-grid">
+          <div><span class="network-tool-icon"><Icon name="server" size={15} /></span><strong>出口 IP</strong><small>IPv4 / IPv6、直连和代理出口</small></div>
+          <div><span class="network-tool-icon"><Icon name="subscription" size={15} /></span><strong>归属地</strong><small>国家、地区、城市、时区</small></div>
+          <div><span class="network-tool-icon"><Icon name="nodes" size={15} /></span><strong>网络归属</strong><small>ASN、运营商、ISP</small></div>
+          <div><span class="network-tool-icon"><Icon name="route" size={15} /></span><strong>Cloudflare 节点</strong><small>边缘节点、TLS、WARP</small></div>
+          <div><span class="network-tool-icon"><Icon name="speed" size={15} /></span><strong>网络质量</strong><small>延迟、抖动、下载速度</small></div>
+          <div><span class="network-tool-icon"><Icon name="check" size={15} /></span><strong>代理对比</strong><small>直连出口与代理出口切换结果</small></div>
         </div>
         <p class="network-disclaimer">
-          内置检测只请求 Cloudflare trace、ipwho.is 和 Cloudflare speed test，不发送节点凭证或订阅 URL。外部网站可能收集请求信息，请自行判断隐私风险。
+          WebRTC 泄漏、DNS 泄漏、IP 纯净度和匿名性评分需要浏览器环境或专用服务接口，当前不集成，也不提供外部网站跳转。
         </p>
       </section>
     </div>

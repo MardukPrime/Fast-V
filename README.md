@@ -28,7 +28,7 @@ Implemented:
 - Overview shows the running node protocol, server address, resolved IP, subscription, local inbound, proxy mode and PID after startup.
 - TUN mode uses the Xray TUN inbound on Windows, with Wintun, administrator preflight and automatic system route setup/cleanup.
 - Network diagnostics for direct and proxied exit IP, geolocation, ASN, Cloudflare edge, latency and optional download speed.
-- External IP purity, DNS leak and anonymity tools are linked instead of being scraped without stable public APIs.
+- Browser-only WebRTC/DNS leak, IP purity and anonymity scoring are intentionally not linked or scraped.
 
 ## Quick Start
 

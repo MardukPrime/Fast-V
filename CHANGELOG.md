@@ -35,4 +35,4 @@ All notable changes to FastV are documented here.
 - Added node config extraction/editing, Xray outbound JSON preview, advanced JSON override, quick node switching and save-and-apply.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
-- Added external browser links for IPCheck.ing, ip.skk.moe, IPPure, IP看看 and Whoer.net after assessing their API/challenge limitations.
+- Removed external detection-site links; only directly integrated network diagnostics remain.

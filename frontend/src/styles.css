@@ -3727,3 +3727,51 @@ input::placeholder {
     max-height: 94vh;
   }
 }
+.network-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.network-capability-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.network-capability-grid strong,
+.network-capability-grid small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-capability-grid strong {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.network-capability-grid small {
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+@media (max-width: 900px) {
+  .network-capability-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .network-capability-grid {
+    grid-template-columns: 1fr;
+  }
+}
