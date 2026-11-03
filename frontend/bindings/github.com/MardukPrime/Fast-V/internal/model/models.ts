@@ -95,6 +95,13 @@ export interface ProxyState {
     "status": string;
     "nodeId": string;
     "nodeName": string;
+    "nodeProtocol": string;
+    "nodeAddress": string;
+    "nodePort": number;
+    "nodeSubscription": string;
+    "resolvedIp": string;
+    "proxyMode": string;
+    "inbound": string;
     "localAddr": string;
     "startedAt": string;
     "error": string;
@@ -129,6 +136,7 @@ export interface Settings {
     "xrayMuxEnabled": boolean;
     "xrayMuxConcurrency": number;
     "xraySniffing": boolean;
+    "tunMode": boolean;
     "testUrl": string;
 }
 

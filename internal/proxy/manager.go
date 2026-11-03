@@ -73,6 +73,10 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Unlock()
 		return m.fail("only Xray-core is currently supported")
 	}
+	if settings.TunMode {
+		m.mu.Unlock()
+		return m.fail("TUN mode requires sing-box or a TUN adapter; Xray-core does not provide a TUN inbound")
+	}
 	coreInfo := m.core.Info()
 	if !coreInfo.Installed || coreInfo.Path == "" {
 		m.mu.Unlock()
@@ -95,11 +99,22 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		return m.fail(err.Error())
 	}
 
+	subscriptionName := ""
+	if sub, err := m.store.FindSubscription(node.SubscriptionID); err == nil {
+		subscriptionName = sub.Name
+	}
 	state := model.ProxyState{
-		Status:    "starting",
-		NodeID:    node.ID,
-		NodeName:  node.Name,
-		LocalAddr: net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.XrayLocalPort)),
+		Status:           "starting",
+		NodeID:           node.ID,
+		NodeName:         node.Name,
+		NodeProtocol:     node.Protocol,
+		NodeAddress:      node.Address,
+		NodePort:         node.Port,
+		NodeSubscription: subscriptionName,
+		ResolvedIP:       resolveNodeHost(ctx, node.Address),
+		ProxyMode:        settings.ProxyMode,
+		Inbound:          "SOCKS5 / HTTP",
+		LocalAddr:        net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.XrayLocalPort)),
 	}
 	m.state = state
 	m.mu.Unlock()
@@ -156,7 +171,6 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.emit(state)
 	return state, nil
 }
-
 func (m *Manager) Stop() (model.ProxyState, error) {
 	m.mu.Lock()
 	if m.cmd == nil {
@@ -293,4 +307,17 @@ func waitForPort(ctx context.Context, address string, timeout time.Duration) err
 		time.Sleep(200 * time.Millisecond)
 	}
 	return errors.New("timeout waiting for local proxy port")
+}
+
+func resolveNodeHost(ctx context.Context, address string) string {
+	if parsed := net.ParseIP(strings.TrimSpace(address)); parsed != nil {
+		return parsed.String()
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	ips, err := net.DefaultResolver.LookupHost(lookupCtx, address)
+	if err != nil || len(ips) == 0 {
+		return ""
+	}
+	return ips[0]
 }

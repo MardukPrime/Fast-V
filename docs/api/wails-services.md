@@ -78,6 +78,7 @@
 | xrayMuxEnabled | 出站 Mux 开关 |
 | xrayMuxConcurrency | 出站 Mux 并发数 |
 | xraySniffing | 入站流量嗅探 |
+| tunMode | TUN 模式开关；当前 Xray-core 下会阻止代理启动，需要 sing-box 或 TUN 适配层 |
 | testUrl | 代理测试地址 |
 
 ## 契约规则
@@ -86,3 +87,21 @@
 - 错误通过 Promise rejection 返回。
 - 修改字段或方法后必须重新生成 bindings。
 - 前端只通过 `frontend/bindings` 调用 Go。
+## ProxyState 运行节点信息
+
+`ProxyState` 在代理启动后包含：
+
+| 字段 | 说明 |
+|---|---|
+| nodeId | 当前节点 ID |
+| nodeName | 节点名称 |
+| nodeProtocol | 节点协议 |
+| nodeAddress | 节点服务器地址 |
+| nodePort | 节点服务器端口 |
+| nodeSubscription | 所属订阅 |
+| resolvedIp | 启动时解析到的服务器 IP，失败时为空 |
+| proxyMode | 当前代理模式 |
+| inbound | 本地入站类型 |
+| localAddr | 本地 SOCKS/HTTP 地址 |
+| startedAt | 启动时间 |
+| pid | Xray 进程 PID |

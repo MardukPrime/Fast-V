@@ -45,11 +45,12 @@ func TestSaveAndReset(t *testing.T) {
 	input.ProxyMode = "global"
 	input.XrayMuxEnabled = true
 	input.XraySniffing = true
+	input.TunMode = true
 	saved, err := service.Save(input)
 	if err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
-	if saved.Theme != "light" || !saved.AutoUpdate || saved.ProxyMode != "global" {
+	if saved.Theme != "light" || !saved.AutoUpdate || saved.ProxyMode != "global" || !saved.TunMode {
 		t.Fatalf("unexpected saved settings: %+v", saved)
 	}
 
@@ -57,7 +58,7 @@ func TestSaveAndReset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reset failed: %v", err)
 	}
-	if reset.Theme != "dark" || reset.UpdateIntervalMinutes != 360 || reset.CoreType != "xray" {
+	if reset.Theme != "dark" || reset.UpdateIntervalMinutes != 360 || reset.CoreType != "xray" || reset.TunMode {
 		t.Fatalf("unexpected reset settings: %+v", reset)
 	}
 }

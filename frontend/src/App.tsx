@@ -49,7 +49,7 @@ export default function App() {
   const [info, setInfo] = createSignal<AppInfo | null>(null);
   const [settings, setSettings] = createSignal<Settings | null>(null);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
-  const [proxy, setProxy] = createSignal<ProxyState>({ status: "stopped", nodeId: "", nodeName: "", localAddr: "", startedAt: "", error: "", pid: 0 });
+  const [proxy, setProxy] = createSignal<ProxyState>({ status: "stopped", nodeId: "", nodeName: "", nodeProtocol: "", nodeAddress: "", nodePort: 0, nodeSubscription: "", resolvedIp: "", proxyMode: "", inbound: "", localAddr: "", startedAt: "", error: "", pid: 0 });
   const [proxyBusy, setProxyBusy] = createSignal(false);
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);

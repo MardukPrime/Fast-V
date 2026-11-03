@@ -32,6 +32,7 @@ type Settings struct {
 	XrayMuxEnabled        bool   `json:"xrayMuxEnabled"`
 	XrayMuxConcurrency    int    `json:"xrayMuxConcurrency"`
 	XraySniffing          bool   `json:"xraySniffing"`
+	TunMode               bool   `json:"tunMode"`
 	TestURL               string `json:"testUrl"`
 }
 
@@ -201,13 +202,20 @@ func NowRFC3339() string {
 
 // ProxyState describes the running local proxy process.
 type ProxyState struct {
-	Status    string `json:"status"`
-	NodeID    string `json:"nodeId"`
-	NodeName  string `json:"nodeName"`
-	LocalAddr string `json:"localAddr"`
-	StartedAt string `json:"startedAt"`
-	Error     string `json:"error"`
-	PID       int    `json:"pid"`
+	Status           string `json:"status"`
+	NodeID           string `json:"nodeId"`
+	NodeName         string `json:"nodeName"`
+	NodeProtocol     string `json:"nodeProtocol"`
+	NodeAddress      string `json:"nodeAddress"`
+	NodePort         int    `json:"nodePort"`
+	NodeSubscription string `json:"nodeSubscription"`
+	ResolvedIP       string `json:"resolvedIp"`
+	ProxyMode        string `json:"proxyMode"`
+	Inbound          string `json:"inbound"`
+	LocalAddr        string `json:"localAddr"`
+	StartedAt        string `json:"startedAt"`
+	Error            string `json:"error"`
+	PID              int    `json:"pid"`
 }
 
 // ProxyTestResult is the result of a request through the local proxy.

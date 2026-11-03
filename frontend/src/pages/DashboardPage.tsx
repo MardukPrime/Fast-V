@@ -17,6 +17,14 @@ type DashboardProps = {
   onNavigate: (page: string) => void;
 };
 
+function proxyModeLabel(mode: string) {
+  switch (mode) {
+    case "global": return "全局代理";
+    case "direct": return "直连";
+    default: return "规则分流";
+  }
+}
+
 function proxyStatusLabel(status: string) {
   switch (status) {
     case "running": return "本地代理运行中";
@@ -87,7 +95,7 @@ export default function DashboardPage(props: DashboardProps) {
           </p>
           <div class="workspace-actions">
             <Show when={props.proxyState.status === "running"} fallback={
-              <button class="btn primary" onClick={props.onStartProxy} disabled={props.proxyBusy || !summary()?.activeNode || summary()?.coreStatus === "not_installed" || summary()?.coreStatus === "error"}>
+              <button class="btn primary" onClick={props.onStartProxy} disabled={props.proxyBusy || !summary()?.activeNode || summary()?.coreStatus === "not_installed" || summary()?.coreStatus === "error" || Boolean(props.settings?.tunMode && props.settings?.coreType !== "singbox")}>
                 <Icon name="play" size={15} /> {props.proxyBusy ? "启动中..." : "启动代理"}
               </button>
             }>
@@ -119,6 +127,9 @@ export default function DashboardPage(props: DashboardProps) {
           <Show when={!summary()?.activeNode}>
             <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> 请先在服务器页面选择一个当前节点。</div>
           </Show>
+          <Show when={props.settings?.tunMode && props.settings?.coreType !== "singbox"}>
+            <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> TUN 模式需要 sing-box 或独立 TUN 适配层，当前 Xray 内核下无法启动。</div>
+          </Show>
         </div>
 
         <div class="workspace-metrics">
@@ -139,6 +150,29 @@ export default function DashboardPage(props: DashboardProps) {
           </div>
         </div>
       </section>
+
+      <Show when={props.proxyState.status === "running"}>
+        <section class="glass-panel proxy-node-panel">
+          <div class="proxy-node-head">
+            <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
+            <div>
+              <h3>运行节点</h3>
+              <span>代理已启动，以下为当前实际使用的节点信息</span>
+            </div>
+            <span class="tag neutral">{props.proxyState.nodeProtocol}</span>
+          </div>
+          <div class="proxy-node-grid">
+            <div><span>节点名称</span><strong>{props.proxyState.nodeName}</strong></div>
+            <div><span>服务器地址</span><strong>{props.proxyState.nodeAddress}:{props.proxyState.nodePort}</strong></div>
+            <div><span>解析 IP</span><strong>{props.proxyState.resolvedIp || "DNS 解析失败"}</strong></div>
+            <div><span>协议</span><strong>{props.proxyState.nodeProtocol}</strong></div>
+            <div><span>订阅</span><strong>{props.proxyState.nodeSubscription || "手动节点"}</strong></div>
+            <div><span>本地入站</span><strong>{props.proxyState.localAddr}</strong></div>
+            <div><span>代理模式</span><strong>{proxyModeLabel(props.proxyState.proxyMode)}</strong></div>
+            <div><span>进程 PID</span><strong>{props.proxyState.pid}</strong></div>
+          </div>
+        </section>
+      </Show>
 
       <Show when={error()}>
         <div class="alert error">

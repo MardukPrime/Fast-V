@@ -25,12 +25,14 @@ Implemented:
 - Xray process start/stop with Windows Job Object cleanup.
 - Local SOCKS/HTTP inbound and proxy test through the local inbound.
 - Settings now drive the generated config: local port, log level, Mux, sniffing and routing mode.
+- Overview shows the running node protocol, server address, resolved IP, subscription, local inbound, proxy mode and PID after startup.
+- TUN mode switch is grouped under client network takeover and is gated until a sing-box/TUN adapter is available.
 
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.26+
+- Go 1.27+
 - Node.js 20+
 - pnpm 10+
 - Wails v3 CLI (`wails3`)

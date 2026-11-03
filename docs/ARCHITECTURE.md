@@ -186,6 +186,8 @@ frontend/node_modules/
 - Windows Job Object 进程树清理
 - 本地 SOCKS/HTTP 入站
 - 通过本地代理访问测试地址
+- 解析节点域名并返回运行节点信息
+- 在 Xray-core 下明确拒绝 TUN 模式，等待 sing-box/TUN 适配
 
 该包不依赖 Wails。
 ### 3.7 Wails 服务适配层

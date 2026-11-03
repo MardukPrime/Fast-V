@@ -31,6 +31,9 @@ func BuildConfig(node model.Node, settings model.Settings) ([]byte, error) {
 	if settings.CoreType != "xray" {
 		return nil, errors.New("only Xray-core is currently supported")
 	}
+	if settings.TunMode {
+		return nil, errors.New("TUN mode requires sing-box or a TUN adapter; Xray-core does not provide a TUN inbound")
+	}
 
 	outbound, err := buildOutbound(node, settings)
 	if err != nil {

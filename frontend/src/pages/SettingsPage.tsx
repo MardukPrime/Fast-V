@@ -24,6 +24,7 @@ const defaults: Settings = {
   xrayMuxEnabled: false,
   xrayMuxConcurrency: 8,
   xraySniffing: true,
+  tunMode: false,
   testUrl: "https://www.gstatic.com/generate_204",
 };
 
@@ -257,6 +258,33 @@ export default function SettingsPage(props: SettingsProps) {
                 <small>启动代理后使用本地 SOCKS/HTTP 入站访问此地址。</small>
               </label>
             </div>
+          </div>
+
+          <div class="setting-block">
+            <div class="setting-label">
+              <strong>网络接管</strong>
+              <small>控制 FastV 如何接管系统流量。</small>
+            </div>
+            <label class="switch-row tun-mode-row">
+              <span>
+                <strong>TUN 模式</strong>
+                <small>全局接管系统流量。TUN 需要 sing-box 或独立 TUN 适配层，当前 Xray-core 不提供 TUN 入站。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().tunMode }}>
+                <input
+                  type="checkbox"
+                  checked={settings().tunMode}
+                  onChange={(event) => update("tunMode", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+            <Show when={settings().tunMode}>
+              <div class="tun-warning">
+                <Icon name="alert" size={14} />
+                <span>当前内核为 Xray-core，TUN 模式下启动代理会失败。请切换到 sing-box 或关闭 TUN 模式。</span>
+              </div>
+            </Show>
           </div>
 
           <div class="setting-block">

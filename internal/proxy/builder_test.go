@@ -137,3 +137,12 @@ func TestConfigPassesXrayValidation(t *testing.T) {
 		t.Fatalf("xray config validation failed: %v\n%s", err, output)
 	}
 }
+
+func TestBuildConfigRejectsTunModeWithXray(t *testing.T) {
+	settings := testSettings()
+	settings.TunMode = true
+	node := model.Node{Protocol: "vless", Raw: "vless://00000000-0000-0000-0000-000000000002@example.com:443#TUN"}
+	if _, err := BuildConfig(node, settings); err == nil {
+		t.Fatal("expected TUN mode to be rejected for Xray-core")
+	}
+}

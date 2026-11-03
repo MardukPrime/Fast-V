@@ -27,3 +27,6 @@ All notable changes to FastV are documented here.
 - Added Xray start/stop, local SOCKS/HTTP inbound, Windows Job Object cleanup and proxy testing through the local inbound.
 - Wired proxy mode, local port, log level, Mux and sniffing settings into the generated Xray config.
 - Added subscription auto-update scheduler driven by settings.
+- Added running-node details to the overview, including resolved IP, protocol, subscription, inbound and PID.
+- Added a TUN mode switch under client network takeover, gated for the current Xray-core implementation.
+- Upgraded the Go module/toolchain to Go 1.27.3.
