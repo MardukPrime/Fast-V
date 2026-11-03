@@ -80,9 +80,15 @@ export default function App() {
     const offProxy = Events.On("proxy:state", (event) => {
       setProxy(event.data as ProxyState);
     });
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleSystemTheme = () => {
+      if (settings()?.theme === "system") applyTheme("system");
+    };
+    systemTheme.addEventListener("change", handleSystemTheme);
     onCleanup(() => {
       offCore();
       offProxy();
+      systemTheme.removeEventListener("change", handleSystemTheme);
     });
   });
 
@@ -244,7 +250,7 @@ export default function App() {
             <NetworkPage proxyState={proxy()} />
           </Show>
           <Show when={active() === "settings"}>
-            <SettingsPage onSaved={handleSettingsSaved} />
+            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
           </Show>
           <Show when={active() !== "dashboard" && active() !== "servers" && active() !== "subscriptions" && active() !== "speedtest" && active() !== "settings"}>
             <PlaceholderPage

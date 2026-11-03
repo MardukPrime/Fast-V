@@ -9,6 +9,7 @@ import Icon from "../components/Icon";
 
 type SettingsProps = {
   onSaved: (settings: Settings) => void;
+  onPreviewTheme: (theme: string) => void;
 };
 
 const defaults: Settings = {
@@ -198,7 +199,10 @@ export default function SettingsPage(props: SettingsProps) {
                 <button
                   type="button"
                   classList={{ "theme-option": true, active: settings().theme === item.value }}
-                  onClick={() => update("theme", item.value)}
+                  onClick={() => {
+                    update("theme", item.value);
+                    props.onPreviewTheme(item.value);
+                  }}
                 >
                   <span classList={{ "theme-preview": true, [item.value]: true }}>
                     <span class="theme-preview-sidebar" />

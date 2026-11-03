@@ -30,6 +30,7 @@ All notable changes to FastV are documented here.
 - Added running-node details to the overview, including resolved IP, protocol, subscription, inbound and PID.
 - Added a TUN mode switch under client network takeover, using the Xray TUN inbound with Wintun, administrator preflight and automatic Windows route setup/cleanup.
 - Corrected the previous Xray TUN limitation and added Xray TUN configuration validation.
+- Theme selection now previews immediately and follows system theme changes when set to system mode.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Added external browser links for IPCheck.ing, ip.skk.moe, IPPure, IP看看 and Whoer.net after assessing their API/challenge limitations.
