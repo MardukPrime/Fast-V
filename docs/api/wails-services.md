@@ -62,6 +62,13 @@
 | State | - | ProxyState | 获取代理状态 |
 | Test | - | ProxyTestResult | 通过本地 SOCKS/HTTP 入站访问测试地址 |
 
+## DiagnosticsService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Check | mode, includeSpeed | NetworkProbe | 检测直连或本地代理出口的 IP、归属地和网络质量 |
+
+`mode` 取值为 `direct` 或 `proxy`。`proxy` 模式要求本地代理处于运行状态。
 ## 当前设置字段
 
 | 字段 | 作用 |
@@ -105,3 +112,19 @@
 | localAddr | 本地 SOCKS/HTTP 地址 |
 | startedAt | 启动时间 |
 | pid | Xray 进程 PID |
+## NetworkProbe 字段
+
+| 字段 | 说明 |
+|---|---|
+| mode | direct 或 proxy |
+| proxyAddr | 代理模式下的本地入站地址 |
+| ip | 公网出口 IP |
+| ipVersion | IPv4 或 IPv6 |
+| country / countryCode / region / city | 归属地 |
+| asn / organization / isp | ASN 和运营商 |
+| timezone | 时区 |
+| colo / tls / warp | Cloudflare 节点、TLS 和 WARP 状态 |
+| latencyMs / jitterMs | 平均延迟和抖动 |
+| downloadMbps / downloadBytes | 可选下载测速结果 |
+| geoError / downloadError | 非致命的部分失败信息 |
+| checkedAt | 检测时间 |

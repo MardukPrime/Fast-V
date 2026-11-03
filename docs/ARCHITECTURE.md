@@ -44,6 +44,9 @@ fastV/
 │   │   ├── fetcher.go
 │   │   ├── parser.go
 │   │   └── nodes.go
+│   ├── diagnostics/
+│   │   ├── checker.go
+│   │   └── checker_test.go
 │   ├── core/
 │   │   ├── manager.go
 │   │   ├── release.go
@@ -59,6 +62,8 @@ fastV/
 │       ├── core/
 │       │   └── service.go
 │       ├── dashboard/
+│       │   └── service.go
+│       ├── diagnostics/
 │       │   └── service.go
 │       ├── node/
 │       │   └── service.go
@@ -190,6 +195,17 @@ frontend/node_modules/
 - 在 Xray-core 下明确拒绝 TUN 模式，等待 sing-box/TUN 适配
 
 该包不依赖 Wails。
+### 3.6.2 网络诊断模块
+
+`internal/diagnostics` 负责：
+
+- 直连出口 IP 和代理出口 IP 检测
+- Cloudflare trace、ipwho.is 和 ipify 兜底
+- 归属地、ASN、ISP、Cloudflare 节点、TLS、WARP
+- 延迟、抖动和可选下载速度
+- 不抓取带 Cloudflare challenge 或验证码的第三方网页
+
+该包不依赖 Wails。
 ### 3.7 Wails 服务适配层
 
 `internal/service/*` 只负责：
@@ -225,15 +241,16 @@ main.go
 internal/core          -> internal/model, standard library
 internal/proxy         -> internal/model, standard library
 internal/subscription  -> internal/model, standard library
+internal/diagnostics   -> internal/model, standard library
 internal/store         -> internal/model, standard library
-internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/store, internal/model, Wails
+internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/diagnostics, internal/store, internal/model, Wails
 internal/bootstrap     -> all concrete implementations
 ```
 
 禁止：
 
 - `internal/model` 导入 Wails 或 infrastructure。
-- `internal/core`、`internal/proxy` 或 `internal/subscription` 导入 Wails。
+- `internal/core`、`internal/proxy`、`internal/subscription` 或 `internal/diagnostics` 导入 Wails。
 - `internal/store` 直接向 Wails Event 发送消息。
 - Service 中直接操作 SQLite、ZIP、注册表或系统 API。
 - 在 `main.go` 中写依赖组装。
@@ -295,7 +312,22 @@ DashboardPage
 
 本地入站使用 SOCKS 协议并同时兼容 HTTP 代理请求。代理测试通过该本地入站访问设置中的测试地址。
 
+### 网络诊断
+
+```text
+NetworkPage
+  -> DiagnosticsService.Check("direct" | "proxy")
+  -> diagnostics.Checker
+  -> Cloudflare trace
+  -> ipwho.is
+  -> Cloudflare speed test（可选）
+  -> NetworkProbe
+```
+
+代理出口检测必须使用当前运行中的本地 SOCKS/HTTP 入站。
+
 ### 更新内核
+
 
 
 ```text

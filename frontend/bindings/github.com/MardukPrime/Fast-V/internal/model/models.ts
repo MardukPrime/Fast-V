@@ -55,6 +55,34 @@ export interface DashboardSummary {
 }
 
 /**
+ * NetworkProbe describes the public exit and basic network quality for one mode.
+ */
+export interface NetworkProbe {
+    "mode": string;
+    "proxyAddr": string;
+    "ip": string;
+    "ipVersion": string;
+    "country": string;
+    "countryCode": string;
+    "region": string;
+    "city": string;
+    "asn": number;
+    "organization": string;
+    "isp": string;
+    "timezone": string;
+    "colo": string;
+    "tls": string;
+    "warp": string;
+    "latencyMs": number;
+    "jitterMs": number;
+    "downloadMbps": number;
+    "downloadBytes": number;
+    "geoError": string;
+    "downloadError": string;
+    "checkedAt": string;
+}
+
+/**
  * NodeFilter controls the node management list.
  */
 export interface NodeFilter {

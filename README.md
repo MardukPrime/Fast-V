@@ -27,6 +27,8 @@ Implemented:
 - Settings now drive the generated config: local port, log level, Mux, sniffing and routing mode.
 - Overview shows the running node protocol, server address, resolved IP, subscription, local inbound, proxy mode and PID after startup.
 - TUN mode switch is grouped under client network takeover and is gated until a sing-box/TUN adapter is available.
+- Network diagnostics for direct and proxied exit IP, geolocation, ASN, Cloudflare edge, latency and optional download speed.
+- External IP purity, DNS leak and anonymity tools are linked instead of being scraped without stable public APIs.
 
 ## Quick Start
 
@@ -109,10 +111,13 @@ fastV/
 │   │   ├── manager.go              # Process lifecycle, local inbound and proxy test
 │   │   ├── process_windows.go      # Windows Job Object integration
 │   │   └── process_other.go        # Non-Windows process stubs
+│   ├── diagnostics/
+│   │   └── checker.go              # Direct/proxied IP and network quality probes
 │   └── service/
 │       ├── app/service.go          # AppService
 │       ├── core/service.go         # CoreService Wails adapter
 │       ├── dashboard/service.go    # DashboardService
+│       ├── diagnostics/service.go  # DiagnosticsService
 │       ├── node/service.go         # NodeService
 │       ├── proxy/service.go        # ProxyService
 │       ├── settings/service.go     # SettingsService
@@ -205,6 +210,7 @@ The service adapter layer does not contain protocol parsing or file-format detai
 - [Xray-core client integration](docs/cores/xray/README.md)
 - [Architecture decision records](docs/adr/README.md)
 - [Subscription and node testing](docs/testing/subscription-test.md)
+- [Network diagnostics and IP tool assessment](docs/network-diagnostics.md)
 
 ## License
 

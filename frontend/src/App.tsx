@@ -10,6 +10,7 @@ import type { AppInfo, CoreInfo, ProxyState, ProxyTestResult, Settings } from ".
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import DashboardPage from "./pages/DashboardPage";
+import NetworkPage from "./pages/NetworkPage";
 import PlaceholderPage from "./pages/PlaceholderPage";
 import ServersPage from "./pages/ServersPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -22,7 +23,7 @@ const navigation: Array<{ key: PageKey; label: string; caption: string; icon: Ic
   { key: "servers", label: "服务器", caption: "节点列表", icon: "server" },
   { key: "subscriptions", label: "订阅", caption: "远程配置", icon: "subscription" },
   { key: "routing", label: "路由", caption: "分流规则", icon: "route" },
-  { key: "speedtest", label: "测速", caption: "延迟与速度", icon: "speed" },
+  { key: "speedtest", label: "网络诊断", caption: "IP 与质量", icon: "speed" },
   { key: "logs", label: "日志", caption: "运行记录", icon: "logs" },
   { key: "settings", label: "设置", caption: "应用偏好", icon: "settings" },
 ];
@@ -32,7 +33,7 @@ const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   servers: { title: "服务器", subtitle: "查看节点、切换当前节点和测试连通性" },
   subscriptions: { title: "订阅", subtitle: "导入、更新和查看订阅节点" },
   routing: { title: "路由", subtitle: "规则编辑器将在后续版本接入" },
-  speedtest: { title: "测速", subtitle: "节点测速将在后续版本接入" },
+  speedtest: { title: "网络诊断", subtitle: "检测出口 IP、归属地、延迟和下载速度" },
   logs: { title: "日志", subtitle: "内核日志将在后续版本接入" },
   settings: { title: "设置", subtitle: "客户端与内核参数分开管理" },
 };
@@ -239,10 +240,13 @@ export default function App() {
           <Show when={active() === "subscriptions"}>
             <SubscriptionsPage />
           </Show>
+          <Show when={active() === "speedtest"}>
+            <NetworkPage proxyState={proxy()} />
+          </Show>
           <Show when={active() === "settings"}>
             <SettingsPage onSaved={handleSettingsSaved} />
           </Show>
-          <Show when={active() !== "dashboard" && active() !== "servers" && active() !== "subscriptions" && active() !== "settings"}>
+          <Show when={active() !== "dashboard" && active() !== "servers" && active() !== "subscriptions" && active() !== "speedtest" && active() !== "settings"}>
             <PlaceholderPage
               title={pageMeta[active()].title}
               description={pageMeta[active()].subtitle}

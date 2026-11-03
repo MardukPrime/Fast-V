@@ -30,3 +30,5 @@ All notable changes to FastV are documented here.
 - Added running-node details to the overview, including resolved IP, protocol, subscription, inbound and PID.
 - Added a TUN mode switch under client network takeover, gated for the current Xray-core implementation.
 - Upgraded the Go module/toolchain to Go 1.27.3.
+- Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
+- Added external browser links for IPCheck.ing, ip.skk.moe, IPPure, IP看看 and Whoer.net after assessing their API/challenge limitations.

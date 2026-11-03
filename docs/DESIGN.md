@@ -225,10 +225,12 @@ fastV/
 │   ├── subscription/       # 订阅抓取、解析和节点构建
 │   ├── core/               # Xray 检测、发布查询和安装
 │   ├── proxy/              # Xray 配置生成、进程和本地代理
+│   ├── diagnostics/        # 出口 IP、归属地和网络质量检测
 │   └── service/            # Wails Service 适配层
 │       ├── app/
 │       ├── core/
 │       ├── dashboard/
+│       ├── diagnostics/
 │       ├── node/
 │       ├── proxy/
 │       ├── settings/

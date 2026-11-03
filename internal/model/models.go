@@ -227,3 +227,29 @@ type ProxyTestResult struct {
 	Error      string `json:"error"`
 	CheckedAt  string `json:"checkedAt"`
 }
+
+// NetworkProbe describes the public exit and basic network quality for one mode.
+type NetworkProbe struct {
+	Mode          string  `json:"mode"`
+	ProxyAddr     string  `json:"proxyAddr"`
+	IP            string  `json:"ip"`
+	IPVersion     string  `json:"ipVersion"`
+	Country       string  `json:"country"`
+	CountryCode   string  `json:"countryCode"`
+	Region        string  `json:"region"`
+	City          string  `json:"city"`
+	ASN           int     `json:"asn"`
+	Organization  string  `json:"organization"`
+	ISP           string  `json:"isp"`
+	Timezone      string  `json:"timezone"`
+	Colo          string  `json:"colo"`
+	TLS           string  `json:"tls"`
+	WARP          string  `json:"warp"`
+	LatencyMS     int64   `json:"latencyMs"`
+	JitterMS      int64   `json:"jitterMs"`
+	DownloadMbps  float64 `json:"downloadMbps"`
+	DownloadBytes int64   `json:"downloadBytes"`
+	GeoError      string  `json:"geoError"`
+	DownloadError string  `json:"downloadError"`
+	CheckedAt     string  `json:"checkedAt"`
+}
