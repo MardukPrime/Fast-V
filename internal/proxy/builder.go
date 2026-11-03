@@ -12,6 +12,8 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/model"
 )
 
+const tunInterfaceName = "FastV-TUN"
+
 type streamOptions struct {
 	network     string
 	security    string
@@ -31,16 +33,28 @@ func BuildConfig(node model.Node, settings model.Settings) ([]byte, error) {
 	if settings.CoreType != "xray" {
 		return nil, errors.New("only Xray-core is currently supported")
 	}
-	if settings.TunMode {
-		return nil, errors.New("TUN mode requires sing-box or a TUN adapter; Xray-core does not provide a TUN inbound")
-	}
 
 	outbound, err := buildOutbound(node, settings)
 	if err != nil {
 		return nil, err
 	}
 
-	inbound := map[string]any{
+	inbounds := make([]any, 0, 2)
+	if settings.TunMode {
+		inbounds = append(inbounds, map[string]any{
+			"tag":      "tun-in",
+			"protocol": "tun",
+			"settings": map[string]any{
+				"name": tunInterfaceName,
+				"MTU":  1500,
+			},
+			"sniffing": map[string]any{
+				"enabled":      settings.XraySniffing,
+				"destOverride": []string{"http", "tls", "quic"},
+			},
+		})
+	}
+	inbounds = append(inbounds, map[string]any{
 		"tag":      "local-in",
 		"listen":   "127.0.0.1",
 		"port":     settings.XrayLocalPort,
@@ -53,13 +67,12 @@ func BuildConfig(node model.Node, settings model.Settings) ([]byte, error) {
 			"enabled":      settings.XraySniffing,
 			"destOverride": []string{"http", "tls", "quic"},
 		},
-	}
-
+	})
 	config := map[string]any{
 		"log": map[string]any{
 			"loglevel": settings.XrayLogLevel,
 		},
-		"inbounds": []any{inbound},
+		"inbounds": inbounds,
 		"outbounds": []any{
 			outbound,
 			map[string]any{"tag": "direct", "protocol": "freedom"},

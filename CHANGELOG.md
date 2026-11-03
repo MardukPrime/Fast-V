@@ -28,7 +28,8 @@ All notable changes to FastV are documented here.
 - Wired proxy mode, local port, log level, Mux and sniffing settings into the generated Xray config.
 - Added subscription auto-update scheduler driven by settings.
 - Added running-node details to the overview, including resolved IP, protocol, subscription, inbound and PID.
-- Added a TUN mode switch under client network takeover, gated for the current Xray-core implementation.
+- Added a TUN mode switch under client network takeover, using the Xray TUN inbound with Wintun, administrator preflight and automatic Windows route setup/cleanup.
+- Corrected the previous Xray TUN limitation and added Xray TUN configuration validation.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Added external browser links for IPCheck.ing, ip.skk.moe, IPPure, IP看看 and Whoer.net after assessing their API/challenge limitations.

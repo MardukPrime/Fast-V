@@ -55,6 +55,8 @@ fastV/
 │   │   ├── builder.go
 │   │   ├── manager.go
 │   │   ├── process_windows.go
+│   │   ├── tun_windows.go
+│   │   ├── tun_other.go
 │   │   └── process_other.go
 │   └── service/
 │       ├── app/
@@ -192,7 +194,7 @@ frontend/node_modules/
 - 本地 SOCKS/HTTP 入站
 - 通过本地代理访问测试地址
 - 解析节点域名并返回运行节点信息
-- 在 Xray-core 下明确拒绝 TUN 模式，等待 sing-box/TUN 适配
+- 在 Windows 下使用 Xray TUN inbound、Wintun 和自动路由接管
 
 该包不依赖 Wails。
 ### 3.6.2 网络诊断模块

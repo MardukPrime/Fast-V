@@ -34,6 +34,7 @@ type Manager struct {
 	job           *processJob
 	state         model.ProxyState
 	onStateChange func(model.ProxyState)
+	tunCleanup    func() error
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -73,14 +74,16 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Unlock()
 		return m.fail("only Xray-core is currently supported")
 	}
-	if settings.TunMode {
-		m.mu.Unlock()
-		return m.fail("TUN mode requires sing-box or a TUN adapter; Xray-core does not provide a TUN inbound")
-	}
 	coreInfo := m.core.Info()
 	if !coreInfo.Installed || coreInfo.Path == "" {
 		m.mu.Unlock()
 		return m.fail("Xray-core is not installed")
+	}
+	if settings.TunMode {
+		if err := preflightTun(coreInfo.Path); err != nil {
+			m.mu.Unlock()
+			return m.fail(err.Error())
+		}
 	}
 
 	config, err := BuildConfig(node, settings)
@@ -103,6 +106,15 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	if sub, err := m.store.FindSubscription(node.SubscriptionID); err == nil {
 		subscriptionName = sub.Name
 	}
+	resolvedIP := resolveNodeHost(ctx, node.Address)
+	if settings.TunMode && resolvedIP == "" {
+		m.mu.Unlock()
+		return m.fail("TUN 模式要求节点服务器地址能够解析为 IP")
+	}
+	inbound := "SOCKS5 / HTTP"
+	if settings.TunMode {
+		inbound = "TUN + SOCKS5 / HTTP"
+	}
 	state := model.ProxyState{
 		Status:           "starting",
 		NodeID:           node.ID,
@@ -111,9 +123,9 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		NodeAddress:      node.Address,
 		NodePort:         node.Port,
 		NodeSubscription: subscriptionName,
-		ResolvedIP:       resolveNodeHost(ctx, node.Address),
+		ResolvedIP:       resolvedIP,
 		ProxyMode:        settings.ProxyMode,
-		Inbound:          "SOCKS5 / HTTP",
+		Inbound:          inbound,
 		LocalAddr:        net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.XrayLocalPort)),
 	}
 	m.state = state
@@ -164,6 +176,19 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		return m.fail(fmt.Sprintf("Xray-core did not become ready: %v", err))
 	}
 
+	if settings.TunMode {
+		cleanup, routeErr := setupTunRoutes(tunInterfaceName, resolvedIP)
+		if routeErr != nil {
+			_ = cmd.Process.Kill()
+			<-done
+			_ = job.Close()
+			return m.fail(fmt.Sprintf("TUN 路由配置失败: %v", routeErr))
+		}
+		m.mu.Lock()
+		m.tunCleanup = cleanup
+		m.mu.Unlock()
+	}
+
 	m.mu.Lock()
 	m.state.Status = "running"
 	state = m.state
@@ -177,6 +202,9 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 		m.state = model.ProxyState{Status: "stopped"}
 		state := m.state
 		m.mu.Unlock()
+		if cleanup := m.takeTunCleanup(); cleanup != nil {
+			_ = cleanup()
+		}
 		m.emit(state)
 		return state, nil
 	}
@@ -186,6 +214,9 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.state.Status = "stopping"
 	m.mu.Unlock()
 	m.emit(m.State())
+	if cleanup := m.takeTunCleanup(); cleanup != nil {
+		_ = cleanup()
+	}
 
 	if cmd.Process != nil {
 		_ = cmd.Process.Kill()
@@ -208,7 +239,6 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.emit(state)
 	return state, nil
 }
-
 func (m *Manager) Test(settings model.Settings) (model.ProxyTestResult, error) {
 	state := m.State()
 	if state.Status != "running" || state.LocalAddr == "" {
@@ -253,6 +283,9 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	err := cmd.Wait()
 	close(done)
 	_ = job.Close()
+	if cleanup := m.takeTunCleanup(); cleanup != nil {
+		_ = cleanup()
+	}
 
 	m.mu.Lock()
 	if m.cmd == cmd {
@@ -273,6 +306,13 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	m.emit(state)
 }
 
+func (m *Manager) takeTunCleanup() func() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cleanup := m.tunCleanup
+	m.tunCleanup = nil
+	return cleanup
+}
 func (m *Manager) fail(message string) (model.ProxyState, error) {
 	m.mu.Lock()
 	m.state = model.ProxyState{Status: "error", Error: message}

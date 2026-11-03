@@ -95,7 +95,7 @@ export default function DashboardPage(props: DashboardProps) {
           </p>
           <div class="workspace-actions">
             <Show when={props.proxyState.status === "running"} fallback={
-              <button class="btn primary" onClick={props.onStartProxy} disabled={props.proxyBusy || !summary()?.activeNode || summary()?.coreStatus === "not_installed" || summary()?.coreStatus === "error" || Boolean(props.settings?.tunMode && props.settings?.coreType !== "singbox")}>
+              <button class="btn primary" onClick={props.onStartProxy} disabled={props.proxyBusy || !summary()?.activeNode || summary()?.coreStatus === "not_installed" || summary()?.coreStatus === "error"}>
                 <Icon name="play" size={15} /> {props.proxyBusy ? "启动中..." : "启动代理"}
               </button>
             }>
@@ -127,8 +127,8 @@ export default function DashboardPage(props: DashboardProps) {
           <Show when={!summary()?.activeNode}>
             <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> 请先在服务器页面选择一个当前节点。</div>
           </Show>
-          <Show when={props.settings?.tunMode && props.settings?.coreType !== "singbox"}>
-            <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> TUN 模式需要 sing-box 或独立 TUN 适配层，当前 Xray 内核下无法启动。</div>
+          <Show when={props.settings?.tunMode}>
+            <div class="proxy-inline-alert muted"><Icon name="alert" size={13} /> TUN 模式需要管理员权限和 wintun.dll，启动时会创建 FastV-TUN 适配器并接管系统路由。</div>
           </Show>
         </div>
 

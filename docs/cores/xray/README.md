@@ -31,6 +31,7 @@ Xray-core is the first and primary proxy core used by FastV. It handles VMess, V
 | [profile-mapping.md](profile-mapping.md) | Mapping FastV profiles to Xray outbounds |
 | [transports.md](transports.md) | Transport and security compatibility |
 | [routing-dns.md](routing-dns.md) | Routing and built-in DNS integration |
+| [tun.md](tun.md) | Windows Xray TUN, Wintun and route setup |
 | [operations.md](operations.md) | Commands, validation, logs and troubleshooting |
 | [examples.md](examples.md) | Minimal client configurations and JSON examples |
 | [upstream.md](upstream.md) | Official documentation index and references |
@@ -43,6 +44,7 @@ Xray-core is the first and primary proxy core used by FastV. It handles VMess, V
 - Transports: RAW, WebSocket, gRPC
 - Security: TLS, REALITY
 - Local inbound: SOCKS inbound with HTTP compatibility
+- TUN: Xray TUN inbound on Windows with Wintun
 - Mux: optional
 - Routing: direct, proxy, block and domain/IP rules
 - DNS: basic built-in DNS configuration

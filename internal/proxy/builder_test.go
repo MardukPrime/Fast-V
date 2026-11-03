@@ -138,11 +138,58 @@ func TestConfigPassesXrayValidation(t *testing.T) {
 	}
 }
 
-func TestBuildConfigRejectsTunModeWithXray(t *testing.T) {
+func TestBuildConfigIncludesTunInbound(t *testing.T) {
 	settings := testSettings()
 	settings.TunMode = true
 	node := model.Node{Protocol: "vless", Raw: "vless://00000000-0000-0000-0000-000000000002@example.com:443#TUN"}
-	if _, err := BuildConfig(node, settings); err == nil {
-		t.Fatal("expected TUN mode to be rejected for Xray-core")
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	inbounds := config["inbounds"].([]any)
+	if len(inbounds) != 2 {
+		t.Fatalf("expected TUN and local inbound, got %+v", inbounds)
+	}
+	tunInbound := inbounds[0].(map[string]any)
+	if tunInbound["protocol"] != "tun" {
+		t.Fatalf("unexpected tun inbound: %+v", tunInbound)
+	}
+	tunSettings := tunInbound["settings"].(map[string]any)
+	if tunSettings["name"] != tunInterfaceName {
+		t.Fatalf("unexpected tun settings: %+v", tunSettings)
+	}
+	localInbound := inbounds[1].(map[string]any)
+	if localInbound["protocol"] != "socks" {
+		t.Fatalf("unexpected local inbound: %+v", localInbound)
+	}
+}
+
+func TestTunConfigPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	settings := testSettings()
+	settings.TunMode = true
+	node := model.Node{
+		Protocol: "vless",
+		Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls#TUN",
+	}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "tun-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("xray TUN config validation failed: %v\n%s", err, output)
 	}
 }

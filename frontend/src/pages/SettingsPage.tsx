@@ -268,7 +268,7 @@ export default function SettingsPage(props: SettingsProps) {
             <label class="switch-row tun-mode-row">
               <span>
                 <strong>TUN 模式</strong>
-                <small>全局接管系统流量。TUN 需要 sing-box 或独立 TUN 适配层，当前 Xray-core 不提供 TUN 入站。</small>
+                <small>全局接管系统流量。Xray-core 已支持 TUN，需要管理员权限、wintun.dll 和系统路由接管。</small>
               </span>
               <span classList={{ "switch": true, on: settings().tunMode }}>
                 <input
@@ -282,7 +282,7 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().tunMode}>
               <div class="tun-warning">
                 <Icon name="alert" size={14} />
-                <span>当前内核为 Xray-core，TUN 模式下启动代理会失败。请切换到 sing-box 或关闭 TUN 模式。</span>
+                <span>TUN 模式需要以管理员身份运行 FastV，并确保 wintun.dll 位于 xray.exe 同目录。启动时 FastV 会创建 FastV-TUN 适配器并接管默认路由。</span>
               </div>
             </Show>
           </div>

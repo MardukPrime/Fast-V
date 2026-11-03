@@ -85,7 +85,7 @@
 | xrayMuxEnabled | 出站 Mux 开关 |
 | xrayMuxConcurrency | 出站 Mux 并发数 |
 | xraySniffing | 入站流量嗅探 |
-| tunMode | TUN 模式开关；当前 Xray-core 下会阻止代理启动，需要 sing-box 或 TUN 适配层 |
+| tunMode | TUN 模式开关；Windows 下使用 Xray TUN inbound + Wintun，需要管理员权限和 wintun.dll |
 | testUrl | 代理测试地址 |
 
 ## 契约规则
@@ -108,7 +108,7 @@
 | nodeSubscription | 所属订阅 |
 | resolvedIp | 启动时解析到的服务器 IP，失败时为空 |
 | proxyMode | 当前代理模式 |
-| inbound | 本地入站类型 |
+| inbound | 本地入站类型，TUN 模式下为 TUN + SOCKS/HTTP |
 | localAddr | 本地 SOCKS/HTTP 地址 |
 | startedAt | 启动时间 |
 | pid | Xray 进程 PID |

@@ -2,7 +2,7 @@
 
 FastV is a desktop proxy client built with Go, Wails v3 and SolidJS. It follows the core workflows of v2rayN: profile management, share-link import, subscriptions, proxy lifecycle control, system proxy integration, routing, latency testing and log inspection.
 
-The project does not implement proxy protocols itself. Xray-core is used as the primary proxy core, with sing-box planned for additional protocols and TUN support.
+The project does not implement proxy protocols itself. Xray-core is used as the primary proxy core, including Xray TUN mode on Windows. sing-box is planned for additional protocols and cross-platform TUN support.
 
 ## Status
 
@@ -26,7 +26,7 @@ Implemented:
 - Local SOCKS/HTTP inbound and proxy test through the local inbound.
 - Settings now drive the generated config: local port, log level, Mux, sniffing and routing mode.
 - Overview shows the running node protocol, server address, resolved IP, subscription, local inbound, proxy mode and PID after startup.
-- TUN mode switch is grouped under client network takeover and is gated until a sing-box/TUN adapter is available.
+- TUN mode uses the Xray TUN inbound on Windows, with Wintun, administrator preflight and automatic system route setup/cleanup.
 - Network diagnostics for direct and proxied exit IP, geolocation, ASN, Cloudflare edge, latency and optional download speed.
 - External IP purity, DNS leak and anonymity tools are linked instead of being scraped without stable public APIs.
 
@@ -110,6 +110,8 @@ fastV/
 │   │   ├── builder.go              # Active node/share-link to Xray config
 │   │   ├── manager.go              # Process lifecycle, local inbound and proxy test
 │   │   ├── process_windows.go      # Windows Job Object integration
+│   │   ├── tun_windows.go          # Xray TUN and Windows route setup
+│   │   ├── tun_other.go            # Non-Windows TUN placeholder
 │   │   └── process_other.go        # Non-Windows process stubs
 │   ├── diagnostics/
 │   │   └── checker.go              # Direct/proxied IP and network quality probes

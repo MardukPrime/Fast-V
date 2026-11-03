@@ -186,7 +186,7 @@ FastV should keep DNS policy separate from route rules in the UI:
 - Route rules decide which outbound receives the connection.
 - Sniffing can recover a domain from a connection that started with an IP.
 - `routeOnly` can use the sniffed domain for routing without replacing the original destination.
-- FakeDNS is a TUN-oriented feature and should be hidden until TUN support exists.
+- FakeDNS is a TUN-oriented feature. TUN support exists on Windows, but FakeDNS remains optional and is not enabled by default.
 
 ## 10. Sniffing
 
