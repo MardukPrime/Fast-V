@@ -1,223 +1,289 @@
+<div align="center">
+
 # FastV
 
-FastV is a desktop proxy client built with Go, Wails v3 and SolidJS. It follows the core workflows of v2rayN: profile management, share-link import, subscriptions, proxy lifecycle control, system proxy integration, routing, latency testing and log inspection.
+**一个现代、轻量、专注桌面体验的代理客户端**
 
-The project does not implement proxy protocols itself. Xray-core is used as the primary proxy core, including Xray TUN mode on Windows. sing-box is planned for additional protocols and cross-platform TUN support.
+Windows 10/11 · Wails v3 · Xray-core · SolidJS
 
-## Status
+![Version](https://img.shields.io/badge/version-0.1.0-5B8DEF)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-2F6FED)
+![Core](https://img.shields.io/badge/core-Xray--core-38A169)
+![License](https://img.shields.io/badge/license-GPL--3.0-718096)
 
-Milestone M3: dashboard, subscriptions, node management, Xray-core updates, local proxy start/stop and proxy testing are functional.
+</div>
 
-Implemented:
+---
 
-- Wails v3 application shell with a source-only repository policy.
-- Dashboard summary with subscription and node counts.
-- Subscription add, update, update-all, delete and node listing.
-- Base64 subscription fetching and common share-link parsing.
-- Basic settings for theme, language, proxy mode and subscription update interval.
-- Local JSON persistence under the user data directory with a workspace fallback.
-- Unit tests for the parser, subscription service, settings service and core updater.
-- Frameless Wails window with a custom draggable title bar and window controls.
-- Client and core settings are separated; Xray-specific parameters only appear when Xray-core is selected.
-- Xray-core version detection, latest release check, SHA-256 verified download and local installation.
-- Automatic core update setting with startup check and download.
-- Xray config generation from the active node, proxy mode and Xray runtime settings.
-- Xray process start/stop with Windows Job Object cleanup.
-- Local SOCKS/HTTP inbound and proxy test through the local inbound.
-- Settings now drive the generated config: local port, log level, Mux, sniffing and routing mode.
-- Overview shows the running node protocol, server address, resolved IP, subscription, local inbound, proxy mode and PID after startup.
-- TUN mode uses the Xray TUN inbound on Windows, with Wintun, administrator preflight and automatic system route setup/cleanup.
-- Network diagnostics for direct and proxied exit IP, geolocation, ASN, Cloudflare edge, latency and optional download speed.
-- Browser-only WebRTC/DNS leak, IP purity and anonymity scoring are intentionally not linked or scraped.
+FastV 是一款面向桌面端的代理客户端。它把订阅管理、节点配置、Xray 内核、路由分流、本地代理、TUN、网络诊断和运行日志整合到一个界面里，尽量减少在多个工具之间来回切换。
 
-## Quick Start
+FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 
-### Prerequisites
+## 产品特色
+
+### 订阅与节点管理
+
+- 支持 Base64 订阅导入
+- 订阅添加、更新、批量更新和删除
+- 按订阅自动解析节点
+- 节点搜索、协议筛选和订阅筛选
+- 当前节点快速切换
+- 节点启用 / 禁用
+- 单节点 TCP 连通性测试
+- 删除单个节点或整个订阅
+- 订阅自动更新
+- 订阅更新时保留节点 ID 和启用状态
+
+### 节点配置编辑
+
+- 从 VMess、VLESS、Trojan、Shadowsocks 分享链接提取配置
+- 表单编辑常用节点参数
+- 修改服务器地址、端口、UUID、密码和加密方式
+- 修改 WebSocket、gRPC、HTTPUpgrade、XHTTP 等传输参数
+- 修改 TLS、REALITY、SNI、Fingerprint、ALPN
+- 修改 Host、Path、gRPC Service Name
+- 修改 REALITY Public Key、Short ID、SpiderX
+- Xray outbound JSON 实时预览
+- 高级 Xray JSON 直接编辑和覆盖
+- 保存并应用
+- 切换节点时自动重启正在运行的代理
+
+### Xray 内核管理
+
+- 自动检测本地 Xray-core
+- 检查 GitHub 最新版本
+- 下载并安装 Xray-core
+- SHA-256 校验
+- 自动更新内核
+- 自动生成 Xray 配置
+- 启动前执行 `xray -test` 配置校验
+- 启动、停止和重启内核
+- Windows Job Object 进程树清理
+- 应用退出时自动清理内核进程
+
+### 本地代理与 TUN
+
+- 本地 SOCKS/HTTP 入站
+- 自定义本地端口
+- 启动后显示实际入站地址
+- 代理链路测试
+- Windows Xray TUN 模式
+- Wintun 适配器
+- 管理员权限预检查
+- TUN 地址、默认路由和代理服务器主机路由自动配置
+- 停止或退出时自动清理路由
+- TUN 模式与本地 SOCKS/HTTP 入站同时可用
+
+TUN 模式需要：
+
+- Windows 10/11
+- 以管理员身份运行 FastV
+- `xray.exe` 同目录存在 `wintun.dll`
+
+### 代理模式
+
+- 规则分流
+- 全局代理
+- 全部直连
+- 自定义路由优先级
+- 代理运行中修改配置后自动重启生效
+
+### 路由规则
+
+支持直接编辑 Xray 路由规则：
+
+- 域名后缀
+- 域名关键字
+- 域名正则
+- IP / CIDR
+- GeoSite
+- GeoIP
+- 端口
+- TCP / UDP
+
+每个规则支持：
+
+- 走代理
+- 直连
+- 拦截
+- 启用 / 禁用
+- 上移 / 下移调整优先级
+
+未命中自定义规则的流量，按当前代理模式处理。
+
+### 网络诊断
+
+无需打开外部网站，直接在 FastV 内检测：
+
+- 直连出口 IP
+- 代理出口 IP
+- IPv4 / IPv6
+- 国家、地区、城市、时区
+- ASN、运营商、ISP
+- Cloudflare 边缘节点
+- TLS 版本
+- WARP 状态
+- 平均延迟
+- 抖动
+- 5 MB 下载速度
+- 直连出口与代理出口对比
+- 出口 IP 是否切换
+
+检测接口带有备用线路和自动重试，Cloudflare trace 不可用时会自动切换其他检测方式。
+
+### 运行日志
+
+- 实时捕获 Xray stdout / stderr
+- 自动识别 debug、info、warning、error
+- 关键词搜索
+- 等级筛选
+- 暂停 / 继续接收
+- 自动滚动
+- 复制当前筛选日志
+- 清空日志
+- 最多保留 1500 条，避免内存无限增长
+
+### 界面
+
+- 无边框窗口
+- 自定义可拖动标题栏
+- 液态玻璃视觉系统
+- 深色主题
+- 浅色主题
+- 跟随系统主题
+- 主题即时预览
+- 可折叠设置分区
+- 清晰的节点、路由和日志表格
+- 响应式布局
+
+## 支持的协议
+
+| 协议 | 订阅解析 | 节点编辑 | Xray 配置 |
+|---|---|---|---|
+| VMess | 支持 | 支持 | 支持 |
+| VLESS | 支持 | 支持 | 支持 |
+| Trojan | 支持 | 支持 | 支持 |
+| Shadowsocks | 支持 | 支持 | 支持 |
+
+传输与安全：
+
+- RAW / TCP
+- WebSocket
+- gRPC
+- HTTPUpgrade
+- XHTTP
+- TLS
+- REALITY
+- Mux
+- 流量嗅探
+## 快速开始
+
+### 运行要求
+
+- Windows 10/11
+- Microsoft Edge WebView2 Runtime
+- Xray-core
+- TUN 模式需要管理员权限和 Wintun
+
+### 使用流程
+
+1. 在订阅页面添加订阅地址
+2. 等待订阅解析完成
+3. 在服务器页面选择当前节点
+4. 在设置页面选择代理模式
+5. 回到概览页面启动代理
+6. 使用测试代理检查本地代理链路
+7. 在网络诊断页面检查出口 IP 和网络质量
+8. 在日志页面查看 Xray 运行日志
+
+默认本地 SOCKS/HTTP 入站：
+
+```text
+127.0.0.1:10808
+```
+
+端口可以在设置中修改。
+
+## 从源码运行
+
+### 环境
 
 - Go 1.27+
 - Node.js 20+
 - pnpm 10+
-- Wails v3 CLI (`wails3`)
-- Microsoft Edge WebView2 Runtime
-- Windows 10/11 for the current primary target
+- Wails v3 CLI
+- WebView2 Runtime
 
-### Install frontend dependencies
+### 安装前端依赖
 
 ```bash
 pnpm --dir frontend install
 ```
 
-### Generate Wails bindings
+### 生成 Wails bindings
 
 ```bash
 wails3 generate bindings -clean=true -ts -i
 ```
 
-### Development
+### 开发模式
 
 ```bash
 wails3 dev
 ```
 
-### Production build
-
-Build assets are intentionally not tracked in this repository. A local Wails v3 build setup is required before running:
+### 生产构建
 
 ```bash
-wails3 build
-```
-
-### Frontend checks
-
-```bash
-pnpm --dir frontend run typecheck
 pnpm --dir frontend run build
+go build -tags production -trimpath -ldflags "-w -s -H windowsgui" -o bin/fastv.exe .
 ```
 
-### Go checks
+> 仓库只包含源码和文档。Wails 构建资源、平台资源、安装包和本地工具不纳入版本控制。
 
-```bash
-go build .
-go test .
-go vet .
-```
+## 当前状态
 
-## Project Structure
+已实现：
 
-The project uses a root Wails entrypoint, a composition root, feature-oriented internal packages, and a Vite frontend.
+- 订阅和节点管理
+- 节点配置提取与编辑
+- Xray 配置生成
+- Xray 内核更新
+- 本地代理启动和停止
+- 本地 SOCKS/HTTP 入站
+- Windows TUN
+- 路由规则
+- 网络诊断
+- 运行日志
+- 深色 / 浅色 / 跟随系统主题
 
-```text
-fastV/
-├── main.go                         # Wails entrypoint and embedded frontend assets
-├── internal/
-│   ├── bootstrap/
-│   │   └── app.go                  # Composition root: Wails app, services, window
-│   ├── buildinfo/
-│   │   └── buildinfo.go            # Product/version metadata
-│   ├── model/
-│   │   └── models.go               # Shared domain models and frontend DTOs
-│   ├── store/
-│   │   └── store.go                # Local JSON persistence
-│   ├── subscription/
-│   │   ├── fetcher.go              # Subscription HTTP fetch
-│   │   ├── parser.go               # Share-link and subscription parser
-│   │   └── nodes.go                # Parsed node builder
-│   ├── core/
-│   │   ├── manager.go              # Xray version detection and update lifecycle
-│   │   ├── release.go              # GitHub release and asset selection
-│   │   └── installer.go            # Download, SHA-256, unzip and install
-│   ├── proxy/
-│   │   ├── builder.go              # Active node/share-link to Xray config
-│   │   ├── manager.go              # Process lifecycle, local inbound and proxy test
-│   │   ├── process_windows.go      # Windows Job Object integration
-│   │   ├── tun_windows.go          # Xray TUN and Windows route setup
-│   │   ├── tun_other.go            # Non-Windows TUN placeholder
-│   │   └── process_other.go        # Non-Windows process stubs
-│   ├── diagnostics/
-│   │   └── checker.go              # Direct/proxied IP and network quality probes
-│   └── service/
-│       ├── app/service.go          # AppService
-│       ├── core/service.go         # CoreService Wails adapter
-│       ├── dashboard/service.go    # DashboardService
-│       ├── diagnostics/service.go  # DiagnosticsService
-│       ├── node/service.go         # NodeService
-│       ├── proxy/service.go        # ProxyService
-│       ├── routing/service.go      # RoutingService
-│       ├── settings/service.go     # SettingsService
-│       └── subscription/service.go # SubscriptionService
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   ├── pages/
-│   │   └── styles.css
-│   ├── bindings/                   # Wails generated TypeScript bindings
-│   └── package.json
-├── test/fixtures/                  # Local subscription test fixtures
-├── docs/
-├── go.mod
-├── go.sum
-└── README.md
-```
+当前仅支持 Xray-core。
 
-Wails embeds `frontend/dist` from the module root, so `main.go` stays at the root.
-## Repository Policy
+## Roadmap
 
-This repository tracks source code and documentation only. Build configuration, platform assets, packaged binaries, generated distributions and local tooling are excluded.
+- sing-box 内核
+- Hysteria2 / TUIC
+- 系统代理
+- 按进程分流
+- 流量统计
+- 测速历史
+- macOS / Linux 适配
+- 多语言界面
+- SQLite 存储选项
 
-Not tracked:
+## 反馈
 
-```text
-build/
-Taskfile.yml
-.github/workflows/
-bin/
-frontend/dist/
-frontend/node_modules/
-.fastv-data/
-.tools/
-*.exe
-*.syso
-```
+- 提交 Issue：请在仓库 Issues 中描述问题、复现步骤和系统版本
+- 提交代码：欢迎提交 Pull Request
+- 日志和截图请先移除订阅地址、节点 UUID、密码和私钥
 
-## Planned Stack
+## 文档
 
-| Layer | Choice |
-|---|---|
-| Desktop | Wails v3.1 |
-| Backend | Go |
-| Frontend | SolidJS + TypeScript + Vite |
-| Persistence | Local JSON now, SQLite planned |
-| Proxy core | Xray-core (primary), sing-box (planned) |
-| Packaging | Wails build + Inno Setup/NSIS |
-
-## Architecture
-
-The application uses a modular monolith with a Wails transport adapter:
-
-```text
-SolidJS pages
-  -> generated Wails bindings
-  -> internal/service/*
-  -> internal/model / internal/store / internal/subscription / internal/core
-```
-
-### Service adapters
-
-- `AppService`: application metadata.
-- `DashboardService`: aggregate counts, active node and recent subscriptions.
-- `SubscriptionService`: add, update, delete, list and inspect nodes.
-- `NodeService`: search/filter nodes, select the active node, edit node configs, preview Xray outbound JSON, toggle enabled state, delete nodes and run direct TCP latency checks.
-- `ProxyService.SwitchNode`: switch the active node and automatically restart the running proxy.
-- `RoutingService`: list, validate, save, delete, reorder and reset user routing rules.
-- `ProxyService.Logs`: read and clear captured Xray runtime logs.
-- `SettingsService`: read, save and reset client and core settings.
-- `ProxyService`: start/stop Xray, expose proxy state and test the local inbound.
-- `CoreService`: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
-
-### Internal modules
-
-- `internal/bootstrap`: the only composition root.
-- `internal/model`: shared domain models and frontend DTOs.
-- `internal/store`: persistence boundary; currently JSON, replaceable with SQLite.
-- `internal/subscription`: parser, fetcher and node builder.
-- `internal/core`: Xray version detection, release lookup and installer.
-- `internal/proxy`: share-link to Xray config builder, process lifecycle and local proxy testing.
-- `internal/service`: thin Wails adapters, one package per feature.
-
-The service adapter layer does not contain protocol parsing or file-format details. `internal/core` does not import Wails.
-## Documentation
-
-- [Documentation index](docs/README.md)
-- [Product and system design](docs/DESIGN.md)
-- [Architecture and directory rules](docs/ARCHITECTURE.md)
-- [UI design rules](docs/ui/DESIGN_RULES.md)
-- [Proxy core documentation](docs/cores/README.md)
-- [Xray-core client integration](docs/cores/xray/README.md)
-- [Architecture decision records](docs/adr/README.md)
-- [Subscription and node testing](docs/testing/subscription-test.md)
-- [Network diagnostics and IP tool assessment](docs/network-diagnostics.md)
-- [Node config editor](docs/cores/xray/node-editor.md)
+- [节点配置编辑器](docs/cores/xray/node-editor.md)
+- [网络诊断](docs/network-diagnostics.md)
+- [Xray TUN](docs/cores/xray/tun.md)
+- [更新日志](CHANGELOG.md)
+- [完整文档索引](docs/README.md)
 
 ## License
 
