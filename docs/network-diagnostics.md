@@ -24,7 +24,7 @@ FastV 只集成能够直接请求、稳定解析且无需浏览器验证的检�
 | `https://api64.ipify.org?format=json` | Cloudflare trace 不可用时的 IP 兜底 | 否 |
 | `https://speed.cloudflare.com/__down?bytes=5000000` | 用户主动开启下载测速时使用 | 否 |
 
-内置检测不会发送节点 Raw、节点凭证、订阅 URL 或本地配置。
+Cloudflare trace 不可用时，会先使用 ipwho.is 自身查询完成 IP 和归属地提取，再尝试其他 IP 兜底接口。内置检测不会发送节点 Raw、节点凭证、订阅 URL 或本地配置。
 
 ## 代理出口检测
 

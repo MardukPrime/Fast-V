@@ -40,7 +40,7 @@ func (s *DiagnosticsService) Check(mode string, includeSpeed bool) (model.Networ
 	if mode == "proxy" {
 		state := s.proxy.State()
 		if state.Status != "running" || state.LocalAddr == "" {
-			return model.NetworkProbe{}, errors.New("local proxy is not running")
+			return model.NetworkProbe{}, errors.New("本地代理未运行，请先启动本地代理")
 		}
 		proxyAddr = state.LocalAddr
 	}

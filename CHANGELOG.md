@@ -35,6 +35,7 @@ All notable changes to FastV are documented here.
 - Added node config extraction/editing, Xray outbound JSON preview, advanced JSON override, quick node switching and save-and-apply.
 - Added ordered routing rule editing mapped to Xray routing rules, with automatic proxy restart.
 - Added Xray runtime log capture, live streaming, filtering, pause, auto-scroll, copy and clear.
+- Hardened IP detection with ipwho.is self fallback, alternate IP endpoints, request retries and a clearer unreachable-interface error.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.

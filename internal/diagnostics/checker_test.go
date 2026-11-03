@@ -86,3 +86,29 @@ func TestProbeProxyRequiresAddress(t *testing.T) {
 		t.Fatal("expected proxy address error")
 	}
 }
+
+func TestProbeFallsBackToIPWhoisSelf(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/geo-self" {
+			fmt.Fprint(w, `{"success":true,"ip":"198.51.100.9","type":"IPv4","country":"Testland","country_code":"TL","region":"Test Region","city":"Test City","connection":{"asn":64501,"org":"Test Org","isp":"Test ISP"},"timezone":{"id":"Etc/UTC"}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	checker := NewChecker()
+	checker.traceURL = server.URL + "/trace"
+	checker.ipURL = server.URL + "/ip"
+	checker.geoURL = server.URL + "/geo/%s"
+	checker.geoIPURL = server.URL + "/geo-self"
+	checker.latencySamples = 1
+
+	result, err := checker.Probe(context.Background(), "direct", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IP != "198.51.100.9" || result.Country != "Testland" || result.ASN != 64501 {
+		t.Fatalf("unexpected fallback result: %+v", result)
+	}
+}
