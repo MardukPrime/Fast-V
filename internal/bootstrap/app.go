@@ -1,0 +1,71 @@
+package bootstrap
+
+import (
+	"embed"
+	"path/filepath"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/MardukPrime/Fast-V/internal/buildinfo"
+	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
+	"github.com/MardukPrime/Fast-V/internal/service/core"
+	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
+	"github.com/MardukPrime/Fast-V/internal/service/node"
+	"github.com/MardukPrime/Fast-V/internal/service/settings"
+	"github.com/MardukPrime/Fast-V/internal/service/subscription"
+	"github.com/MardukPrime/Fast-V/internal/store"
+)
+
+// Run assembles the application, services and window, then starts the Wails event loop.
+func Run(assets embed.FS) error {
+	st, err := store.NewStore()
+	if err != nil {
+		return err
+	}
+
+	appSvc := appservice.New()
+	coreSvc := core.NewCoreService(st)
+	dashboardSvc := dashboard.New(st, coreSvc)
+	subSvc := subscription.New(st)
+	nodeSvc := node.New(st)
+	settingsSvc := settings.New(st)
+
+	app := application.New(application.Options{
+		Name:        buildinfo.ProductName,
+		Description: "A modern proxy client built with Wails v3",
+		Services: []application.Service{
+			application.NewService(appSvc),
+			application.NewService(coreSvc),
+			application.NewService(dashboardSvc),
+			application.NewService(subSvc),
+			application.NewService(nodeSvc),
+			application.NewService(settingsSvc),
+		},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: buildinfo.ProductID,
+		},
+		Windows: application.WindowsOptions{
+			WebviewUserDataPath:   filepath.Join(st.DataDir(), "webview2"),
+			AdditionalBrowserArgs: []string{"--disable-gpu"},
+		},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		},
+	})
+
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            buildinfo.ProductName,
+		Width:            1280,
+		Height:           800,
+		MinWidth:         960,
+		MinHeight:        640,
+		Frameless:        true,
+		BackgroundColour: application.NewRGB(15, 18, 25),
+		URL:              "/",
+	})
+
+	return app.Run()
+}

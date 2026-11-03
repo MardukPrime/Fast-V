@@ -1,7 +1,7 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 
-import { DashboardService } from "../../bindings/github.com/MardukPrime/Fast-V";
-import type { AppInfo, DashboardSummary, Settings } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { DashboardService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/dashboard";
+import type { AppInfo, DashboardSummary, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type DashboardProps = {

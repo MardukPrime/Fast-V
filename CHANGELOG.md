@@ -22,3 +22,4 @@ All notable changes to FastV are documented here.
 - Node management with search, filters, active node selection, enable/disable, deletion and direct TCP latency testing.
 - Subscription updates preserve node identity and enabled state through stable source keys.
 - Settings split into client settings and core settings, with Xray-specific parameters shown conditionally.
+- Backend refactored into a root entrypoint, composition root, feature packages and Wails service adapters.

@@ -2,8 +2,9 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
 import { Events } from "@wailsio/runtime";
 
-import { CoreService, SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V";
-import type { CoreInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
+import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
+import type { CoreInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type SettingsProps = {

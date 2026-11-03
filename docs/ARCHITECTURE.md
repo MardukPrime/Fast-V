@@ -2,28 +2,27 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文档版本 | v0.2 |
+| 文档版本 | v0.3 |
 | 状态 | 当前实现基线 |
-| 日期 | 2026-11-02 |
+| 日期 | 2026-11-03 |
 | 桌面框架 | Wails v3.1 |
 | 前端 | SolidJS + TypeScript + Vite |
 | 后端 | Go |
-| 当前能力 | Dashboard、订阅、基础设置 |
+| 架构风格 | 模块化单体 + 根入口 + 内部特性包 + Wails 服务适配层 |
 
 ---
 
-## 1. 架构原则
+## 1. 架构目标
 
-FastV 当前采用 Wails v3 官方推荐的服务式项目布局：
+FastV 的目录组织遵循以下原则：
 
-- 根目录 `main.go` 作为应用入口。
-- 根目录 Service 文件作为 Go 与前端的边界。
-- `frontend/` 存放 Vite 前端。
-- `frontend/bindings/` 由 Wails 自动生成。
-- `frontend/dist/` 由 Vite 生成，并嵌入 Go 二进制。
-- `build/`、`Taskfile.yml`、`bin/` 等构建配置和产物不入库。
-
-当前阶段不引入微服务、复杂 DDD 分层或额外依赖注入框架。业务规模增长后，再把根目录 Service 拆到独立包中。
+- 根目录只保留 Wails 入口和项目级文件。
+- 所有业务代码进入 `internal/`，避免被外部模块导入。
+- Wails Service 只作为传输适配层，不承载解析、下载、存储等核心逻辑。
+- 业务能力按特性分包，不建立无边界的 `utils`、`common`、`services` 大包。
+- 只有 `internal/bootstrap` 负责组装具体实现。
+- 核心模块不依赖 Wails，便于单元测试和未来迁移。
+- 前后端类型契约通过 `internal/model` 和自动生成的 bindings 维护。
 
 ---
 
@@ -31,55 +30,54 @@ FastV 当前采用 Wails v3 官方推荐的服务式项目布局：
 
 ```text
 fastV/
-├── main.go                     # Wails 入口，注册 Service、窗口和资源
-├── appservice.go               # 应用元数据
-├── dashboardservice.go         # 仪表盘聚合数据
-├── subscriptionservice.go      # 订阅拉取、更新、删除和节点查询
-├── nodeservice.go              # 节点筛选、当前节点、启停和 TCP 测试
-├── settingsservice.go          # 基础设置
-├── coreservice.go              # Xray 内核版本检测、下载和安装
-├── models.go                   # 前端 DTO 和内部数据模型
-├── store.go                    # 本地 JSON 持久化
-├── parser.go                   # 订阅格式和分享链接解析
-├── parser_test.go
-├── subscription_service_test.go
-├── node_service_test.go
-├── settings_service_test.go
-├── core_service_test.go
-├── core_download_test.go
+├── main.go
+├── internal/
+│   ├── bootstrap/
+│   │   └── app.go
+│   ├── buildinfo/
+│   │   └── buildinfo.go
+│   ├── model/
+│   │   └── models.go
+│   ├── store/
+│   │   └── store.go
+│   ├── subscription/
+│   │   ├── fetcher.go
+│   │   ├── parser.go
+│   │   └── nodes.go
+│   ├── core/
+│   │   ├── manager.go
+│   │   ├── release.go
+│   │   └── installer.go
+│   └── service/
+│       ├── app/
+│       │   └── service.go
+│       ├── core/
+│       │   └── service.go
+│       ├── dashboard/
+│       │   └── service.go
+│       ├── node/
+│       │   └── service.go
+│       ├── settings/
+│       │   └── service.go
+│       └── subscription/
+│           └── service.go
 ├── frontend/
-│   ├── index.html
-│   ├── package.json
-│   ├── pnpm-lock.yaml
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   ├── bindings/               # Wails 自动生成
-│   └── src/
-│       ├── App.tsx
-│       ├── index.tsx
-│       ├── styles.css
-│       └── pages/
-│           ├── DashboardPage.tsx
-│           ├── SubscriptionsPage.tsx
-│           ├── SettingsPage.tsx
-│           └── PlaceholderPage.tsx
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── components/
+│   │   ├── pages/
+│   │   └── styles.css
+│   ├── bindings/
+│   └── package.json
+├── test/
+│   └── fixtures/
 ├── docs/
-│   ├── README.md
-│   ├── DESIGN.md
-│   ├── ARCHITECTURE.md
-│   ├── ui/
-│   ├── cores/
-│   ├── adr/
-│   ├── api/
-│   ├── operations/
-│   └── testing/
 ├── go.mod
 ├── go.sum
-├── README.md
-└── LICENSE
+└── README.md
 ```
 
-以下文件由本地工具生成或维护，不纳入版本控制：
+以下内容由本地工具生成，不纳入版本控制：
 
 ```text
 build/
@@ -96,69 +94,139 @@ frontend/node_modules/
 
 ---
 
-## 3. Wails v3 Service 边界
+## 3. 分层和职责
 
-```text
-SolidJS 页面
-  -> frontend/bindings/*.ts
-  -> Wails Service 方法
-  -> Store / Parser / HTTP Client
-```
+### 3.1 根入口
 
-### AppService
+`main.go` 只负责：
 
-- 返回应用名称、版本、平台、架构和 Wails 版本。
+- `go:embed frontend/dist`
+- 调用 `bootstrap.Run(assets)`
 
-### DashboardService
+不写业务逻辑，不直接创建 Store、数据库或 Service。
 
-- 汇总订阅数量、节点数量、启用订阅数量。
-- 返回最近更新的订阅。
-- 返回当前基础设置和应用信息。
+### 3.2 组合根
 
-### SubscriptionService
+`internal/bootstrap/app.go` 是唯一允许知道所有具体实现的包：
 
-- 添加订阅。
-- 拉取 Base64 订阅或分享链接内容。
-- 解析 VMess、VLESS、Trojan、Shadowsocks 节点。
-- 更新单个订阅或全部订阅。
-- 删除订阅及其节点。
-- 返回前端安全的 `NodeView`，不暴露原始凭据。
+- 创建 Store
+- 创建 Core Manager 和 Wails CoreService
+- 创建各业务 Service
+- 注册 Wails Application、窗口和托盘
+- 管理启动和退出生命周期
 
-### NodeService
+### 3.3 模型层
 
-- 搜索、按协议和订阅筛选节点。
-- 设置当前节点。
-- 启用或禁用单个节点。
-- 删除节点并同步订阅节点计数。
-- 提供直接 TCP 连通性测试。
-- 订阅更新时按稳定 source key 保留节点 ID 和启用状态。
+`internal/model` 负责：
 
-### SettingsService
+- 共享领域模型
+- 前端 DTO
+- View 转换函数
+- ID、时间、source key 等稳定的模型辅助函数
 
-- 读取、保存和重置基础设置。
-- 校验主题、语言、代理模式和订阅更新间隔。
+模型层不导入 Wails、SQLite、HTTP 或 Windows API。
 
-### CoreService
+### 3.4 存储层
 
-- 检测已安装的 Xray-core 版本。
-- 查询 GitHub 最新 Release。
-- 根据平台选择对应的 Xray-core 压缩包。
-- 下载、校验 SHA-256、解压并验证新内核。
-- 安装 `xray.exe`、Geo 数据和版本记录。
-- 支持手动检查和下载，也支持启动后自动检查更新。
+`internal/store` 负责：
+
+- 本地 JSON 持久化
+- 订阅、节点、设置和当前节点状态
+- 原子写入
+- 数据目录回退
+- 订阅更新时保留节点 ID 和启用状态
+
+当前存储为 JSON，但接口边界保持在 Store 内部，后续可以替换为 SQLite。
+
+### 3.5 订阅模块
+
+`internal/subscription` 负责：
+
+- HTTP 拉取订阅
+- Base64 解码
+- VMess、VLESS、Trojan、Shadowsocks 分享链接解析
+- 节点去重
+- 生成稳定 source key
+- 构建存储节点
+
+该包不依赖 Wails，也不依赖 store。
+
+### 3.6 内核模块
+
+`internal/core` 负责：
+
+- Xray-core 版本检测
+- GitHub Release 查询
+- 平台和架构对应资源选择
+- 下载
+- GitHub SHA-256 digest 校验
+- ZIP 解压
+- staging 验证
+- 安装和版本记录
+
+该包不导入 Wails。内核状态变化通过回调通知服务适配层。
+
+### 3.7 Wails 服务适配层
+
+`internal/service/*` 只负责：
+
+- 暴露前端可调用方法
+- 参数校验
+- 调用对应内部模块
+- 将内部错误映射为前端可处理的错误
+- 通过 Wails Event 推送状态
+
+Service 不实现协议解析、下载器、ZIP 解压或数据库细节。
+
+### 3.8 前端
+
+`frontend/src` 只通过生成的 bindings 调用 Go：
+
+- `App.tsx`：窗口壳、导航、主题和当前状态
+- `pages/`：Dashboard、Servers、Subscriptions、Settings、Placeholder
+- `components/`：共享图标和基础组件
+- `styles.css`：双主题和液态玻璃视觉系统
 
 ---
 
-## 4. 数据流
+## 4. 依赖规则
+
+```text
+main.go
+  -> internal/bootstrap
+  -> internal/service/*
+  -> internal/core / internal/subscription / internal/store
+  -> internal/model
+
+internal/core          -> internal/model, standard library
+internal/subscription  -> internal/model, standard library
+internal/store         -> internal/model, standard library
+internal/service/*     -> internal/core, internal/subscription, internal/store, internal/model, Wails
+internal/bootstrap     -> all concrete implementations
+```
+
+禁止：
+
+- `internal/model` 导入 Wails 或 infrastructure。
+- `internal/core` 或 `internal/subscription` 导入 Wails。
+- `internal/store` 直接向 Wails Event 发送消息。
+- Service 中直接操作 SQLite、ZIP、注册表或系统 API。
+- 在 `main.go` 中写依赖组装。
+- 创建无边界 `utils`、`common`、`helpers` 包。
+
+---
+
+## 5. 数据流
 
 ### 添加订阅
 
 ```text
 SubscriptionsPage
   -> SubscriptionService.Add
-  -> fetchSubscription
-  -> parseSubscriptionContent
-  -> Store.AddSubscription
+  -> subscription.Fetch
+  -> subscription.ParseContent
+  -> subscription.BuildNodes
+  -> store.AddSubscription
   -> SubscriptionView
 ```
 
@@ -167,110 +235,72 @@ SubscriptionsPage
 ```text
 SubscriptionsPage
   -> SubscriptionService.Update
-  -> HTTP GET
-  -> parse
-  -> Store.ReplaceSubscriptionNodes
+  -> subscription.Fetch
+  -> subscription.ParseContent
+  -> subscription.BuildNodes
+  -> store.ReplaceSubscriptionNodes
   -> SubscriptionView
 ```
 
-更新失败时保留旧节点，并把错误写入订阅的 `LastError`。
+更新失败时保留旧节点，并记录 `LastError`。
 
-### 保存设置
+### 节点管理
 
 ```text
-SettingsPage
-  -> SettingsService.Save
-  -> validate
-  -> Store.SaveSettings
-  -> Settings
+ServersPage
+  -> NodeService.List / SetActive / SetEnabled / Delete
+  -> Store
+  -> NodeView
 ```
 
----
+`NodeService.TestLatency` 执行直接 TCP 连通性检查，不经过代理链路。
 
-### 检查并更新内核
+### 更新内核
 
 ```text
 SettingsPage
   -> CoreService.CheckLatest / DownloadLatest / AutoUpdate
+  -> core.Manager
   -> GitHub Release API
-  -> download asset
-  -> SHA-256 verify
-  -> extract zip
-  -> run xray version
-  -> install to data/cores/xray
+  -> download + SHA-256 + unzip + staging validation
+  -> install
   -> CoreInfo
 ```
 
 ---
-## 5. 本地持久化
 
-当前使用本地 JSON：
+## 6. 测试
 
-```text
-%APPDATA%\FastV\data.json
-```
-
-如果系统配置目录不可写，会依次回退到：
+测试文件与被测包同目录：
 
 ```text
-%LOCALAPPDATA%\FastV\data.json
-<当前工作目录>\.fastv-data\data.json
+internal/subscription/parser_test.go
+internal/service/subscription/service_test.go
+internal/service/settings/service_test.go
+internal/service/node/service_test.go
+internal/core/manager_test.go
 ```
 
-也可以通过环境变量覆盖：
+测试不依赖真实网络，使用 `httptest`、临时数据目录和本地 TCP listener。核心下载集成测试只在本地存在 `xray.zip` fixture 时运行，否则跳过。
 
-```text
-FASTV_DATA_DIR=<目录>
-```
-
-持久化数据包括：
-
-- 基础设置
-- 订阅 URL 和元数据
-- 解析后的节点元数据和原始分享链接
-
-原始分享链接包含凭据，只用于后续内核配置生成，不返回给前端。后续迁移 SQLite 时保持 `Store` 接口不变。
-
----
-
-## 6. 前端结构
-
-- `App.tsx`：应用壳、导航和主题应用。
-- `DashboardPage.tsx`：统计卡片、快速操作和最近订阅。
-- `SubscriptionsPage.tsx`：添加、更新、删除订阅，查看节点。
-- `SettingsPage.tsx`：主题、语言、代理模式和更新间隔。
-- `PlaceholderPage.tsx`：尚未实现的服务器、路由、测速和日志页面。
-- `styles.css`：深色/浅色主题、布局和组件样式。
-
-前端只通过 `frontend/bindings` 调用 Go，不直接访问文件或网络。
-
----
-
-## 7. 测试
+常用命令：
 
 ```bash
-go test .
+go test ./internal/...
+go vet ./internal/...
 pnpm --dir frontend run typecheck
 pnpm --dir frontend run build
 ```
 
-当前测试覆盖：
-
-- Base64 订阅解析。
-- VMess、VLESS、Trojan、Shadowsocks 分享链接解析。
-- 订阅添加、更新、删除和节点查询。
-- 设置保存、重置和非法值校验。
-
 ---
 
-## 8. 后续演进
+## 7. 演进方向
 
-当业务复杂度增加时按以下顺序演进：
+随着功能增长，保持以下边界：
 
-1. 把根目录 Service 拆分到 `internal/service` 或按业务能力分包。
-2. 把 `Store` 从 JSON 迁移到 SQLite。
-3. 增加 Xray-core 进程管理和配置生成。
-4. 增加代理状态机和系统代理。
-5. 增加路由规则编辑器和测速页面。
-
-演进时必须保持 Wails Service 方法签名和前端 DTO 稳定，避免 UI 大改。
+1. 新业务能力先建 `internal/<feature>`，不要继续往根目录加 Service 文件。
+2. Wails 交互统一放 `internal/service/<feature>`。
+3. 跨模块共享类型放 `internal/model`，但不要把所有实现细节都放进去。
+4. 需要替换持久化时，只改 `internal/store`。
+5. 需要替换内核时，扩展 `internal/core` 或新增对应内核包。
+6. 保持 `main.go` 和 `bootstrap` 的职责不扩散。

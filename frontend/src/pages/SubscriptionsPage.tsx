@@ -1,7 +1,8 @@
 import { createSignal, For, onMount, Show } from "solid-js";
 
-import { NodeService, SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V";
-import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
+import { Service as SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/subscription";
+import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 function formatTime(value: string) {

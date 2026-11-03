@@ -6,7 +6,7 @@ The project does not implement proxy protocols itself. Xray-core is used as the 
 
 ## Status
 
-Milestone M1: dashboard, subscriptions and basic settings are functional.
+Milestone M2: dashboard, subscriptions, node management, settings and Xray-core updates are functional.
 
 Implemented:
 
@@ -76,37 +76,44 @@ go vet .
 
 ## Project Structure
 
-The project follows the Wails v3 service-based layout: a root `main.go`, root service files, and a Vite frontend.
+The project uses a root Wails entrypoint, a composition root, feature-oriented internal packages, and a Vite frontend.
 
 ```text
 fastV/
-├── main.go                     # Wails entrypoint and embedded frontend assets
-├── appservice.go               # Application metadata service
-├── dashboardservice.go         # Dashboard aggregate service
-├── subscriptionservice.go      # Subscription fetching and node management
-├── nodeservice.go               # Node listing, selection, enablement and TCP checks
-├── settingsservice.go          # Basic settings service
-├── coreservice.go              # Xray-core detection, download and install
-├── models.go                   # Frontend-facing models
-├── store.go                    # Local JSON persistence
-├── parser.go                   # Subscription and share-link parser
-├── parser_test.go
-├── subscription_service_test.go
-├── settings_service_test.go
-├── core_service_test.go
-├── node_service_test.go
-├── core_download_test.go
+├── main.go                         # Wails entrypoint and embedded frontend assets
+├── internal/
+│   ├── bootstrap/
+│   │   └── app.go                  # Composition root: Wails app, services, window
+│   ├── buildinfo/
+│   │   └── buildinfo.go            # Product/version metadata
+│   ├── model/
+│   │   └── models.go               # Shared domain models and frontend DTOs
+│   ├── store/
+│   │   └── store.go                # Local JSON persistence
+│   ├── subscription/
+│   │   ├── fetcher.go              # Subscription HTTP fetch
+│   │   ├── parser.go               # Share-link and subscription parser
+│   │   └── nodes.go                # Parsed node builder
+│   ├── core/
+│   │   ├── manager.go              # Xray version detection and update lifecycle
+│   │   ├── release.go              # GitHub release and asset selection
+│   │   └── installer.go            # Download, SHA-256, unzip and install
+│   └── service/
+│       ├── app/service.go          # AppService
+│       ├── core/service.go         # CoreService Wails adapter
+│       ├── dashboard/service.go    # DashboardService
+│       ├── node/service.go         # NodeService
+│       ├── settings/service.go     # SettingsService
+│       └── subscription/service.go # SubscriptionService
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx
+│   │   ├── components/
 │   │   ├── pages/
-│   │   │   ├── DashboardPage.tsx
-│   │   │   ├── SubscriptionsPage.tsx
-│   │   │   ├── SettingsPage.tsx
-│   │   │   └── PlaceholderPage.tsx
 │   │   └── styles.css
-│   ├── bindings/               # Generated TypeScript bindings
+│   ├── bindings/                   # Wails generated TypeScript bindings
 │   └── package.json
+├── test/fixtures/                  # Local subscription test fixtures
 ├── docs/
 ├── go.mod
 ├── go.sum
@@ -114,7 +121,6 @@ fastV/
 ```
 
 Wails embeds `frontend/dist` from the module root, so `main.go` stays at the root.
-
 ## Repository Policy
 
 This repository tracks source code and documentation only. Build configuration, platform assets, packaged binaries, generated distributions and local tooling are excluded.
@@ -147,26 +153,34 @@ frontend/node_modules/
 
 ## Architecture
 
-The application uses Wails v3 services as the boundary between Go and TypeScript:
+The application uses a modular monolith with a Wails transport adapter:
 
 ```text
 SolidJS pages
   -> generated Wails bindings
-  -> root Go services
-  -> Store / Parser / HTTP client / Xray updater
+  -> internal/service/*
+  -> internal/model / internal/store / internal/subscription / internal/core
 ```
 
-Services:
+### Service adapters
 
 - `AppService`: application metadata.
-- `DashboardService`: aggregate counts and recent subscriptions.
-- SubscriptionService: add, update, delete, list and inspect nodes.
-- NodeService: search/filter nodes, select the active node, toggle enabled state, delete nodes and run direct TCP latency checks.
-- SettingsService: read, save and reset basic settings.
-- CoreService: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
+- `DashboardService`: aggregate counts, active node and recent subscriptions.
+- `SubscriptionService`: add, update, delete, list and inspect nodes.
+- `NodeService`: search/filter nodes, select the active node, toggle enabled state, delete nodes and run direct TCP latency checks.
+- `SettingsService`: read, save and reset client and core settings.
+- `CoreService`: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
 
-The current store is a small local JSON file. It is intentionally isolated behind `Store` so it can be replaced with SQLite without changing the frontend contract.
+### Internal modules
 
+- `internal/bootstrap`: the only composition root.
+- `internal/model`: shared domain models and frontend DTOs.
+- `internal/store`: persistence boundary; currently JSON, replaceable with SQLite.
+- `internal/subscription`: parser, fetcher and node builder.
+- `internal/core`: Xray version detection, release lookup and installer.
+- `internal/service`: thin Wails adapters, one package per feature.
+
+The service adapter layer does not contain protocol parsing or file-format details. `internal/core` does not import Wails.
 ## Documentation
 
 - [Documentation index](docs/README.md)

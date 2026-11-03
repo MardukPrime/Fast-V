@@ -212,41 +212,41 @@ Wails 加载的是本地静态资源，不存在 SEO 和首屏服务端渲染需
 
 ### 6.1 目录结构
 
-当前使用 Wails v3 官方推荐的服务式项目布局：根目录入口、根目录 Service、Vite 前端和自动生成 bindings。完整说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+项目采用根入口 + 内部特性包 + Wails 服务适配层的模块化单体结构。完整规则见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ```text
 fastV/
-├── main.go                     # Wails 入口和资源嵌入
-├── appservice.go               # 应用元数据
-├── dashboardservice.go         # 仪表盘聚合
-├── subscriptionservice.go      # 订阅管理
-├── settingsservice.go          # 基础设置
-├── models.go                   # 数据模型
-├── store.go                    # 本地持久化
-├── parser.go                   # 分享链接和订阅解析
-├── *_test.go                   # 单元测试
+├── main.go
+├── internal/
+│   ├── bootstrap/          # 唯一组合根
+│   ├── buildinfo/          # 产品版本信息
+│   ├── model/              # 共享模型和 DTO
+│   ├── store/              # 本地持久化
+│   ├── subscription/       # 订阅抓取、解析和节点构建
+│   ├── core/               # Xray 检测、发布查询和安装
+│   └── service/            # Wails Service 适配层
+│       ├── app/
+│       ├── core/
+│       ├── dashboard/
+│       ├── node/
+│       ├── settings/
+│       └── subscription/
 ├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── pages/
-│   │   └── styles.css
-│   ├── bindings/               # Wails 自动生成
-│   └── package.json
+├── test/fixtures/
 ├── docs/
 ├── go.mod
-├── go.sum
 └── README.md
 ```
 
 关键约束：
 
-- 根目录 Service 是 Go 和前端的边界。
-- 前端只通过 `frontend/bindings` 调用 Go。
-- `Store` 隔离持久化实现，后续可从 JSON 替换为 SQLite。
-- `build/`、`Taskfile.yml`、`bin/`、`frontend/dist/`、`frontend/node_modules/` 和 `.fastv-data/` 不入库。
-- 当前阶段不引入复杂 DDD 分层；业务增长后再拆分包。
-- 禁止创建 `utils`、`common`、`helpers` 这类无边界包。
-
+- 根目录只保留 Wails 入口和项目级文件。
+- 业务代码全部进入 `internal/`。
+- Service 是传输适配层，不承载解析、下载、ZIP 和存储细节。
+- `internal/core` 和 `internal/subscription` 不依赖 Wails。
+- `internal/bootstrap` 是唯一依赖组装入口。
+- 前端只通过生成的 bindings 调用 Go。
+- 构建产物、平台资源和本地工具不入库。
 ### 6.2 领域模型
 
 #### Profile

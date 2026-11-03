@@ -1,7 +1,7 @@
 import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 
-import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V";
-import type { NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V";
+import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
+import type { NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type ServersProps = {
