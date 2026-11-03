@@ -83,6 +83,43 @@ export interface NetworkProbe {
 }
 
 /**
+ * NodeConfig is the editable, frontend-safe view of a node's Xray-compatible settings.
+ */
+export interface NodeConfig {
+    "id": string;
+    "name": string;
+    "protocol": string;
+    "address": string;
+    "port": number;
+    "uuid": string;
+    "password": string;
+    "method": string;
+    "security": string;
+    "flow": string;
+    "network": string;
+    "tls": string;
+    "serverName": string;
+    "fingerprint": string;
+    "alpn": string[] | null;
+    "host": string;
+    "path": string;
+    "serviceName": string;
+    "publicKey": string;
+    "shortId": string;
+    "spiderX": string;
+    "allowInsecure": boolean;
+    "outboundJson": string;
+}
+
+/**
+ * NodeConfigPreview contains generated raw and Xray outbound representations.
+ */
+export interface NodeConfigPreview {
+    "rawLink": string;
+    "outboundJson": string;
+}
+
+/**
  * NodeFilter controls the node management list.
  */
 export interface NodeFilter {

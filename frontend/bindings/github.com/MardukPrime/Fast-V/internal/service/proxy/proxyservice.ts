@@ -26,6 +26,10 @@ export function Stop(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(2731269635);
 }
 
+export function SwitchNode(id: string): $CancellablePromise<model$0.ProxyState> {
+    return $Call.ByID(3191579083, id);
+}
+
 export function Test(): $CancellablePromise<model$0.ProxyTestResult> {
     return $Call.ByID(457674591);
 }

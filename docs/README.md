@@ -32,6 +32,7 @@ docs/
 │       ├── README.md
 │       ├── integration.md
 │       ├── tun.md
+│       ├── node-editor.md
 │       ├── profile-mapping.md
 │       ├── transports.md
 │       ├── routing-dns.md

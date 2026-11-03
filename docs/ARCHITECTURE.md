@@ -185,6 +185,8 @@ frontend/node_modules/
 `internal/proxy` 负责：
 
 - 将当前节点和设置转换为 Xray JSON 配置
+- 通过 nodeconfig 提取/重建分享链接并生成 Xray outbound
+- 支持节点配置文件编辑、Xray JSON 预览和高级 outbound 覆盖
 - 支持 VMess、VLESS、Trojan、Shadowsocks 分享链接
 - 根据代理模式生成路由规则
 - 将 Xray 参数写入配置
@@ -243,6 +245,7 @@ main.go
 internal/core          -> internal/model, standard library
 internal/proxy         -> internal/model, standard library
 internal/subscription  -> internal/model, standard library
+internal/nodeconfig    -> internal/model, standard library
 internal/diagnostics   -> internal/model, standard library
 internal/store         -> internal/model, standard library
 internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/diagnostics, internal/store, internal/model, Wails

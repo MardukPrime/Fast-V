@@ -32,6 +32,7 @@ All notable changes to FastV are documented here.
 - Corrected the previous Xray TUN limitation and added Xray TUN configuration validation.
 - Theme selection now previews immediately and follows system theme changes when set to system mode.
 - Settings major sections are now collapsible and remember their open/closed state.
+- Added node config extraction/editing, Xray outbound JSON preview, advanced JSON override, quick node switching and save-and-apply.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Added external browser links for IPCheck.ing, ip.skk.moe, IPPure, IP看看 and Whoer.net after assessing their API/challenge limitations.

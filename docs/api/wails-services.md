@@ -32,6 +32,9 @@
 | List | NodeFilter | []NodeView | 搜索和筛选节点 |
 | Active | - | NodeView | 获取当前节点 |
 | SetActive | id | NodeView | 设置当前节点 |
+| Config | id | NodeConfig | 提取可编辑节点配置 |
+| Preview | NodeConfig | NodeConfigPreview | 生成分享链接和 Xray outbound 预览 |
+| SaveConfig | NodeConfig | NodeView | 保存编辑后的节点配置 |
 | SetEnabled | id, enabled | NodeView | 启用或禁用节点 |
 | Delete | id | - | 删除节点 |
 | TestLatency | ids | []NodeLatency | 直接 TCP 连通性测试 |
@@ -60,6 +63,7 @@
 | Start | - | ProxyState | 生成配置、校验并启动 Xray |
 | Stop | - | ProxyState | 停止 Xray |
 | State | - | ProxyState | 获取代理状态 |
+| SwitchNode | id | ProxyState | 切换当前节点；代理运行中时自动重启 |
 | Test | - | ProxyTestResult | 通过本地 SOCKS/HTTP 入站访问测试地址 |
 
 ## DiagnosticsService
@@ -128,3 +132,16 @@
 | downloadMbps / downloadBytes | 可选下载测速结果 |
 | geoError / downloadError | 非致命的部分失败信息 |
 | checkedAt | 检测时间 |
+## NodeConfig 字段
+
+| 字段 | 说明 |
+|---|---|
+| id / name / protocol / address / port | 节点基础信息 |
+| uuid / password / method / security / flow | 协议凭证与加密参数 |
+| network / tls / serverName / fingerprint / alpn | 传输与安全层 |
+| host / path / serviceName | WebSocket、gRPC、HTTPUpgrade、XHTTP 参数 |
+| publicKey / shortId / spiderX | REALITY 参数 |
+| allowInsecure | 允许不安全 TLS |
+| outboundJson | 高级 Xray outbound JSON 覆盖；为空时由表单生成 |
+
+`NodeConfigPreview` 同时返回重新生成的分享链接和 Xray outbound JSON。保存高级 JSON 后，代理配置会优先使用该 outbound。

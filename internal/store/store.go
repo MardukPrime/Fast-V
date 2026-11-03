@@ -425,6 +425,26 @@ func (s *Store) SetNodeEnabled(id string, enabled bool) (Node, error) {
 	return updated, err
 }
 
+func (s *Store) UpdateNode(id string, name string, protocol string, address string, port int, raw string, outboundJSON string) (Node, error) {
+	var updated Node
+	err := s.update(func(data *storeData) error {
+		for i := range data.Nodes {
+			if data.Nodes[i].ID != id {
+				continue
+			}
+			data.Nodes[i].Name = name
+			data.Nodes[i].Protocol = protocol
+			data.Nodes[i].Address = address
+			data.Nodes[i].Port = port
+			data.Nodes[i].Raw = raw
+			data.Nodes[i].OutboundJSON = outboundJSON
+			updated = data.Nodes[i]
+			return nil
+		}
+		return errors.New("node not found")
+	})
+	return updated, err
+}
 func (s *Store) DeleteNode(id string) error {
 	return s.update(func(data *storeData) error {
 		removedSubID := ""

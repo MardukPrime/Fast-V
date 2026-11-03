@@ -193,3 +193,27 @@ func TestTunConfigPassesXrayValidation(t *testing.T) {
 		t.Fatalf("xray TUN config validation failed: %v\n%s", err, output)
 	}
 }
+
+func TestBuildConfigUsesAdvancedOutboundJSON(t *testing.T) {
+	node := model.Node{
+		Protocol:     "trojan",
+		Raw:          "trojan://password@example.com:443#Original",
+		OutboundJSON: `{"protocol":"trojan","settings":{"address":"advanced.example.com","port":8443,"password":"advanced-password"}}`,
+	}
+	raw, err := BuildConfig(node, testSettings())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	outbound := config["outbounds"].([]any)[0].(map[string]any)
+	if outbound["protocol"] != "trojan" || outbound["tag"] != "proxy" {
+		t.Fatalf("unexpected advanced outbound: %+v", outbound)
+	}
+	settings := outbound["settings"].(map[string]any)
+	if settings["address"] != "advanced.example.com" || settings["port"].(float64) != 8443 {
+		t.Fatalf("advanced outbound was not used: %+v", settings)
+	}
+}

@@ -34,6 +34,21 @@ func (s *ProxyService) Start() (model.ProxyState, error) {
 	return s.manager.Start(ctx)
 }
 
+func (s *ProxyService) SwitchNode(id string) (model.ProxyState, error) {
+	if _, err := s.store.SetActiveNode(id); err != nil {
+		return s.manager.State(), err
+	}
+	state := s.manager.State()
+	if state.Status != "running" && state.Status != "starting" {
+		return state, nil
+	}
+	if _, err := s.manager.Stop(); err != nil {
+		return s.manager.State(), err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	return s.manager.Start(ctx)
+}
 func (s *ProxyService) Stop() (model.ProxyState, error) {
 	return s.manager.Stop()
 }

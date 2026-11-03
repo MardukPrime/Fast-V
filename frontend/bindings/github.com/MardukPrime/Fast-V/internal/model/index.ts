@@ -7,6 +7,8 @@ export type {
     CoreUpdateResult,
     DashboardSummary,
     NetworkProbe,
+    NodeConfig,
+    NodeConfigPreview,
     NodeFilter,
     NodeLatency,
     NodeView,

@@ -186,7 +186,8 @@ SolidJS pages
 - `AppService`: application metadata.
 - `DashboardService`: aggregate counts, active node and recent subscriptions.
 - `SubscriptionService`: add, update, delete, list and inspect nodes.
-- `NodeService`: search/filter nodes, select the active node, toggle enabled state, delete nodes and run direct TCP latency checks.
+- `NodeService`: search/filter nodes, select the active node, edit node configs, preview Xray outbound JSON, toggle enabled state, delete nodes and run direct TCP latency checks.
+- `ProxyService.SwitchNode`: switch the active node and automatically restart the running proxy.
 - `SettingsService`: read, save and reset client and core settings.
 - `ProxyService`: start/stop Xray, expose proxy state and test the local inbound.
 - `CoreService`: detect the installed Xray-core version, check GitHub releases, verify SHA-256 and install updates.
@@ -213,6 +214,7 @@ The service adapter layer does not contain protocol parsing or file-format detai
 - [Architecture decision records](docs/adr/README.md)
 - [Subscription and node testing](docs/testing/subscription-test.md)
 - [Network diagnostics and IP tool assessment](docs/network-diagnostics.md)
+- [Node config editor](docs/cores/xray/node-editor.md)
 
 ## License
 

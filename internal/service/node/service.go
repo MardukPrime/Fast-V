@@ -1,6 +1,7 @@
 package node
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/nodeconfig"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
 
@@ -93,6 +95,68 @@ func (s *NodeService) SetEnabled(id string, enabled bool) (model.NodeView, error
 	return *s.view(item), nil
 }
 
+func (s *NodeService) Config(id string) (model.NodeConfig, error) {
+	item, err := s.store.FindNode(id)
+	if err != nil {
+		return model.NodeConfig{}, err
+	}
+	cfg, err := nodeconfig.Extract(item.Raw, item.Protocol)
+	if err != nil {
+		return model.NodeConfig{}, err
+	}
+	cfg.ID = item.ID
+	cfg.Name = item.Name
+	cfg.OutboundJSON = item.OutboundJSON
+	return cfg, nil
+}
+
+func (s *NodeService) Preview(input model.NodeConfig) (model.NodeConfigPreview, error) {
+	raw, err := nodeconfig.BuildRaw(input)
+	if err != nil {
+		return model.NodeConfigPreview{}, err
+	}
+	outbound, err := nodeconfig.BuildOutbound(input)
+	if err != nil {
+		return model.NodeConfigPreview{}, err
+	}
+	rawJSON, err := json.MarshalIndent(outbound, "", "  ")
+	if err != nil {
+		return model.NodeConfigPreview{}, err
+	}
+	return model.NodeConfigPreview{RawLink: raw, OutboundJSON: string(rawJSON)}, nil
+}
+
+func (s *NodeService) SaveConfig(input model.NodeConfig) (model.NodeView, error) {
+	input.Name = strings.TrimSpace(input.Name)
+	input.Protocol = strings.ToLower(strings.TrimSpace(input.Protocol))
+	input.Address = strings.TrimSpace(input.Address)
+	input.OutboundJSON = strings.TrimSpace(input.OutboundJSON)
+	if input.Name == "" {
+		input.Name = input.Address
+	}
+	raw, err := nodeconfig.BuildRaw(input)
+	if err != nil {
+		return model.NodeView{}, err
+	}
+	if input.OutboundJSON != "" {
+		var outbound map[string]any
+		if err := json.Unmarshal([]byte(input.OutboundJSON), &outbound); err != nil {
+			return model.NodeView{}, errors.New("Xray outbound JSON 格式无效")
+		}
+		if len(outbound) == 0 {
+			return model.NodeView{}, errors.New("Xray outbound JSON 不能为空对象")
+		}
+		protocol, _ := outbound["protocol"].(string)
+		if strings.TrimSpace(protocol) == "" {
+			return model.NodeView{}, errors.New("Xray outbound JSON 必须包含 protocol")
+		}
+	}
+	item, err := s.store.UpdateNode(input.ID, input.Name, input.Protocol, input.Address, input.Port, raw, input.OutboundJSON)
+	if err != nil {
+		return model.NodeView{}, err
+	}
+	return *s.view(item), nil
+}
 func (s *NodeService) Delete(id string) error {
 	return s.store.DeleteNode(id)
 }

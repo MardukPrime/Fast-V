@@ -18,12 +18,24 @@ export function Active(): $CancellablePromise<model$0.NodeView | null> {
     return $Call.ByID(502107305);
 }
 
+export function Config(id: string): $CancellablePromise<model$0.NodeConfig> {
+    return $Call.ByID(1672081461, id);
+}
+
 export function Delete(id: string): $CancellablePromise<void> {
     return $Call.ByID(3937961124, id);
 }
 
 export function List(filter: model$0.NodeFilter): $CancellablePromise<model$0.NodeView[] | null> {
     return $Call.ByID(815656287, filter);
+}
+
+export function Preview(input: model$0.NodeConfig): $CancellablePromise<model$0.NodeConfigPreview> {
+    return $Call.ByID(3740078081, input);
+}
+
+export function SaveConfig(input: model$0.NodeConfig): $CancellablePromise<model$0.NodeView> {
+    return $Call.ByID(3300778444, input);
 }
 
 export function SetActive(id: string): $CancellablePromise<model$0.NodeView> {

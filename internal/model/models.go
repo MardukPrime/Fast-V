@@ -77,6 +77,7 @@ type Node struct {
 	Raw            string `json:"raw"`
 	Enabled        bool   `json:"enabled"`
 	SourceKey      string `json:"sourceKey"`
+	OutboundJSON   string `json:"outboundJson"`
 }
 
 // NodeView is the frontend-safe node representation.
@@ -252,4 +253,37 @@ type NetworkProbe struct {
 	GeoError      string  `json:"geoError"`
 	DownloadError string  `json:"downloadError"`
 	CheckedAt     string  `json:"checkedAt"`
+}
+
+// NodeConfig is the editable, frontend-safe view of a node's Xray-compatible settings.
+type NodeConfig struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Protocol      string   `json:"protocol"`
+	Address       string   `json:"address"`
+	Port          int      `json:"port"`
+	UUID          string   `json:"uuid"`
+	Password      string   `json:"password"`
+	Method        string   `json:"method"`
+	Security      string   `json:"security"`
+	Flow          string   `json:"flow"`
+	Network       string   `json:"network"`
+	TLS           string   `json:"tls"`
+	ServerName    string   `json:"serverName"`
+	Fingerprint   string   `json:"fingerprint"`
+	ALPN          []string `json:"alpn"`
+	Host          string   `json:"host"`
+	Path          string   `json:"path"`
+	ServiceName   string   `json:"serviceName"`
+	PublicKey     string   `json:"publicKey"`
+	ShortID       string   `json:"shortId"`
+	SpiderX       string   `json:"spiderX"`
+	AllowInsecure bool     `json:"allowInsecure"`
+	OutboundJSON  string   `json:"outboundJson"`
+}
+
+// NodeConfigPreview contains generated raw and Xray outbound representations.
+type NodeConfigPreview struct {
+	RawLink      string `json:"rawLink"`
+	OutboundJSON string `json:"outboundJson"`
 }

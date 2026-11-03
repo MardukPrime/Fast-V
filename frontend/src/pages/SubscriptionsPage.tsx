@@ -3,6 +3,7 @@ import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Events } from "@wailsio/runtime";
 
 import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
+import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { Service as SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/subscription";
 import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
@@ -122,7 +123,7 @@ export default function SubscriptionsPage() {
   const setActiveNode = async (node: NodeView) => {
     setError("");
     try {
-      await NodeService.SetActive(node.id);
+      await ProxyService.SwitchNode(node.id);
       setNodes((current) => (current ?? []).map((item) => ({ ...item, active: item.id === node.id })));
       setMessage(`已将「${node.name}」设为当前节点。`);
     } catch (err) {
