@@ -88,6 +88,12 @@ func TestRejectsInvalidValues(t *testing.T) {
 
 	invalidLevel := validSettings()
 	invalidLevel.XrayLogLevel = "verbose"
+	invalidTransportJSON := validSettings()
+	invalidTransportJSON.XrayFinalMaskJSON = "[]"
+	if _, err := service.Save(invalidTransportJSON); err == nil {
+		t.Fatal("expected invalid finalmask JSON error")
+	}
+
 	if _, err := service.Save(invalidLevel); err == nil {
 		t.Fatal("expected invalid Xray log level error")
 	}

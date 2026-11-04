@@ -355,3 +355,61 @@ func TestBuildConfigUsesAdvancedNetworkSettings(t *testing.T) {
 		t.Fatalf("unexpected TUN settings: %+v", tun)
 	}
 }
+
+func TestBuildConfigIncludesSockoptAndFinalMask(t *testing.T) {
+	settings := testSettings()
+	settings.XraySockoptTFO = true
+	settings.XraySockoptMPTCP = true
+	settings.XraySockoptKeepIdle = 30
+	settings.XraySockoptKeepIntvl = 10
+	settings.XraySockoptUserTimeout = 60000
+	settings.XraySockoptCongestion = "bbr"
+	settings.XraySockoptDomainStrategy = "UseIPv4"
+	settings.XrayFinalMaskJSON = `{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","length":"100-200","delay":"10-20"}}]}`
+	node := model.Node{Protocol: "vless", Raw: "vless://00000000-0000-0000-0000-000000000004@example.com:443?security=tls&type=tcp#FinalMask"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	outbound := config["outbounds"].([]any)[0].(map[string]any)
+	stream := outbound["streamSettings"].(map[string]any)
+	sockopt := stream["sockopt"].(map[string]any)
+	if sockopt["tcpFastOpen"] != true || sockopt["tcpMptcp"] != true || sockopt["tcpKeepAliveIdle"].(float64) != 30 {
+		t.Fatalf("unexpected sockopt: %+v", sockopt)
+	}
+	finalmask := stream["finalmask"].(map[string]any)
+	if len(finalmask["tcp"].([]any)) != 1 {
+		t.Fatalf("unexpected finalmask: %+v", finalmask)
+	}
+}
+
+func TestSockoptFinalMaskPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	settings := testSettings()
+	settings.XraySockoptTFO = true
+	settings.XraySockoptKeepIdle = 30
+	settings.XraySockoptKeepIntvl = 10
+	settings.XraySockoptUserTimeout = 60000
+	settings.XrayFinalMaskJSON = `{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","length":"100-200","delay":"10-20"}}]}`
+	node := model.Node{Protocol: "vless", Raw: "vless://00000000-0000-0000-0000-000000000004@example.com:443?security=tls&type=tcp#FinalMask"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "finalmask-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("xray finalmask/sockopt config validation failed: %v\n%s", err, output)
+	}
+}

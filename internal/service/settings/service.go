@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -63,6 +64,22 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if err != nil || testURL.Hostname() == "" || (testURL.Scheme != "http" && testURL.Scheme != "https") {
 		return model.Settings{}, errors.New("invalid proxy test URL")
 	}
+	input.XraySockoptJSON = strings.TrimSpace(input.XraySockoptJSON)
+	input.XrayFinalMaskJSON = strings.TrimSpace(input.XrayFinalMaskJSON)
+	switch input.XraySockoptDomainStrategy {
+	case "", "AsIs", "UseIP", "UseIPv4", "UseIPv6":
+	default:
+		return model.Settings{}, errors.New("invalid sockopt domain strategy")
+	}
+	if input.XraySockoptKeepIdle < 0 || input.XraySockoptKeepIntvl < 0 || input.XraySockoptUserTimeout < 0 {
+		return model.Settings{}, errors.New("sockopt keepalive values must not be negative")
+	}
+	if err := validateJSONObject(input.XraySockoptJSON); err != nil {
+		return model.Settings{}, fmt.Errorf("invalid sockopt JSON: %w", err)
+	}
+	if err := validateJSONObject(input.XrayFinalMaskJSON); err != nil {
+		return model.Settings{}, fmt.Errorf("invalid finalmask JSON: %w", err)
+	}
 	input.XrayDNSServers = strings.TrimSpace(input.XrayDNSServers)
 	switch input.XrayDNSStrategy {
 	case "UseIP", "UseIPv4", "UseIPv6", "AsIs":
@@ -105,4 +122,18 @@ func (s *SettingsService) Reset() (model.Settings, error) {
 		return model.Settings{}, err
 	}
 	return defaults, nil
+}
+
+func validateJSONObject(value string) error {
+	if value == "" {
+		return nil
+	}
+	var object map[string]any
+	if err := json.Unmarshal([]byte(value), &object); err != nil {
+		return err
+	}
+	if object == nil {
+		return errors.New("value must be a JSON object")
+	}
+	return nil
 }

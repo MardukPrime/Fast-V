@@ -20,28 +20,37 @@ type AppInfo struct {
 
 // Settings contains the basic application settings.
 type Settings struct {
-	Theme                 string `json:"theme"`
-	Language              string `json:"language"`
-	LayoutMode            string `json:"layoutMode"`
-	DockTransparency      int    `json:"dockTransparency"`
-	AutoUpdate            bool   `json:"autoUpdate"`
-	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
-	ProxyMode             string `json:"proxyMode"`
-	CoreAutoUpdate        bool   `json:"coreAutoUpdate"`
-	CoreType              string `json:"coreType"`
-	XrayLocalPort         int    `json:"xrayLocalPort"`
-	XrayLogLevel          string `json:"xrayLogLevel"`
-	XrayMuxEnabled        bool   `json:"xrayMuxEnabled"`
-	XrayMuxConcurrency    int    `json:"xrayMuxConcurrency"`
-	XraySniffing          bool   `json:"xraySniffing"`
-	XrayDNSStrategy       string `json:"xrayDnsStrategy"`
-	XrayDNSServers        string `json:"xrayDnsServers"`
-	XrayDomainStrategy    string `json:"xrayDomainStrategy"`
-	XrayTunMTU            int    `json:"xrayTunMtu"`
-	TunMode               bool   `json:"tunMode"`
-	TestURL               string `json:"testUrl"`
-	XrayAPIEnabled        bool   `json:"xrayApiEnabled"`
-	XrayAPIPort           int    `json:"xrayApiPort"`
+	Theme                     string `json:"theme"`
+	Language                  string `json:"language"`
+	LayoutMode                string `json:"layoutMode"`
+	DockTransparency          int    `json:"dockTransparency"`
+	AutoUpdate                bool   `json:"autoUpdate"`
+	UpdateIntervalMinutes     int    `json:"updateIntervalMinutes"`
+	ProxyMode                 string `json:"proxyMode"`
+	CoreAutoUpdate            bool   `json:"coreAutoUpdate"`
+	CoreType                  string `json:"coreType"`
+	XrayLocalPort             int    `json:"xrayLocalPort"`
+	XrayLogLevel              string `json:"xrayLogLevel"`
+	XrayMuxEnabled            bool   `json:"xrayMuxEnabled"`
+	XrayMuxConcurrency        int    `json:"xrayMuxConcurrency"`
+	XraySniffing              bool   `json:"xraySniffing"`
+	XrayDNSStrategy           string `json:"xrayDnsStrategy"`
+	XrayDNSServers            string `json:"xrayDnsServers"`
+	XrayDomainStrategy        string `json:"xrayDomainStrategy"`
+	XrayTunMTU                int    `json:"xrayTunMtu"`
+	XraySockoptTFO            bool   `json:"xraySockoptTfo"`
+	XraySockoptMPTCP          bool   `json:"xraySockoptMptcp"`
+	XraySockoptKeepIdle       int    `json:"xraySockoptKeepIdle"`
+	XraySockoptKeepIntvl      int    `json:"xraySockoptKeepIntvl"`
+	XraySockoptUserTimeout    int    `json:"xraySockoptUserTimeout"`
+	XraySockoptCongestion     string `json:"xraySockoptCongestion"`
+	XraySockoptDomainStrategy string `json:"xraySockoptDomainStrategy"`
+	XraySockoptJSON           string `json:"xraySockoptJson"`
+	XrayFinalMaskJSON         string `json:"xrayFinalMaskJson"`
+	TunMode                   bool   `json:"tunMode"`
+	TestURL                   string `json:"testUrl"`
+	XrayAPIEnabled            bool   `json:"xrayApiEnabled"`
+	XrayAPIPort               int    `json:"xrayApiPort"`
 }
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.

@@ -33,6 +33,15 @@ const defaults: Settings = {
   xrayDnsServers: "1.1.1.1,8.8.8.8",
   xrayDomainStrategy: "IPIfNonMatch",
   xrayTunMtu: 1500,
+  xraySockoptTfo: false,
+  xraySockoptMptcp: false,
+  xraySockoptKeepIdle: 0,
+  xraySockoptKeepIntvl: 0,
+  xraySockoptUserTimeout: 0,
+  xraySockoptCongestion: "",
+  xraySockoptDomainStrategy: "",
+  xraySockoptJson: "",
+  xrayFinalMaskJson: "",
   tunMode: false,
   testUrl: "https://www.gstatic.com/generate_204",
   xrayApiEnabled: false,
@@ -60,6 +69,27 @@ const coreTypes = [
   { value: "xray", label: "Xray-core", hint: "已接入，支持版本检测和自动更新" },
   { value: "singbox", label: "sing-box", hint: "规划中，参数会在接入后开放" },
 ];
+
+const sockoptDomainStrategies = [
+  { value: "", label: "默认" },
+  { value: "AsIs", label: "AsIs" },
+  { value: "UseIP", label: "UseIP" },
+  { value: "UseIPv4", label: "UseIPv4" },
+  { value: "UseIPv6", label: "UseIPv6" },
+];
+
+const finalMaskTemplate = `{
+  "tcp": [
+    {
+      "type": "fragment",
+      "settings": {
+        "packets": "tlshello",
+        "length": "100-200",
+        "delay": "10-20"
+      }
+    }
+  ]
+}`;
 
 const dnsStrategies = [
   { value: "UseIP", label: "UseIP", hint: "优先解析 A/AAAA 记录" },
@@ -670,6 +700,81 @@ export default function SettingsPage(props: SettingsProps) {
               <div class="core-path-row">
                 <span>Xray 内核路径</span>
                 <code>{core()?.path || "未安装"}</code>
+              </div>
+            </div>
+            <div class="setting-block transport-advanced-block">
+              <div class="setting-label">
+                <strong>传输层 FinalMask / Sockopt</strong>
+                <small>写入当前 outbound 的 streamSettings。Sockopt 高级 JSON 会覆盖上方同名参数；FinalMask 为空时不生成。</small>
+              </div>
+
+              <div class="core-switch-grid">
+                <label class="switch-row">
+                  <span><strong>TCP Fast Open</strong><small>写入 sockopt.tcpFastOpen。</small></span>
+                  <span classList={{ "switch": true, on: settings().xraySockoptTfo }}>
+                    <input type="checkbox" checked={settings().xraySockoptTfo} onChange={(event) => update("xraySockoptTfo", event.currentTarget.checked)} />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+                <label class="switch-row">
+                  <span><strong>TCP MPTCP</strong><small>写入 sockopt.tcpMptcp，系统支持时启用。</small></span>
+                  <span classList={{ "switch": true, on: settings().xraySockoptMptcp }}>
+                    <input type="checkbox" checked={settings().xraySockoptMptcp} onChange={(event) => update("xraySockoptMptcp", event.currentTarget.checked)} />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="core-param-grid">
+                <label>
+                  <span>KeepAlive Idle</span>
+                  <input type="number" min="0" value={settings().xraySockoptKeepIdle} onInput={(event) => update("xraySockoptKeepIdle", Number(event.currentTarget.value))} />
+                  <small>秒，0 表示不写入。</small>
+                </label>
+                <label>
+                  <span>KeepAlive Interval</span>
+                  <input type="number" min="0" value={settings().xraySockoptKeepIntvl} onInput={(event) => update("xraySockoptKeepIntvl", Number(event.currentTarget.value))} />
+                  <small>秒，0 表示不写入。</small>
+                </label>
+                <label>
+                  <span>TCP User Timeout</span>
+                  <input type="number" min="0" value={settings().xraySockoptUserTimeout} onInput={(event) => update("xraySockoptUserTimeout", Number(event.currentTarget.value))} />
+                  <small>毫秒，0 表示不写入。</small>
+                </label>
+                <label>
+                  <span>TCP Congestion</span>
+                  <input value={settings().xraySockoptCongestion} onInput={(event) => update("xraySockoptCongestion", event.currentTarget.value)} placeholder="例如 bbr / cubic" />
+                  <small>写入 sockopt.tcpCongestion。</small>
+                </label>
+                <label>
+                  <span>Sockopt Domain Strategy</span>
+                  <select value={settings().xraySockoptDomainStrategy} onChange={(event) => update("xraySockoptDomainStrategy", event.currentTarget.value)}>
+                    {sockoptDomainStrategies.map((item) => <option value={item.value}>{item.label}</option>)}
+                  </select>
+                  <small>写入 sockopt.domainStrategy。</small>
+                </label>
+              </div>
+
+              <div class="advanced-json-grid">
+                <label>
+                  <span>Sockopt 高级 JSON</span>
+                  <textarea value={settings().xraySockoptJson} onInput={(event) => update("xraySockoptJson", event.currentTarget.value)} spellcheck={false} placeholder={'{\n  "acceptProxyProtocol": false\n}'} />
+                  <small>与上方 Sockopt 字段合并，同名键以 JSON 为准。</small>
+                </label>
+                <label>
+                  <span>FinalMask JSON</span>
+                  <textarea value={settings().xrayFinalMaskJson} onInput={(event) => update("xrayFinalMaskJson", event.currentTarget.value)} spellcheck={false} placeholder={'{\n  "tcp": [\n    { "type": "fragment", "settings": { "packets": "tlshello" } }\n  ]\n}'} />
+                  <small>完整 finalmask 对象，写入 streamSettings.finalmask。</small>
+                </label>
+              </div>
+
+              <div class="core-actions">
+                <button class="btn secondary" type="button" onClick={() => update("xrayFinalMaskJson", finalMaskTemplate)}>
+                  <Icon name="plus" size={14} /> 插入 Fragment 模板
+                </button>
+                <button class="btn ghost" type="button" onClick={() => update("xrayFinalMaskJson", "")}>
+                  清空 FinalMask
+                </button>
               </div>
             </div>
             <div class="geodata-block">

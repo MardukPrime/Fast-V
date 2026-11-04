@@ -113,6 +113,15 @@
 | xrayDnsStrategy | dns.queryStrategy，支持 UseIP、UseIPv4、UseIPv6、AsIs |
 | xrayDomainStrategy | routing.domainStrategy，支持 IPIfNonMatch、IPOnDemand、AsIs |
 | xrayTunMtu | TUN inbound MTU，范围 576-9000 |
+| xraySockoptTfo | 启用 sockopt.tcpFastOpen |
+| xraySockoptMptcp | 启用 sockopt.tcpMptcp |
+| xraySockoptKeepIdle | sockopt.tcpKeepAliveIdle |
+| xraySockoptKeepIntvl | sockopt.tcpKeepAliveInterval |
+| xraySockoptUserTimeout | sockopt.tcpUserTimeout |
+| xraySockoptCongestion | sockopt.tcpCongestion |
+| xraySockoptDomainStrategy | sockopt.domainStrategy |
+| xraySockoptJson | 高级 sockopt JSON，覆盖同名字段 |
+| xrayFinalMaskJson | outbound.streamSettings.finalmask JSON 对象 |
 
 ## 契约规则
 

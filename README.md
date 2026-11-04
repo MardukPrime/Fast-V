@@ -64,6 +64,7 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - TUN 模式自动请求 UAC 管理员权限并重启
 - GeoData 资源检测与更新（geoip.dat / geosite.dat）
 - Xray DNS 服务器、DNS 查询策略、路由域名策略和 TUN MTU 配置
+- FinalMask 传输伪装和 Sockopt 底层网络参数
 - 本地 Xray API、StatsService 和统计策略配置
 
 ### 本地代理与 TUN

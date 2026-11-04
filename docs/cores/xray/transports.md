@@ -248,3 +248,81 @@ Before saving a profile, FastV should validate:
 - REALITY password and serverName are present.
 - ALPN and fingerprint values are from the allowed sets.
 - The selected Xray version supports the chosen transport.
+## FinalMask
+
+FinalMask is a transport-layer packet masking / fragmentation layer under `streamSettings.finalmask`.
+
+FastV stores a full JSON object in Settings and writes it into the active outbound:
+
+```json
+{
+  "streamSettings": {
+    "finalmask": {
+      "tcp": [
+        {
+          "type": "fragment",
+          "settings": {
+            "packets": "tlshello",
+            "length": "100-200",
+            "delay": "10-20"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Rules:
+
+- Empty FinalMask JSON emits no `finalmask` field.
+- Non-empty JSON must be an object.
+- FastV validates JSON before saving.
+- The JSON is copied unchanged into `streamSettings.finalmask`.
+- FinalMask is applied to the current outbound stream, not to local inbound sockets.
+
+## Sockopt
+
+Sockopt is written under `streamSettings.sockopt`.
+
+Structured FastV settings:
+
+| FastV setting | Xray field |
+|---|---|
+| TCP Fast Open | `tcpFastOpen` |
+| TCP MPTCP | `tcpMptcp` |
+| KeepAlive Idle | `tcpKeepAliveIdle` |
+| KeepAlive Interval | `tcpKeepAliveInterval` |
+| TCP User Timeout | `tcpUserTimeout` |
+| TCP Congestion | `tcpCongestion` |
+| Domain Strategy | `domainStrategy` |
+
+Advanced Sockopt JSON is merged over the structured fields. This allows fields such as:
+
+```json
+{
+  "mark": 0,
+  "acceptProxyProtocol": false,
+  "customSockopt": []
+}
+```
+
+The generated outbound looks like:
+
+```json
+{
+  "streamSettings": {
+    "sockopt": {
+      "tcpFastOpen": true,
+      "tcpMptcp": false,
+      "tcpKeepAliveIdle": 30,
+      "tcpKeepAliveInterval": 10,
+      "tcpUserTimeout": 60000,
+      "tcpCongestion": "bbr",
+      "domainStrategy": "UseIPv4"
+    }
+  }
+}
+```
+
+Both FinalMask and Sockopt settings are global client core settings and are applied to newly generated outbound configurations after saving and restarting the proxy.

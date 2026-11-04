@@ -249,6 +249,15 @@ export interface Settings {
     "xrayDnsServers": string;
     "xrayDomainStrategy": string;
     "xrayTunMtu": number;
+    "xraySockoptTfo": boolean;
+    "xraySockoptMptcp": boolean;
+    "xraySockoptKeepIdle": number;
+    "xraySockoptKeepIntvl": number;
+    "xraySockoptUserTimeout": number;
+    "xraySockoptCongestion": string;
+    "xraySockoptDomainStrategy": string;
+    "xraySockoptJson": string;
+    "xrayFinalMaskJson": string;
     "tunMode": boolean;
     "testUrl": string;
     "xrayApiEnabled": boolean;

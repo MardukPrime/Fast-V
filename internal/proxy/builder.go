@@ -141,6 +141,9 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 			"concurrency": settings.XrayMuxConcurrency,
 		}
 	}
+	if err := applyStreamOverrides(outbound, settings); err != nil {
+		return nil, err
+	}
 	return outbound, nil
 }
 
@@ -159,6 +162,64 @@ func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled 
 	}
 }
 
+func applyStreamOverrides(outbound map[string]any, settings model.Settings) error {
+	stream, _ := outbound["streamSettings"].(map[string]any)
+	if stream == nil {
+		stream = map[string]any{}
+	}
+	sockopt := buildSockopt(settings)
+	if len(sockopt) > 0 {
+		stream["sockopt"] = sockopt
+	}
+	if settings.XrayFinalMaskJSON != "" {
+		var finalmask map[string]any
+		if err := json.Unmarshal([]byte(settings.XrayFinalMaskJSON), &finalmask); err != nil {
+			return fmt.Errorf("invalid finalmask JSON: %w", err)
+		}
+		if finalmask == nil {
+			return errors.New("finalmask JSON must be an object")
+		}
+		stream["finalmask"] = finalmask
+	}
+	if len(stream) > 0 {
+		outbound["streamSettings"] = stream
+	}
+	return nil
+}
+
+func buildSockopt(settings model.Settings) map[string]any {
+	sockopt := map[string]any{}
+	if settings.XraySockoptTFO {
+		sockopt["tcpFastOpen"] = true
+	}
+	if settings.XraySockoptMPTCP {
+		sockopt["tcpMptcp"] = true
+	}
+	if settings.XraySockoptKeepIdle > 0 {
+		sockopt["tcpKeepAliveIdle"] = settings.XraySockoptKeepIdle
+	}
+	if settings.XraySockoptKeepIntvl > 0 {
+		sockopt["tcpKeepAliveInterval"] = settings.XraySockoptKeepIntvl
+	}
+	if settings.XraySockoptUserTimeout > 0 {
+		sockopt["tcpUserTimeout"] = settings.XraySockoptUserTimeout
+	}
+	if settings.XraySockoptCongestion != "" {
+		sockopt["tcpCongestion"] = settings.XraySockoptCongestion
+	}
+	if settings.XraySockoptDomainStrategy != "" {
+		sockopt["domainStrategy"] = settings.XraySockoptDomainStrategy
+	}
+	if settings.XraySockoptJSON != "" {
+		var advanced map[string]any
+		if json.Unmarshal([]byte(settings.XraySockoptJSON), &advanced) == nil {
+			for key, value := range advanced {
+				sockopt[key] = value
+			}
+		}
+	}
+	return sockopt
+}
 func splitList(value string) []string {
 	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' })
 	out := make([]string, 0, len(parts))
