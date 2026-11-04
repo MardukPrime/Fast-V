@@ -31,7 +31,7 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			"protocol": "tun",
 			"settings": map[string]any{
 				"name": tunInterfaceName,
-				"MTU":  1500,
+				"MTU":  settings.XrayTunMTU,
 			},
 			"sniffing": map[string]any{
 				"enabled":      settings.XraySniffing,
@@ -75,10 +75,10 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			map[string]any{"tag": "direct", "protocol": "freedom"},
 			map[string]any{"tag": "block", "protocol": "blackhole"},
 		},
-		"routing": buildRouting(settings.ProxyMode, customRules, settings.XrayAPIEnabled),
+		"routing": buildRouting(settings.ProxyMode, customRules, settings.XrayAPIEnabled, settings.XrayDomainStrategy),
 		"dns": map[string]any{
-			"servers":       []string{"1.1.1.1", "8.8.8.8"},
-			"queryStrategy": "UseIP",
+			"servers":       splitList(settings.XrayDNSServers),
+			"queryStrategy": settings.XrayDNSStrategy,
 		},
 	}
 	if settings.XrayAPIEnabled {
@@ -144,7 +144,7 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 	return outbound, nil
 }
 
-func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled bool) map[string]any {
+func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled bool, domainStrategy string) map[string]any {
 	rules := routing.BuildXrayRules(customRules, proxyMode)
 	if apiEnabled {
 		rules = append([]any{map[string]any{
@@ -154,7 +154,18 @@ func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled 
 		}}, rules...)
 	}
 	return map[string]any{
-		"domainStrategy": "IPIfNonMatch",
+		"domainStrategy": domainStrategy,
 		"rules":          rules,
 	}
+}
+
+func splitList(value string) []string {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' })
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

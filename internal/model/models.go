@@ -33,6 +33,10 @@ type Settings struct {
 	XrayMuxEnabled        bool   `json:"xrayMuxEnabled"`
 	XrayMuxConcurrency    int    `json:"xrayMuxConcurrency"`
 	XraySniffing          bool   `json:"xraySniffing"`
+	XrayDNSStrategy       string `json:"xrayDnsStrategy"`
+	XrayDNSServers        string `json:"xrayDnsServers"`
+	XrayDomainStrategy    string `json:"xrayDomainStrategy"`
+	XrayTunMTU            int    `json:"xrayTunMtu"`
 	TunMode               bool   `json:"tunMode"`
 	TestURL               string `json:"testUrl"`
 	XrayAPIEnabled        bool   `json:"xrayApiEnabled"`

@@ -108,6 +108,10 @@
 | testUrl | 代理测试地址 |
 | xrayApiEnabled | 启用本地 Xray API 和 StatsService |
 | xrayApiPort | Xray API 监听端口，仅绑定 127.0.0.1 |
+| xrayDnsServers | Xray DNS 服务器列表，逗号或换行分隔 |
+| xrayDnsStrategy | dns.queryStrategy，支持 UseIP、UseIPv4、UseIPv6、AsIs |
+| xrayDomainStrategy | routing.domainStrategy，支持 IPIfNonMatch、IPOnDemand、AsIs |
+| xrayTunMtu | TUN inbound MTU，范围 576-9000 |
 
 ## 契约规则
 

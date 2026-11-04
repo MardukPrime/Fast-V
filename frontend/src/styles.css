@@ -5163,3 +5163,71 @@ select {
 :root[data-theme="light"] .glass-panel {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.46));
 }
+/* Dock layout must reserve space instead of covering settings and tables. */
+.layout-dock .app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.layout-dock .content {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: 30px;
+}
+
+.layout-dock .liquid-dock {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  z-index: 40;
+  flex: 0 0 auto;
+  width: min(980px, calc(100vw - 64px));
+  margin: 0 auto 14px;
+  transform: none;
+}
+
+@media (max-width: 760px) {
+  .layout-dock .liquid-dock {
+    width: calc(100vw - 32px);
+  }
+}
+/* Xray advanced network settings */
+.core-advanced-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.core-path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.core-path-row span {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.core-path-row code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Center constrained settings pages in dock mode so the dock and content share one axis. */
+.layout-dock .settings-page {
+  width: 100%;
+  margin-inline: auto;
+}

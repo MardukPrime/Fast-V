@@ -27,6 +27,10 @@ const defaults: Settings = {
   xrayMuxEnabled: false,
   xrayMuxConcurrency: 8,
   xraySniffing: true,
+  xrayDnsStrategy: "UseIP",
+  xrayDnsServers: "1.1.1.1,8.8.8.8",
+  xrayDomainStrategy: "IPIfNonMatch",
+  xrayTunMtu: 1500,
   tunMode: false,
   testUrl: "https://www.gstatic.com/generate_204",
   xrayApiEnabled: false,
@@ -53,6 +57,19 @@ const proxyModes = [
 const coreTypes = [
   { value: "xray", label: "Xray-core", hint: "已接入，支持版本检测和自动更新" },
   { value: "singbox", label: "sing-box", hint: "规划中，参数会在接入后开放" },
+];
+
+const dnsStrategies = [
+  { value: "UseIP", label: "UseIP", hint: "优先解析 A/AAAA 记录" },
+  { value: "UseIPv4", label: "UseIPv4", hint: "只使用 IPv4 解析结果" },
+  { value: "UseIPv6", label: "UseIPv6", hint: "只使用 IPv6 解析结果" },
+  { value: "AsIs", label: "AsIs", hint: "保持原始解析行为" },
+];
+
+const domainStrategies = [
+  { value: "IPIfNonMatch", label: "IPIfNonMatch", hint: "域名规则未命中时再匹配 IP" },
+  { value: "IPOnDemand", label: "IPOnDemand", hint: "需要 IP 信息时按需解析" },
+  { value: "AsIs", label: "AsIs", hint: "只使用原始域名匹配" },
 ];
 
 const logLevels = [
@@ -603,6 +620,42 @@ export default function SettingsPage(props: SettingsProps) {
               </div>
             </div>
 
+            <div class="setting-block core-advanced-block">
+              <div class="setting-label">
+                <strong>Xray 高级网络参数</strong>
+                <small>直接写入 Xray 的 DNS、路由和 TUN 配置，修改后重新启动代理生效。</small>
+              </div>
+              <div class="core-param-grid">
+                <label>
+                  <span>DNS 服务器</span>
+                  <input value={settings().xrayDnsServers} onInput={(event) => update("xrayDnsServers", event.currentTarget.value)} placeholder="1.1.1.1,8.8.8.8" />
+                  <small>逗号或换行分隔，写入 dns.servers。</small>
+                </label>
+                <label>
+                  <span>DNS 查询策略</span>
+                  <select value={settings().xrayDnsStrategy} onChange={(event) => update("xrayDnsStrategy", event.currentTarget.value)}>
+                    {dnsStrategies.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                  </select>
+                  <small>写入 dns.queryStrategy。</small>
+                </label>
+                <label>
+                  <span>路由域名策略</span>
+                  <select value={settings().xrayDomainStrategy} onChange={(event) => update("xrayDomainStrategy", event.currentTarget.value)}>
+                    {domainStrategies.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                  </select>
+                  <small>写入 routing.domainStrategy。</small>
+                </label>
+                <label>
+                  <span>TUN MTU</span>
+                  <input type="number" min="576" max="9000" value={settings().xrayTunMtu} onInput={(event) => update("xrayTunMtu", Number(event.currentTarget.value))} />
+                  <small>写入 TUN inbound 的 MTU，默认 1500。</small>
+                </label>
+              </div>
+              <div class="core-path-row">
+                <span>Xray 内核路径</span>
+                <code>{core()?.path || "未安装"}</code>
+              </div>
+            </div>
             <div class="geodata-block">
               <div class="setting-label">
                 <strong>GeoData 资源</strong>

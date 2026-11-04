@@ -324,3 +324,34 @@ func TestAPIConfigPassesXrayValidation(t *testing.T) {
 		t.Fatalf("xray API config validation failed: %v\n%s", err, output)
 	}
 }
+
+func TestBuildConfigUsesAdvancedNetworkSettings(t *testing.T) {
+	settings := testSettings()
+	settings.TunMode = true
+	settings.XrayTunMTU = 1400
+	settings.XrayDNSStrategy = "UseIPv4"
+	settings.XrayDNSServers = "1.1.1.1, 9.9.9.9"
+	settings.XrayDomainStrategy = "IPOnDemand"
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Advanced"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	dns := config["dns"].(map[string]any)
+	servers := dns["servers"].([]any)
+	if len(servers) != 2 || dns["queryStrategy"] != "UseIPv4" {
+		t.Fatalf("unexpected dns config: %+v", dns)
+	}
+	routing := config["routing"].(map[string]any)
+	if routing["domainStrategy"] != "IPOnDemand" {
+		t.Fatalf("unexpected routing strategy: %+v", routing)
+	}
+	tun := config["inbounds"].([]any)[0].(map[string]any)
+	if tun["settings"].(map[string]any)["MTU"].(float64) != 1400 {
+		t.Fatalf("unexpected TUN settings: %+v", tun)
+	}
+}

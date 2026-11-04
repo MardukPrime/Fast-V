@@ -244,6 +244,10 @@ export interface Settings {
     "xrayMuxEnabled": boolean;
     "xrayMuxConcurrency": number;
     "xraySniffing": boolean;
+    "xrayDnsStrategy": string;
+    "xrayDnsServers": string;
+    "xrayDomainStrategy": string;
+    "xrayTunMtu": number;
     "tunMode": boolean;
     "testUrl": string;
     "xrayApiEnabled": boolean;

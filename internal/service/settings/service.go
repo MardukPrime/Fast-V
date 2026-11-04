@@ -60,6 +60,23 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if err != nil || testURL.Hostname() == "" || (testURL.Scheme != "http" && testURL.Scheme != "https") {
 		return model.Settings{}, errors.New("invalid proxy test URL")
 	}
+	input.XrayDNSServers = strings.TrimSpace(input.XrayDNSServers)
+	switch input.XrayDNSStrategy {
+	case "UseIP", "UseIPv4", "UseIPv6", "AsIs":
+	default:
+		return model.Settings{}, errors.New("invalid Xray DNS query strategy")
+	}
+	switch input.XrayDomainStrategy {
+	case "AsIs", "IPIfNonMatch", "IPOnDemand":
+	default:
+		return model.Settings{}, errors.New("invalid Xray routing domain strategy")
+	}
+	if input.XrayDNSServers == "" {
+		return model.Settings{}, errors.New("Xray DNS servers are required")
+	}
+	if input.XrayTunMTU < 576 || input.XrayTunMTU > 9000 {
+		return model.Settings{}, errors.New("invalid TUN MTU")
+	}
 	if input.XrayAPIPort < 1 || input.XrayAPIPort > 65535 {
 		return model.Settings{}, errors.New("invalid Xray API port")
 	}

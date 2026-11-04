@@ -327,6 +327,8 @@ export default function App() {
             <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
           </Show>
 
+        </main>
+
           <Show when={layoutMode() === "dock"}>
           <nav
             class="liquid-dock"
@@ -375,7 +377,6 @@ export default function App() {
             </div>
           </nav>
           </Show>
-        </main>
       </div>
     </div>
   );

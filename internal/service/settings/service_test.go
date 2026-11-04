@@ -27,6 +27,10 @@ func validSettings() model.Settings {
 		CoreType:              "xray",
 		XrayLocalPort:         10808,
 		XrayLogLevel:          "warning",
+		XrayDNSStrategy:       "UseIP",
+		XrayDNSServers:        "1.1.1.1,8.8.8.8",
+		XrayDomainStrategy:    "IPIfNonMatch",
+		XrayTunMTU:            1500,
 		XrayMuxConcurrency:    8,
 		TestURL:               "https://www.gstatic.com/generate_204",
 		XrayAPIEnabled:        true,
@@ -38,7 +42,7 @@ func TestSaveAndReset(t *testing.T) {
 	service := newService(t)
 
 	defaults := service.Get()
-	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" {
+	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 {
 		t.Fatalf("unexpected defaults: %+v", defaults)
 	}
 

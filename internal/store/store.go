@@ -53,6 +53,10 @@ func DefaultSettings() Settings {
 		XrayMuxEnabled:        false,
 		XrayMuxConcurrency:    8,
 		XraySniffing:          true,
+		XrayDNSStrategy:       "UseIP",
+		XrayDNSServers:        "1.1.1.1,8.8.8.8",
+		XrayDomainStrategy:    "IPIfNonMatch",
+		XrayTunMTU:            1500,
 		TestURL:               "https://www.gstatic.com/generate_204",
 		XrayAPIEnabled:        false,
 		XrayAPIPort:           10085,
@@ -189,6 +193,18 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.TestURL == "" {
 		value.TestURL = fallback.TestURL
+	}
+	if value.XrayDNSStrategy == "" {
+		value.XrayDNSStrategy = fallback.XrayDNSStrategy
+	}
+	if value.XrayDNSServers == "" {
+		value.XrayDNSServers = fallback.XrayDNSServers
+	}
+	if value.XrayDomainStrategy == "" {
+		value.XrayDomainStrategy = fallback.XrayDomainStrategy
+	}
+	if value.XrayTunMTU == 0 {
+		value.XrayTunMTU = fallback.XrayTunMTU
 	}
 	if value.XrayMuxConcurrency == 0 {
 		value.XrayMuxConcurrency = fallback.XrayMuxConcurrency
