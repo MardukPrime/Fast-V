@@ -22,6 +22,7 @@ func validSettings() model.Settings {
 		Theme:                 "dark",
 		Language:              "zh-CN",
 		LayoutMode:            "sidebar",
+		DockTransparency:      28,
 		UpdateIntervalMinutes: 60,
 		ProxyMode:             "rule",
 		CoreType:              "xray",
@@ -42,7 +43,7 @@ func TestSaveAndReset(t *testing.T) {
 	service := newService(t)
 
 	defaults := service.Get()
-	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 {
+	if defaults.Theme != "dark" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 || defaults.DockTransparency != 28 {
 		t.Fatalf("unexpected defaults: %+v", defaults)
 	}
 

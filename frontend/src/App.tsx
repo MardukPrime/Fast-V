@@ -57,6 +57,7 @@ export default function App() {
   const [proxyBusy, setProxyBusy] = createSignal(false);
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
+  const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "dock" ? "dock" : "sidebar";
   let dockNavElement: HTMLDivElement | undefined;
   const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
@@ -124,6 +125,7 @@ export default function App() {
       setSettings(loadedSettings);
       setCore(coreInfo);
       setProxy(proxyState);
+      setDockTransparency(loadedSettings.dockTransparency || 28);
       applyTheme(loadedSettings.theme);
     } catch (error) {
       console.error("Failed to load application state", error);
@@ -190,7 +192,21 @@ export default function App() {
   };
   const handleSettingsSaved = (next: Settings) => {
     setSettings(next);
+    setDockTransparency(next.dockTransparency || 28);
     applyTheme(next.theme);
+  };
+
+  const dockGlassStyle = () => {
+    const alpha = Math.max(0.1, Math.min(1, 1 - dockTransparency() / 100));
+    return [
+      `--dock-a1:${(0.21 * alpha).toFixed(3)}`,
+      `--dock-a2:${(0.15 * alpha).toFixed(3)}`,
+      `--dock-a3:${(0.035 * alpha).toFixed(3)}`,
+      `--dock-a4:${(0.07 * alpha).toFixed(3)}`,
+      `--dock-l1:${(0.8 * alpha).toFixed(3)}`,
+      `--dock-l2:${(0.72 * alpha).toFixed(3)}`,
+      `--dock-l3:${(0.42 * alpha).toFixed(3)}`,
+    ].join(";");
   };
 
   const toggleMaximise = async () => {
@@ -324,7 +340,7 @@ export default function App() {
             <LogsPage proxyState={proxy()} />
           </Show>
           <Show when={active() === "settings"}>
-            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
+            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewDockTransparency={setDockTransparency} />
           </Show>
 
         </main>
@@ -332,6 +348,7 @@ export default function App() {
           <Show when={layoutMode() === "dock"}>
           <nav
             class="liquid-dock"
+            style={dockGlassStyle()}
             aria-label="底部快捷导航"
             onPointerMove={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();

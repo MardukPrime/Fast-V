@@ -43,6 +43,7 @@ All notable changes to FastV are documented here.
 - Added a sliding liquid-glass selection indicator for bottom navigation and transparent-glass selected states for option cards.
 - Unified the liquid-glass surface system across panels, sidebar, title bar, settings and quick actions with pointer-responsive highlights.
 - Fixed dock-mode settings alignment and added Xray DNS, routing-domain and TUN MTU settings.
+- Added adjustable bottom-dock glass transparency with live preview.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.

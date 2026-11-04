@@ -23,6 +23,7 @@ type Settings struct {
 	Theme                 string `json:"theme"`
 	Language              string `json:"language"`
 	LayoutMode            string `json:"layoutMode"`
+	DockTransparency      int    `json:"dockTransparency"`
 	AutoUpdate            bool   `json:"autoUpdate"`
 	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
 	ProxyMode             string `json:"proxyMode"`

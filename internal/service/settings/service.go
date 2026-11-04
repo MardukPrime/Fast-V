@@ -38,6 +38,9 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}
 
+	if input.DockTransparency < 5 || input.DockTransparency > 90 {
+		return model.Settings{}, errors.New("dock transparency must be between 5 and 90")
+	}
 	if input.Theme != "dark" && input.Theme != "light" && input.Theme != "system" {
 		return model.Settings{}, errors.New("invalid theme")
 	}

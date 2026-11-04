@@ -11,12 +11,14 @@ import Icon from "../components/Icon";
 type SettingsProps = {
   onSaved: (settings: Settings) => void;
   onPreviewTheme: (theme: string) => void;
+  onPreviewDockTransparency: (value: number) => void;
 };
 
 const defaults: Settings = {
   theme: "dark",
   language: "zh-CN",
   layoutMode: "sidebar",
+  dockTransparency: 28,
   autoUpdate: false,
   updateIntervalMinutes: 360,
   proxyMode: "rule",
@@ -336,6 +338,20 @@ export default function SettingsPage(props: SettingsProps) {
               ))}
             </div>
           </div>
+
+          <Show when={settings().layoutMode === "dock"}>
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>底栏透明度</strong>
+                <small>只调整底栏玻璃背景的透明度，文字、图标和操作按钮保持不透明。</small>
+              </div>
+              <div class="dock-transparency-row">
+                <input type="range" min="5" max="90" value={settings().dockTransparency} onInput={(event) => { const value = Number(event.currentTarget.value); update("dockTransparency", value); props.onPreviewDockTransparency(value); }} />
+                <strong>{settings().dockTransparency}%</strong>
+              </div>
+              <div class="dock-transparency-scale"><span>更实</span><span>更透明</span></div>
+            </div>
+          </Show>
 
           <div class="settings-grid compact">
             <label>

@@ -234,6 +234,7 @@ export interface Settings {
     "theme": string;
     "language": string;
     "layoutMode": string;
+    "dockTransparency": number;
     "autoUpdate": boolean;
     "updateIntervalMinutes": number;
     "proxyMode": string;

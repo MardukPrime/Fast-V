@@ -5231,3 +5231,51 @@ select {
   width: 100%;
   margin-inline: auto;
 }
+/* Dock transparency control */
+.dock-transparency-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dock-transparency-row input[type="range"] {
+  flex: 1;
+  height: 4px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.dock-transparency-row strong {
+  flex: 0 0 38px;
+  color: var(--text-secondary);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-align: right;
+}
+
+.dock-transparency-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  color: var(--faint);
+  font-size: 9px;
+}
+
+.liquid-dock {
+  background:
+    radial-gradient(240px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, var(--dock-a1, 0.21)), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, var(--dock-a2, 0.15)), rgba(255, 255, 255, var(--dock-a3, 0.035)) 56%, rgba(255, 255, 255, var(--dock-a4, 0.07)));
+}
+
+:root[data-theme="light"] .liquid-dock {
+  background:
+    radial-gradient(240px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, var(--dock-l1, 0.8)), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, var(--dock-l2, 0.72)), rgba(236, 245, 251, var(--dock-l3, 0.42)));
+}

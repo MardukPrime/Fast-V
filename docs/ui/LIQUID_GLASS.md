@@ -78,6 +78,19 @@ The selected approach keeps labels crisp while preserving the wet-glass look.
 - Status text is hidden next.
 - Navigation items become flexible and icon-first.
 
+## Dock Transparency
+
+Dock mode exposes a transparency slider from 5% to 90%. The setting changes only the glass background alpha; text, icons and action buttons stay fully opaque.
+
+The value is converted into a small set of CSS alpha variables:
+
+```text
+--dock-a1 ... --dock-a4  dark-theme background layers
+--dock-l1 ... --dock-l3  light-theme background layers
+```
+
+This avoids applying `opacity` to the whole dock and keeps labels readable at maximum transparency.
+
 ## Performance
 
 - One composited dock layer.

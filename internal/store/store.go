@@ -43,6 +43,7 @@ func DefaultSettings() Settings {
 		Theme:                 "dark",
 		Language:              "zh-CN",
 		LayoutMode:            "sidebar",
+		DockTransparency:      28,
 		AutoUpdate:            false,
 		UpdateIntervalMinutes: 360,
 		ProxyMode:             "rule",
@@ -172,6 +173,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.LayoutMode == "" {
 		value.LayoutMode = fallback.LayoutMode
+	}
+	if value.DockTransparency == 0 {
+		value.DockTransparency = fallback.DockTransparency
 	}
 	if value.UpdateIntervalMinutes == 0 {
 		value.UpdateIntervalMinutes = fallback.UpdateIntervalMinutes
