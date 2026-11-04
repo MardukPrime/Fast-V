@@ -5279,3 +5279,95 @@ select {
     radial-gradient(240px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, var(--dock-l1, 0.8)), transparent 72%),
     linear-gradient(145deg, rgba(255, 255, 255, var(--dock-l2, 0.72)), rgba(236, 245, 251, var(--dock-l3, 0.42)));
 }
+/* Unified content alignment */
+:root {
+  --content-max: 1080px;
+}
+
+.content > .topbar,
+.content > .page-stack,
+.page-stack {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+.topbar {
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+.settings-page {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+.layout-dock .liquid-dock {
+  width: min(var(--content-max), calc(100vw - 64px));
+}
+
+.core-advanced-block .core-param-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.btn {
+  min-height: 36px;
+}
+
+.btn.icon-only {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.node-toolbar > select,
+.log-toolbar-right select {
+  min-height: 36px;
+}
+
+@media (max-width: 1100px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .layout-dock .liquid-dock {
+    width: calc(100vw - 32px);
+  }
+
+  .core-advanced-block .core-param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Residual alignment: stable gutters and matching control heights. */
+.content {
+  scrollbar-gutter: stable;
+}
+
+.logs-view {
+  scrollbar-gutter: stable;
+}
+
+.log-search input {
+  min-height: 36px;
+}
+
+.log-toolbar .icon-button,
+.node-toolbar .icon-button {
+  width: 36px;
+  height: 36px;
+}
+
+.panel-heading .btn,
+.core-actions .btn,
+.routing-heading-actions .btn,
+.modal-footer .btn {
+  min-height: 36px;
+}
