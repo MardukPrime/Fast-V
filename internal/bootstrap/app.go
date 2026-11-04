@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/buildinfo"
+	"github.com/MardukPrime/Fast-V/internal/platform"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
 	"github.com/MardukPrime/Fast-V/internal/service/core"
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
@@ -24,6 +25,12 @@ func Run(assets embed.FS) error {
 	st, err := store.NewStore()
 	if err != nil {
 		return err
+	}
+
+	if st.Settings().TunMode && !platform.IsElevated() {
+		if err := platform.LaunchElevatedRestart(); err == nil {
+			return nil
+		}
 	}
 
 	appSvc := appservice.New()

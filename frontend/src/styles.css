@@ -4511,3 +4511,282 @@ select {
     grid-template-columns: 1fr;
   }
 }
+/* Coolapk-inspired liquid glass bottom dock */
+.content {
+  padding-bottom: 118px;
+}
+
+.liquid-dock {
+  --liquid-x: 50%;
+  --liquid-y: 50%;
+  position: fixed;
+  z-index: 80;
+  bottom: 16px;
+  left: calc(228px + (100vw - 228px) / 2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(900px, calc(100vw - 228px - 56px));
+  min-height: 66px;
+  padding: 8px 10px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.19);
+  border-radius: 22px;
+  background:
+    radial-gradient(240px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, 0.18), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035) 56%, rgba(255, 255, 255, 0.07));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 18px 48px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(28px) saturate(190%) brightness(1.06);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) brightness(1.06);
+  isolation: isolate;
+}
+
+.liquid-dock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent 34%),
+    radial-gradient(120% 90% at 50% 120%, rgba(176, 219, 244, 0.12), transparent 60%);
+  pointer-events: none;
+}
+
+.liquid-dock::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 21px;
+  pointer-events: none;
+}
+
+.liquid-dock-nav {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.liquid-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 58px;
+  min-height: 50px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.liquid-nav-item:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.liquid-nav-item.active {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.liquid-nav-item.active svg {
+  filter: drop-shadow(0 0 8px rgba(185, 220, 242, 0.38));
+}
+
+.liquid-nav-item:active {
+  transform: scale(0.97);
+}
+
+.liquid-dock-divider {
+  width: 1px;
+  align-self: stretch;
+  margin-block: 8px;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.17), transparent);
+}
+
+.liquid-dock-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 150px;
+}
+
+.liquid-dock-status strong,
+.liquid-dock-status small,
+.liquid-dock-node span,
+.liquid-dock-node strong {
+  display: block;
+}
+
+.liquid-dock-status strong {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.liquid-dock-status small {
+  margin-top: 2px;
+  color: var(--faint);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 9px;
+}
+
+.liquid-dock-node {
+  min-width: 0;
+  flex: 1;
+  padding-inline: 4px;
+}
+
+.liquid-dock-node span {
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.liquid-dock-node strong {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.liquid-dock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.liquid-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.liquid-action:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.liquid-action.primary {
+  color: #0d1721;
+  border-color: rgba(222, 242, 255, 0.9);
+  background: linear-gradient(145deg, rgba(236, 248, 255, 0.98), rgba(166, 207, 232, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 5px 16px rgba(115, 177, 214, 0.18);
+}
+
+.liquid-action.primary:hover:not(:disabled) {
+  color: #0d1721;
+  background: linear-gradient(145deg, #f4fbff, #b7d9ee);
+}
+
+:root[data-theme="light"] .liquid-dock {
+  border-color: rgba(255, 255, 255, 0.88);
+  background:
+    radial-gradient(240px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, 0.8), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(236, 245, 251, 0.42));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(51, 78, 100, 0.08),
+    0 18px 44px rgba(47, 72, 94, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+:root[data-theme="light"] .liquid-dock::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 40%),
+    radial-gradient(120% 90% at 50% 120%, rgba(174, 220, 244, 0.2), transparent 60%);
+}
+
+:root[data-theme="light"] .liquid-nav-item.active {
+  border-color: rgba(255, 255, 255, 0.94);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 248, 253, 0.7));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 4px 12px rgba(60, 96, 122, 0.1);
+}
+
+:root[data-theme="light"] .liquid-dock-divider {
+  background: linear-gradient(180deg, transparent, rgba(61, 92, 116, 0.14), transparent);
+}
+
+@media (max-width: 1120px) {
+  .liquid-dock {
+    gap: 8px;
+  }
+
+  .liquid-nav-item {
+    min-width: 50px;
+    padding-inline: 7px;
+  }
+
+  .liquid-dock-node {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .liquid-dock {
+    left: calc(210px + (100vw - 210px) / 2);
+    width: calc(100vw - 210px - 40px);
+  }
+}
+
+@media (max-width: 760px) {
+  .liquid-dock {
+    left: 16px;
+    width: calc(100vw - 32px);
+    transform: none;
+  }
+
+  .liquid-dock-status {
+    display: none;
+  }
+
+  .liquid-dock-nav {
+    flex: 1;
+  }
+
+  .liquid-nav-item {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-nav-item {
+    transition: none;
+  }
+}

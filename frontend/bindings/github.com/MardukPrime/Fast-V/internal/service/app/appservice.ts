@@ -17,3 +17,11 @@ import * as model$0 from "../../model/models.js";
 export function Info(): $CancellablePromise<model$0.AppInfo> {
     return $Call.ByID(545960859);
 }
+
+export function IsElevated(): $CancellablePromise<boolean> {
+    return $Call.ByID(3610483421);
+}
+
+export function RestartAsAdmin(): $CancellablePromise<void> {
+    return $Call.ByID(3747228385);
+}

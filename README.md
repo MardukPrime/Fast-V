@@ -60,6 +60,7 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - 启动、停止和重启内核
 - Windows Job Object 进程树清理
 - 应用退出时自动清理内核进程
+- TUN 模式自动请求 UAC 管理员权限并重启
 - GeoData 资源检测与更新（geoip.dat / geosite.dat）
 - 本地 Xray API、StatsService 和统计策略配置
 
@@ -156,6 +157,7 @@ TUN 模式需要：
 - 主题即时预览
 - 可折叠设置分区
 - 清晰的节点、路由和日志表格
+- 液态玻璃底部快捷栏
 - 响应式布局
 
 ## 支持的协议
@@ -285,6 +287,7 @@ go build -tags production -trimpath -ldflags "-w -s -H windowsgui" -o bin/fastv.
 - [网络诊断](docs/network-diagnostics.md)
 - [Xray TUN](docs/cores/xray/tun.md)
 - [GeoData](docs/cores/xray/geodata.md)
+- [液态玻璃底栏](docs/ui/LIQUID_GLASS.md)
 - [更新日志](CHANGELOG.md)
 - [完整文档索引](docs/README.md)
 

@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/platform"
 	proxyruntime "github.com/MardukPrime/Fast-V/internal/proxy"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
@@ -30,11 +31,33 @@ func (s *ProxyService) ServiceName() string {
 }
 
 func (s *ProxyService) Start() (model.ProxyState, error) {
+	relaunching, err := s.ensureAdminForTun()
+	if err != nil {
+		return s.manager.State(), err
+	}
+	if relaunching {
+		return s.manager.State(), nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	return s.manager.Start(ctx)
 }
 
+func (s *ProxyService) ensureAdminForTun() (bool, error) {
+	if !s.store.Settings().TunMode || platform.IsElevated() {
+		return false, nil
+	}
+	if err := platform.LaunchElevatedRestart(); err != nil {
+		return false, err
+	}
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		if app := application.Get(); app != nil {
+			app.Quit()
+		}
+	}()
+	return true, nil
+}
 func (s *ProxyService) SwitchNode(id string) (model.ProxyState, error) {
 	if _, err := s.store.SetActiveNode(id); err != nil {
 		return s.manager.State(), err

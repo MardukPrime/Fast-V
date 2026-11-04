@@ -2,6 +2,7 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
 import { Events } from "@wailsio/runtime";
 
+import { AppService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
 import type { CoreInfo, GeoDataInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
@@ -100,6 +101,7 @@ export default function SettingsPage(props: SettingsProps) {
   const [coreBusy, setCoreBusy] = createSignal("");
   const [geoBusy, setGeoBusy] = createSignal("");
   const [geoData, setGeoData] = createSignal<GeoDataInfo | null>(null);
+  const [elevated, setElevated] = createSignal(false);
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
   const [clientExpanded, setClientExpanded] = createSignal(readSectionState("fastv.settings.clientOpen", false));
@@ -108,14 +110,16 @@ export default function SettingsPage(props: SettingsProps) {
   const load = async () => {
     setLoading(true);
     try {
-      const [loadedSettings, loadedCore, loadedGeoData] = await Promise.all([
+      const [loadedSettings, loadedCore, loadedGeoData, isElevated] = await Promise.all([
         SettingsService.Get(),
         CoreService.Info(),
         CoreService.GeoData(),
+        AppService.IsElevated(),
       ]);
       setSettings(loadedSettings);
       setCore(loadedCore);
       setGeoData(loadedGeoData);
+      setElevated(isElevated);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -150,6 +154,10 @@ export default function SettingsPage(props: SettingsProps) {
       setSettings(saved);
       props.onSaved(saved);
       setMessage("设置已保存。");
+      if (saved.tunMode && !elevated()) {
+        setMessage("TUN 模式需要管理员权限，正在请求 UAC 提权并重启 FastV...");
+        await AppService.RestartAsAdmin();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -354,7 +362,7 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().tunMode}>
               <div class="tun-warning">
                 <Icon name="alert" size={14} />
-                <span>TUN 模式需要以管理员身份运行 FastV，并确保 wintun.dll 位于 xray.exe 同目录。启动时 FastV 会创建 FastV-TUN 适配器并接管默认路由。</span>
+                <span>TUN 模式需要管理员权限。保存设置后 FastV 会自动请求 UAC 提权并重启；也可以直接启动代理触发提权。请确保 wintun.dll 位于 xray.exe 同目录。当前状态：{elevated() ? "已获得管理员权限" : "普通权限，启动 TUN 时将自动申请提权"}。</span>
               </div>
             </Show>
           </div>

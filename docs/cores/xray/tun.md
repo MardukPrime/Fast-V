@@ -5,7 +5,7 @@ FastV uses the native Xray TUN inbound on Windows. TUN creates a virtual network
 ## Requirements
 
 - Windows 10/11
-- FastV running as administrator
+- FastV running as administrator (automatic UAC elevation is supported)
 - `wintun.dll` next to `xray.exe`
 - Xray-core version with TUN inbound support
 - Xray-core configured with the TUN inbound
@@ -61,7 +61,7 @@ The TUN adapter is owned by the Xray process. The Windows Job Object ensures the
 - TUN route setup is implemented for Windows only.
 - IPv4 route setup is implemented; IPv6 TUN route setup is not yet exposed.
 - TUN requires administrator privileges.
-- The app does not auto-elevate itself; start FastV with Run as administrator.
+- When TUN mode is enabled, FastV automatically requests UAC elevation and relaunches itself with administrator privileges.
 - ICMP is not supported by the Xray TUN implementation.
 - System proxy mode and TUN mode are separate; TUN does not set the Windows system proxy.
 
@@ -74,3 +74,19 @@ xray run -test -config runtime/xray-config.json
 ```
 
 Actual adapter creation and route changes require an elevated process and should be tested on a disposable machine or with a known-good proxy endpoint.
+## Automatic Elevation
+
+FastV handles TUN elevation automatically:
+
+1. TUN mode is enabled and settings are saved, or the proxy is started with TUN mode already enabled.
+2. If the current process is not elevated, FastV launches a hidden helper through the Windows `runas` UAC prompt.
+3. The helper waits for the current process to exit, then starts `fastv.exe` again with the elevated token.
+4. FastV starts normally on the next launch because the saved TUN setting is still enabled.
+
+If the user cancels UAC:
+
+- Settings remain saved.
+- FastV stays open with normal privileges.
+- Starting the proxy reports that TUN mode requires administrator permission.
+
+At startup, if TUN mode is already saved and FastV is not elevated, the same UAC request is made before the Wails window is created. This avoids creating two UI instances.

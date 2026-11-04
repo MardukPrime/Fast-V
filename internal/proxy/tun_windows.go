@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/sys/windows"
+	"github.com/MardukPrime/Fast-V/internal/platform"
 )
 
 func preflightTun(corePath string) error {
@@ -19,12 +19,7 @@ func preflightTun(corePath string) error {
 	if _, err := os.Stat(dllPath); err != nil {
 		return errors.New("wintun.dll 未找到，请更新或重新安装 Xray-core")
 	}
-	var token windows.Token
-	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
-		return errors.New("无法检查进程权限")
-	}
-	defer token.Close()
-	if !token.IsElevated() {
+	if !platform.IsElevated() {
 		return errors.New("TUN 模式需要管理员权限，请以管理员身份启动 FastV")
 	}
 	return nil

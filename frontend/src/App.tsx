@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { Events, Window as AppWindow } from "@wailsio/runtime";
 
@@ -28,6 +28,8 @@ const navigation: Array<{ key: PageKey; label: string; caption: string; icon: Ic
   { key: "logs", label: "日志", caption: "运行记录", icon: "logs" },
   { key: "settings", label: "设置", caption: "应用偏好", icon: "settings" },
 ];
+
+const dockNavigation = navigation.filter((item) => ["dashboard", "servers", "routing", "logs"].includes(item.key));
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
@@ -260,6 +262,51 @@ export default function App() {
             <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
           </Show>
 
+          <nav
+            class="liquid-dock"
+            aria-label="底部快捷导航"
+            onPointerMove={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              event.currentTarget.style.setProperty("--liquid-x", `${event.clientX - rect.left}px`);
+              event.currentTarget.style.setProperty("--liquid-y", `${event.clientY - rect.top}px`);
+            }}
+          >
+            <div class="liquid-dock-nav">
+              <For each={dockNavigation}>
+                {(item) => (
+                  <button type="button" classList={{ "liquid-nav-item": true, active: active() === item.key }} onClick={() => setActive(item.key)}>
+                    <Icon name={item.icon} size={16} />
+                    <span>{item.label}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+
+            <div class="liquid-dock-divider" />
+
+            <div class="liquid-dock-status">
+              <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
+              <div>
+                <strong>{proxy().status === "running" ? "代理运行中" : proxy().status === "starting" ? "正在启动" : "代理未启动"}</strong>
+                <small>{proxy().status === "running" ? proxy().localAddr : "本地 SOCKS/HTTP 入口"}</small>
+              </div>
+            </div>
+
+            <div class="liquid-dock-node">
+              <span>当前节点</span>
+              <strong title={proxy().nodeName || "未选择节点"}>{proxy().nodeName || "未选择节点"}</strong>
+            </div>
+
+            <div class="liquid-dock-actions">
+              <button class="liquid-action" type="button" onClick={handleTestProxy} disabled={proxyBusy() || proxy().status !== "running"}>
+                <Icon name="speed" size={14} /> 测试
+              </button>
+              <button classList={{ "liquid-action": true, primary: proxy().status !== "running" }} type="button" onClick={proxy().status === "running" ? handleStopProxy : handleStartProxy} disabled={proxyBusy() || proxy().status === "starting" || proxy().status === "stopping"}>
+                <Icon name={proxy().status === "running" ? "stop" : "play"} size={14} />
+                {proxyBusy() ? "处理中" : proxy().status === "running" ? "停止" : "启动"}
+              </button>
+            </div>
+          </nav>
         </main>
       </div>
     </div>
