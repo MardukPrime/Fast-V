@@ -39,6 +39,7 @@ All notable changes to FastV are documented here.
 - Rewrote README as a product-focused overview of features, usage and roadmap.
 - Added GeoData status/update management and Xray API/StatsService configuration in settings.
 - Added automatic UAC elevation for TUN mode and a liquid-glass bottom quick dock.
+- Added switchable sidebar and bottom-dock navigation layouts.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.

@@ -93,6 +93,7 @@
 |---|---|
 | theme | 深色、浅色或跟随系统 |
 | language | 界面语言 |
+| layoutMode | 导航布局：sidebar 或 dock |
 | autoUpdate | 订阅自动更新开关 |
 | updateIntervalMinutes | 订阅自动更新间隔 |
 | proxyMode | rule、global 或 direct，写入 Xray 路由 |

@@ -29,7 +29,7 @@ const navigation: Array<{ key: PageKey; label: string; caption: string; icon: Ic
   { key: "settings", label: "设置", caption: "应用偏好", icon: "settings" },
 ];
 
-const dockNavigation = navigation.filter((item) => ["dashboard", "servers", "routing", "logs"].includes(item.key));
+const dockNavigation = navigation;
 
 const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
   dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
@@ -57,6 +57,7 @@ export default function App() {
   const [proxyBusy, setProxyBusy] = createSignal(false);
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
+  const layoutMode = () => settings()?.layoutMode === "dock" ? "dock" : "sidebar";
 
   onMount(async () => {
     try {
@@ -148,7 +149,7 @@ export default function App() {
   };
 
   return (
-    <div class="app-root">
+    <div classList={{ "app-root": true, "layout-sidebar": layoutMode() === "sidebar", "layout-dock": layoutMode() === "dock" }}>
       <header class="window-titlebar" onDblClick={toggleMaximise}>
         <div class="titlebar-brand">
           <span class="titlebar-mark">F</span>
@@ -169,6 +170,7 @@ export default function App() {
       </header>
 
       <div class="app-shell">
+        <Show when={layoutMode() === "sidebar"}>
         <aside class="sidebar">
           <div class="brand">
             <div class="brand-mark">F</div>
@@ -208,6 +210,7 @@ export default function App() {
             <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
           </div>
         </aside>
+        </Show>
 
         <main class="content">
           <header class="topbar">
@@ -262,6 +265,7 @@ export default function App() {
             <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} />
           </Show>
 
+          <Show when={layoutMode() === "dock"}>
           <nav
             class="liquid-dock"
             aria-label="底部快捷导航"
@@ -307,6 +311,7 @@ export default function App() {
               </button>
             </div>
           </nav>
+          </Show>
         </main>
       </div>
     </div>

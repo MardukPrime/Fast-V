@@ -42,6 +42,7 @@ func DefaultSettings() Settings {
 	return Settings{
 		Theme:                 "dark",
 		Language:              "zh-CN",
+		LayoutMode:            "sidebar",
 		AutoUpdate:            false,
 		UpdateIntervalMinutes: 360,
 		ProxyMode:             "rule",
@@ -164,6 +165,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.Language == "" {
 		value.Language = fallback.Language
+	}
+	if value.LayoutMode == "" {
+		value.LayoutMode = fallback.LayoutMode
 	}
 	if value.UpdateIntervalMinutes == 0 {
 		value.UpdateIntervalMinutes = fallback.UpdateIntervalMinutes

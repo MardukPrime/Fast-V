@@ -7,14 +7,15 @@
 1. [DESIGN.md](DESIGN.md)：产品目标、需求范围、系统设计和核心流程。
 2. [ARCHITECTURE.md](ARCHITECTURE.md)：代码分层、目录结构、依赖规则和包职责。
 3. [ui/DESIGN_RULES.md](ui/DESIGN_RULES.md)：UI 布局、组件、交互和页面设计规则。
-4. [network-diagnostics.md](network-diagnostics.md)：网络诊断、数据源和在线 IP 工具集成评估。
-5. [cores/README.md](cores/README.md)：代理内核文档入口。
-6. [cores/xray/README.md](cores/xray/README.md)：Xray-core 客户端集成文档。
-7. [adr/README.md](adr/README.md)：重要架构决策记录。
-8. [api/wails-services.md](api/wails-services.md)：Wails Service 接口契约。
-9. [api/events.md](api/events.md)：后端事件名和载荷。
-10. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
-11. [operations/build.md](operations/build.md)：构建、打包和发布。
+4. [ui/LIQUID_GLASS.md](ui/LIQUID_GLASS.md)：液态玻璃底栏、导航布局和性能取舍。
+5. [network-diagnostics.md](network-diagnostics.md)：网络诊断、数据源和在线 IP 工具集成评估。
+6. [cores/README.md](cores/README.md)：代理内核文档入口。
+7. [cores/xray/README.md](cores/xray/README.md)：Xray-core 客户端集成文档。
+8. [adr/README.md](adr/README.md)：重要架构决策记录。
+9. [api/wails-services.md](api/wails-services.md)：Wails Service 接口契约。
+10. [api/events.md](api/events.md)：后端事件名和载荷。
+11. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
+12. [operations/build.md](operations/build.md)：构建、打包和发布。
 
 ## 文档目录
 

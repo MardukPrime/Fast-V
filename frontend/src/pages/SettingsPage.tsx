@@ -16,6 +16,7 @@ type SettingsProps = {
 const defaults: Settings = {
   theme: "dark",
   language: "zh-CN",
+  layoutMode: "sidebar",
   autoUpdate: false,
   updateIntervalMinutes: 360,
   proxyMode: "rule",
@@ -36,6 +37,11 @@ const themes = [
   { value: "dark", label: "深色", hint: "低光环境" },
   { value: "light", label: "浅色", hint: "明亮环境" },
   { value: "system", label: "跟随系统", hint: "自动切换" },
+];
+
+const layoutModes = [
+  { value: "sidebar", label: "侧边模式", hint: "保留左侧导航，关闭底栏" },
+  { value: "dock", label: "底栏模式", hint: "保留液态玻璃底栏，关闭侧边" },
 ];
 
 const proxyModes = [
@@ -294,6 +300,21 @@ export default function SettingsPage(props: SettingsProps) {
                   <Show when={settings().theme === item.value}>
                     <span class="theme-check"><Icon name="check" size={12} /></span>
                   </Show>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div class="setting-block">
+            <div class="setting-label">
+              <strong>导航布局</strong>
+              <small>侧边模式保留左侧导航；底栏模式隐藏侧边栏，只保留液态玻璃底栏。</small>
+            </div>
+            <div class="mode-options">
+              {layoutModes.map((item) => (
+                <button type="button" classList={{ "mode-option": true, active: settings().layoutMode === item.value }} onClick={() => update("layoutMode", item.value)}>
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
                 </button>
               ))}
             </div>

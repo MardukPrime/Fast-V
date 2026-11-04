@@ -233,6 +233,7 @@ export interface RoutingRule {
 export interface Settings {
     "theme": string;
     "language": string;
+    "layoutMode": string;
     "autoUpdate": boolean;
     "updateIntervalMinutes": number;
     "proxyMode": string;

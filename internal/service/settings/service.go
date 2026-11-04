@@ -34,6 +34,9 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	input.CoreType = strings.TrimSpace(input.CoreType)
 	input.XrayLogLevel = strings.TrimSpace(input.XrayLogLevel)
 	input.TestURL = strings.TrimSpace(input.TestURL)
+	if input.LayoutMode != "sidebar" && input.LayoutMode != "dock" {
+		return model.Settings{}, errors.New("invalid layout mode")
+	}
 
 	if input.Theme != "dark" && input.Theme != "light" && input.Theme != "system" {
 		return model.Settings{}, errors.New("invalid theme")

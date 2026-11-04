@@ -1,6 +1,6 @@
 # Liquid Glass Bottom Dock
 
-FastV uses a Coolapk-inspired liquid-glass bottom dock for quick navigation and proxy actions.
+FastV uses a Coolapk-inspired liquid-glass bottom dock for quick navigation and proxy actions. It is one of two navigation layouts: sidebar mode keeps the left navigation and hides the dock, while dock mode hides the sidebar and keeps the bottom dock.
 
 ## Reference Implementations
 
@@ -47,7 +47,7 @@ The selected approach keeps labels crisp while preserving the wet-glass look.
 
 ## Responsive Rules
 
-- The dock remains centered over the main content area.
+- The dock is only rendered in dock mode; sidebar mode removes the dock entirely.`r`n- The dock remains centered over the main content area.
 - The current-node block is hidden first on narrower windows.
 - Status text is hidden next.
 - Navigation items become flexible and icon-first.
