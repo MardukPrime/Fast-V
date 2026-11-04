@@ -88,6 +88,30 @@ export default function App() {
     onCleanup(() => window.removeEventListener("resize", handleResize));
   });
 
+  onMount(() => {
+    let frame = 0;
+    let lastEvent: PointerEvent | null = null;
+    const glassSelector = ".panel, .glass-panel, .sidebar, .window-titlebar, .mini-stat, .quick-action, .settings-section, .core-summary, .status-chip, .theme-option, .mode-option, .core-type-option, .liquid-dock";
+    const updateGlass = () => {
+      frame = 0;
+      if (!lastEvent) return;
+      const target = lastEvent.target instanceof Element ? lastEvent.target.closest<HTMLElement>(glassSelector) : null;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      target.style.setProperty("--glass-x", `${lastEvent.clientX - rect.left}px`);
+      target.style.setProperty("--glass-y", `${lastEvent.clientY - rect.top}px`);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      lastEvent = event;
+      if (!frame) frame = requestAnimationFrame(updateGlass);
+    };
+    document.addEventListener("pointermove", handlePointerMove, { passive: true });
+    onCleanup(() => {
+      document.removeEventListener("pointermove", handlePointerMove);
+      if (frame) cancelAnimationFrame(frame);
+    });
+  });
+
   onMount(async () => {
     try {
       const [appInfo, loadedSettings, coreInfo, proxyState] = await Promise.all([
@@ -179,6 +203,15 @@ export default function App() {
 
   return (
     <div classList={{ "app-root": true, "layout-sidebar": layoutMode() === "sidebar", "layout-dock": layoutMode() === "dock" }}>
+      <svg class="liquid-glass-defs" aria-hidden="true">
+        <defs>
+          <filter id="liquid-glass-refraction" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="11" result="noise" />
+            <feGaussianBlur in="noise" stdDeviation="1.2" result="softNoise" />
+            <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="7" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
       <header class="window-titlebar" onDblClick={toggleMaximise}>
         <div class="titlebar-brand">
           <span class="titlebar-mark">F</span>

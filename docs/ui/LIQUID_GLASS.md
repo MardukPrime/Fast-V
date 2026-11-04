@@ -2,6 +2,20 @@
 
 FastV uses a Coolapk-inspired liquid-glass bottom dock for quick navigation and proxy actions. It is one of two navigation layouts: sidebar mode keeps the left navigation and hides the dock, while dock mode hides the sidebar and keeps the bottom dock.
 
+## Surface System
+
+Liquid Glass v3 applies one visual language across the application:
+
+- panels and glass panels;
+- sidebar and title bar;
+- status chips and quick-action rows;
+- settings sections and core summary;
+- bottom dock and selected navigation items.
+
+Each surface combines a quiet static gradient with a shared specular border. A delegated pointer listener writes `--glass-x` and `--glass-y` on the nearest glass surface. The interaction runs inside `requestAnimationFrame`, so a pointer move does not cause a layout loop.
+
+The SVG `liquid-glass-refraction` filter is applied only to small decorative highlights such as the active nav indicator and dock sheen. It is intentionally not applied to large text panels, where displacement can produce visible light bands and blurred text.
+
 ## Reference Implementations
 
 The implementation is informed by open-source liquid-glass experiments:
@@ -46,9 +60,9 @@ The pointer position is written to CSS variables:
 
 The dock uses those values in a radial gradient so the highlight follows the cursor without rerendering the page.
 
-## Why Not SVG Displacement
+## Why Not SVG Displacement Everywhere
 
-SVG displacement looks convincing but has tradeoffs:
+SVG displacement looks convincing but has tradeoffs when applied to full surfaces:
 
 - Inconsistent `backdrop-filter: url(...)` support in Chromium/WebView2.
 - Higher GPU and compositing cost.

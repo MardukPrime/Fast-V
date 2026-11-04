@@ -41,6 +41,7 @@ All notable changes to FastV are documented here.
 - Added automatic UAC elevation for TUN mode and a liquid-glass bottom quick dock.
 - Added switchable sidebar and bottom-dock navigation layouts.
 - Added a sliding liquid-glass selection indicator for bottom navigation and transparent-glass selected states for option cards.
+- Unified the liquid-glass surface system across panels, sidebar, title bar, settings and quick actions with pointer-responsive highlights.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.
