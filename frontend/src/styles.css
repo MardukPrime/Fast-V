@@ -4824,3 +4824,128 @@ select {
     display: none;
   }
 }
+/* Liquid-glass selection state */
+.liquid-dock-nav {
+  position: relative;
+}
+
+.liquid-nav-indicator {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  z-index: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 14px;
+  background:
+    radial-gradient(90px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, 0.3), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+    0 4px 14px rgba(0, 0, 0, 0.13);
+  backdrop-filter: blur(14px) saturate(190%);
+  -webkit-backdrop-filter: blur(14px) saturate(190%);
+  pointer-events: none;
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease;
+}
+
+.liquid-nav-indicator::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 46%),
+    radial-gradient(120% 100% at 50% 120%, rgba(171, 218, 246, 0.15), transparent 64%);
+  pointer-events: none;
+}
+
+.liquid-nav-indicator::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 13px;
+  pointer-events: none;
+}
+
+.liquid-nav-item {
+  position: relative;
+  z-index: 1;
+}
+
+.liquid-nav-item.active {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nav-item.active {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.045));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1),
+    0 6px 18px rgba(0, 0, 0, 0.11);
+  backdrop-filter: blur(14px) saturate(170%);
+  -webkit-backdrop-filter: blur(14px) saturate(170%);
+}
+
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 48%);
+  pointer-events: none;
+}
+
+.theme-option.active,
+.mode-option.active,
+.core-type-option.active {
+  border-color: rgba(255, 255, 255, 0.28);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(185, 220, 242, 0.06),
+    0 8px 22px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(12px) saturate(165%);
+  -webkit-backdrop-filter: blur(12px) saturate(165%);
+}
+
+:root[data-theme="light"] .liquid-nav-indicator {
+  border-color: rgba(255, 255, 255, 0.96);
+  background:
+    radial-gradient(90px circle at var(--liquid-x) var(--liquid-y), rgba(255, 255, 255, 0.96), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(239, 248, 254, 0.5));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(47, 74, 96, 0.08),
+    0 4px 14px rgba(45, 73, 96, 0.1);
+}
+
+:root[data-theme="light"] .nav-item.active,
+:root[data-theme="light"] .theme-option.active,
+:root[data-theme="light"] .mode-option.active,
+:root[data-theme="light"] .core-type-option.active {
+  border-color: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.86), rgba(239, 248, 254, 0.54));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(47, 74, 96, 0.06),
+    0 7px 20px rgba(45, 73, 96, 0.09);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liquid-nav-indicator {
+    transition: none;
+  }
+}

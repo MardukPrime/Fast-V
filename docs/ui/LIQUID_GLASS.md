@@ -23,6 +23,18 @@ The dock combines:
 5. A pointer-following radial highlight.
 6. A deep but restrained outer shadow.
 
+## Selected State
+
+The active bottom-navigation item is not a flat filled button. A separate glass indicator slides between items:
+
+- the indicator is measured from the active button;
+- transform and width animate with a spring-like cubic bezier;
+- the indicator has its own specular line, inner border and pointer highlight;
+- labels and icons stay above the glass layer;
+- the active button background is removed so the glass indicator remains visible.
+
+Sidebar active items and settings option cards use the same transparent-glass selection language without the sliding indicator.
+
 ## Interaction
 
 The pointer position is written to CSS variables:

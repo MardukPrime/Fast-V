@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { Events, Window as AppWindow } from "@wailsio/runtime";
 
@@ -58,6 +58,35 @@ export default function App() {
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
   const layoutMode = () => settings()?.layoutMode === "dock" ? "dock" : "sidebar";
+  let dockNavElement: HTMLDivElement | undefined;
+  const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
+
+  const updateDockIndicator = () => {
+    if (!dockNavElement) {
+      setDockIndicator((current) => ({ ...current, visible: false }));
+      return;
+    }
+    const buttons = dockNavElement.querySelectorAll<HTMLButtonElement>(".liquid-nav-item");
+    const index = dockNavigation.findIndex((item) => item.key === active());
+    const button = buttons[index];
+    if (!button) {
+      setDockIndicator((current) => ({ ...current, visible: false }));
+      return;
+    }
+    setDockIndicator({ left: button.offsetLeft, width: button.offsetWidth, visible: true });
+  };
+
+  createEffect(() => {
+    active();
+    layoutMode();
+    requestAnimationFrame(updateDockIndicator);
+  });
+
+  onMount(() => {
+    const handleResize = () => updateDockIndicator();
+    window.addEventListener("resize", handleResize);
+    onCleanup(() => window.removeEventListener("resize", handleResize));
+  });
 
   onMount(async () => {
     try {
@@ -275,7 +304,8 @@ export default function App() {
               event.currentTarget.style.setProperty("--liquid-y", `${event.clientY - rect.top}px`);
             }}
           >
-            <div class="liquid-dock-nav">
+            <div class="liquid-dock-nav" ref={(element) => (dockNavElement = element)}>
+              <span class="liquid-nav-indicator" aria-hidden="true" style={{ transform: `translateX(${dockIndicator().left}px)`, width: `${dockIndicator().width}px`, opacity: dockIndicator().visible ? 1 : 0 }} />
               <For each={dockNavigation}>
                 {(item) => (
                   <button type="button" classList={{ "liquid-nav-item": true, active: active() === item.key }} onClick={() => setActive(item.key)}>
