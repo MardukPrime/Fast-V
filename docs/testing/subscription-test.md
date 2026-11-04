@@ -153,3 +153,18 @@ go test .
 - 节点启用和禁用
 - 订阅更新保留节点身份和状态
 - 本地 TCP 延迟测试
+## Subscription-Userinfo Fixture
+
+Use this response header when testing quota rendering:
+
+```text
+Subscription-Userinfo: upload=1073741824; download=2147483648; total=10737418240; expire=1893456000
+```
+
+Expected frontend result:
+
+- upload: 1.0 GB
+- download: 2.0 GB
+- total: 10.0 GB
+- used: 3.0 GB / 30%
+- expiry date: 2030-01-01

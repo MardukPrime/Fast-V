@@ -17,6 +17,7 @@ func TestServiceAddUpdateDelete(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte(content))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Subscription-Userinfo", "upload=1024; download=2048; total=1048576; expire=1893456000")
 		_, _ = fmt.Fprint(w, encoded)
 	}))
 	defer server.Close()
@@ -32,6 +33,9 @@ func TestServiceAddUpdateDelete(t *testing.T) {
 		t.Fatalf("add failed: %v", err)
 	}
 	if sub.NodeCount != 1 {
+		if sub.UploadBytes != 1024 || sub.DownloadBytes != 2048 || sub.TotalBytes != 1048576 || sub.ExpireAt != 1893456000 {
+			t.Fatalf("unexpected subscription usage: %+v", sub)
+		}
 		t.Fatalf("expected 1 node, got %d", sub.NodeCount)
 	}
 
@@ -53,6 +57,9 @@ func TestServiceAddUpdateDelete(t *testing.T) {
 		t.Fatalf("update failed: %v", err)
 	}
 	if updated.NodeCount != 1 || updated.LastError != "" {
+		if updated.UploadBytes != 1024 || updated.TotalBytes != 1048576 {
+			t.Fatalf("usage was not retained after update: %+v", updated)
+		}
 		t.Fatalf("unexpected update result: %+v", updated)
 	}
 

@@ -275,6 +275,11 @@ export interface SubscriptionView {
     "updatedAt": string;
     "lastError": string;
     "nodeCount": number;
+    "uploadBytes": number;
+    "downloadBytes": number;
+    "totalBytes": number;
+    "expireAt": number;
+    "usageUpdatedAt": string;
 }
 
 /**

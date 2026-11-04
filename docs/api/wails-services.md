@@ -194,3 +194,18 @@
 | geoIp | geoip.dat 文件状态 |
 | geoSite | geosite.dat 文件状态 |
 | files | 目录内全部 .dat 文件 |
+## SubscriptionView 用量字段
+
+| 字段 | 说明 |
+|---|---|
+| uploadBytes | 订阅端返回的上传流量 |
+| downloadBytes | 订阅端返回的下载流量 |
+| totalBytes | 套餐总流量 |
+| expireAt | 到期时间，Unix 秒 |
+| usageUpdatedAt | 用量信息最近更新时间 |
+
+数据来自订阅响应头 `Subscription-Userinfo`，格式示例：
+
+```text
+upload=1024; download=2048; total=1048576; expire=1893456000
+```

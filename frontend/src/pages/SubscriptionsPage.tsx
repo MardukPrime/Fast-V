@@ -15,6 +15,30 @@ function formatTime(value: string) {
   return date.toLocaleString();
 }
 
+function formatBytes(value: number) {
+  if (!value || value <= 0) return "0 B";
+  if (value >= 1024 ** 4) return `${(value / 1024 ** 4).toFixed(2)} TB`;
+  if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`;
+  if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(0)} KB`;
+  return `${value} B`;
+}
+
+function formatExpire(value: number) {
+  if (!value) return "未设置";
+  const date = new Date(value * 1000);
+  if (Number.isNaN(date.getTime())) return "未设置";
+  return date.toLocaleDateString("zh-CN");
+}
+
+function usageOf(sub: SubscriptionView) {
+  return (sub.uploadBytes ?? 0) + (sub.downloadBytes ?? 0);
+}
+
+function usagePercent(sub: SubscriptionView) {
+  if (!sub.totalBytes || sub.totalBytes <= 0) return 0;
+  return Math.min(100, Math.round((usageOf(sub) / sub.totalBytes) * 100));
+}
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = createSignal<SubscriptionView[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -31,6 +55,8 @@ export default function SubscriptionsPage() {
   const totalNodes = () => subscriptions().reduce((sum, sub) => sum + sub.nodeCount, 0);
   const activeCount = () => subscriptions().filter((sub) => sub.enabled).length;
   const failedCount = () => subscriptions().filter((sub) => Boolean(sub.lastError)).length;
+  const usedTotal = () => subscriptions().reduce((sum, sub) => sum + usageOf(sub), 0);
+  const quotaTotal = () => subscriptions().reduce((sum, sub) => sum + (sub.totalBytes ?? 0), 0);
 
   const load = async () => {
     setLoading(true);
@@ -143,9 +169,10 @@ export default function SubscriptionsPage() {
 
   return (
     <div class="page-stack">
-      <section class="mini-stats">
+      <section class="mini-stats subscription-stats">
         <div class="mini-stat"><span>订阅</span><strong>{subscriptions().length}</strong><small>{activeCount()} 个启用</small></div>
         <div class="mini-stat"><span>节点</span><strong>{totalNodes()}</strong><small>已解析</small></div>
+        <div class="mini-stat"><span>套餐流量</span><strong>{formatBytes(usedTotal())}</strong><small>{quotaTotal() > 0 ? `共 ${formatBytes(quotaTotal())}` : "订阅端未提供"}</small></div>
         <div class="mini-stat"><span>异常</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>需要处理</small></div>
       </section>
 
@@ -225,7 +252,26 @@ export default function SubscriptionsPage() {
                         <span><Icon name="nodes" size={12} /> {sub.nodeCount} 个节点</span>
                         <span><Icon name="refresh" size={12} /> {formatTime(sub.updatedAt)}</span>
                       </div>
-                      <Show when={sub.lastError}>
+                      <Show when={Boolean(sub.usageUpdatedAt) || (sub.totalBytes ?? 0) > 0 || usageOf(sub) > 0} fallback={
+                        <div class="subscription-usage-empty">订阅端未提供套餐用量信息</div>
+                      }>
+                        <div classList={{ "subscription-usage": true, warning: usagePercent(sub) >= 90 }}>
+                          <div class="subscription-usage-summary">
+                            <span>已用 {formatBytes(usageOf(sub))}{sub.totalBytes > 0 ? ` / ${formatBytes(sub.totalBytes)}` : ""}</span>
+                            <Show when={sub.totalBytes > 0}>
+                              <strong>{usagePercent(sub)}%</strong>
+                            </Show>
+                          </div>
+                          <Show when={sub.totalBytes > 0}>
+                            <div class="subscription-usage-track"><span style={{ width: `${usagePercent(sub)}%` }} /></div>
+                          </Show>
+                          <div class="subscription-usage-meta">
+                            <span>上传 {formatBytes(sub.uploadBytes ?? 0)}</span>
+                            <span>下载 {formatBytes(sub.downloadBytes ?? 0)}</span>
+                            <span>到期 {formatExpire(sub.expireAt ?? 0)}</span>
+                          </div>
+                        </div>
+                      </Show>                      <Show when={sub.lastError}>
                         <div class="inline-error"><Icon name="alert" size={12} /> {sub.lastError}</div>
                       </Show>
                     </div>

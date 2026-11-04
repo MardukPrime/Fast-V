@@ -360,6 +360,21 @@ func (s *Store) ReplaceSubscriptionNodes(id string, nodes []Node) error {
 	})
 }
 
+func (s *Store) SetSubscriptionUsage(id string, uploadBytes, downloadBytes, totalBytes, expireAt int64, updatedAt string) error {
+	return s.update(func(data *storeData) error {
+		for i := range data.Subscriptions {
+			if data.Subscriptions[i].ID == id {
+				data.Subscriptions[i].UploadBytes = uploadBytes
+				data.Subscriptions[i].DownloadBytes = downloadBytes
+				data.Subscriptions[i].TotalBytes = totalBytes
+				data.Subscriptions[i].ExpireAt = expireAt
+				data.Subscriptions[i].UsageUpdatedAt = updatedAt
+				return nil
+			}
+		}
+		return errors.New("subscription not found")
+	})
+}
 func (s *Store) SetSubscriptionError(id string, message string) error {
 	return s.update(func(data *storeData) error {
 		for i := range data.Subscriptions {

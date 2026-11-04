@@ -107,15 +107,14 @@ func (s *Service) Add(input model.SubscriptionInput) (model.SubscriptionView, er
 		return model.SubscriptionView{}, errors.New("subscription URL must use http or https")
 	}
 
-	content, err := subdomain.Fetch(context.Background(), rawURL)
+	fetched, err := subdomain.FetchWithMeta(context.Background(), rawURL)
 	if err != nil {
 		return model.SubscriptionView{}, err
 	}
-	parsedNodes, err := subdomain.ParseContent(content)
+	parsedNodes, err := subdomain.ParseContent(fetched.Content)
 	if err != nil {
 		return model.SubscriptionView{}, err
 	}
-
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		name = parsedURL.Hostname()
@@ -134,6 +133,10 @@ func (s *Service) Add(input model.SubscriptionInput) (model.SubscriptionView, er
 	if err := s.store.AddSubscription(sub, nodes); err != nil {
 		return model.SubscriptionView{}, err
 	}
+	if fetched.UserInfo.Present {
+		applyUserInfo(&sub, fetched.UserInfo)
+		_ = s.store.SetSubscriptionUsage(sub.ID, sub.UploadBytes, sub.DownloadBytes, sub.TotalBytes, sub.ExpireAt, sub.UsageUpdatedAt)
+	}
 
 	sub.NodeCount = len(nodes)
 	return subscriptionView(sub), nil
@@ -145,13 +148,13 @@ func (s *Service) Update(id string) (model.SubscriptionView, error) {
 		return model.SubscriptionView{}, err
 	}
 
-	content, fetchErr := subdomain.Fetch(context.Background(), sub.URL)
+	fetched, fetchErr := subdomain.FetchWithMeta(context.Background(), sub.URL)
 	if fetchErr != nil {
 		_ = s.store.SetSubscriptionError(id, fetchErr.Error())
 		sub.LastError = fetchErr.Error()
 		return subscriptionView(sub), fetchErr
 	}
-	parsedNodes, parseErr := subdomain.ParseContent(content)
+	parsedNodes, parseErr := subdomain.ParseContent(fetched.Content)
 	if parseErr != nil {
 		_ = s.store.SetSubscriptionError(id, parseErr.Error())
 		sub.LastError = parseErr.Error()
@@ -162,7 +165,10 @@ func (s *Service) Update(id string) (model.SubscriptionView, error) {
 	if err := s.store.ReplaceSubscriptionNodes(id, nodes); err != nil {
 		return model.SubscriptionView{}, err
 	}
-
+	if fetched.UserInfo.Present {
+		applyUserInfo(&sub, fetched.UserInfo)
+		_ = s.store.SetSubscriptionUsage(id, sub.UploadBytes, sub.DownloadBytes, sub.TotalBytes, sub.ExpireAt, sub.UsageUpdatedAt)
+	}
 	sub.NodeCount = len(nodes)
 	sub.LastError = ""
 	sub.UpdatedAt = model.NowRFC3339()
@@ -211,6 +217,16 @@ func (s *Service) Nodes(id string) ([]model.NodeView, error) {
 	return out, nil
 }
 
+func applyUserInfo(sub *model.Subscription, info subdomain.UserInfo) {
+	if !info.Present {
+		return
+	}
+	sub.UploadBytes = info.UploadBytes
+	sub.DownloadBytes = info.DownloadBytes
+	sub.TotalBytes = info.TotalBytes
+	sub.ExpireAt = info.ExpireAt
+	sub.UsageUpdatedAt = model.NowRFC3339()
+}
 func subscriptionView(sub model.Subscription) model.SubscriptionView {
 	view := model.SubscriptionViewFrom(sub)
 	if parsed, err := url.Parse(sub.URL); err == nil {

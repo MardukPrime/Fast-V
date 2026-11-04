@@ -46,26 +46,36 @@ type Settings struct {
 
 // Subscription is the internal subscription record. URL contains a token and is never exposed directly.
 type Subscription struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	Enabled   bool   `json:"enabled"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	LastError string `json:"lastError"`
-	NodeCount int    `json:"nodeCount"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	URL            string `json:"url"`
+	Enabled        bool   `json:"enabled"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
+	LastError      string `json:"lastError"`
+	NodeCount      int    `json:"nodeCount"`
+	UploadBytes    int64  `json:"uploadBytes"`
+	DownloadBytes  int64  `json:"downloadBytes"`
+	TotalBytes     int64  `json:"totalBytes"`
+	ExpireAt       int64  `json:"expireAt"`
+	UsageUpdatedAt string `json:"usageUpdatedAt"`
 }
 
 // SubscriptionView is the frontend-safe subscription representation.
 type SubscriptionView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Host      string `json:"host"`
-	Enabled   bool   `json:"enabled"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
-	LastError string `json:"lastError"`
-	NodeCount int    `json:"nodeCount"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Host           string `json:"host"`
+	Enabled        bool   `json:"enabled"`
+	CreatedAt      string `json:"createdAt"`
+	UpdatedAt      string `json:"updatedAt"`
+	LastError      string `json:"lastError"`
+	NodeCount      int    `json:"nodeCount"`
+	UploadBytes    int64  `json:"uploadBytes"`
+	DownloadBytes  int64  `json:"downloadBytes"`
+	TotalBytes     int64  `json:"totalBytes"`
+	ExpireAt       int64  `json:"expireAt"`
+	UsageUpdatedAt string `json:"usageUpdatedAt"`
 }
 
 // SubscriptionInput is the payload for adding a subscription.

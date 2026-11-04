@@ -45,6 +45,7 @@ All notable changes to FastV are documented here.
 - Fixed dock-mode settings alignment and added Xray DNS, routing-domain and TUN MTU settings.
 - Added adjustable bottom-dock glass transparency with live preview.
 - Unified global content width, topbar, page, settings and dock alignment across both navigation modes.
+- Added Subscription-Userinfo parsing with package quota, upload/download usage and expiry display.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.
