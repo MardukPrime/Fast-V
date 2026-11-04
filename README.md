@@ -244,10 +244,20 @@ wails3 dev
 
 ### 生产构建
 
+推荐使用正式构建脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Version 0.1.0
+```
+
+等价的核心参数：
+
 ```bash
 pnpm --dir frontend run build
-go build -tags production -trimpath -ldflags "-w -s -H windowsgui" -o bin/fastv.exe .
+go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=0.1.0" -o bin/fastv.exe .
 ```
+
+`-H=windowsgui` 必须保留。缺少该参数会生成控制台子系统程序，启动时出现终端窗口。
 
 > 仓库只包含源码和文档。Wails 构建资源、平台资源、安装包和本地工具不纳入版本控制。
 
