@@ -48,6 +48,7 @@ All notable changes to FastV are documented here.
 - Added Subscription-Userinfo parsing with package quota, upload/download usage and expiry display.
 - Added FinalMask JSON and structured Sockopt settings mapped into generated Xray outbound streamSettings.
 - Added a production Windows build script that enforces `-H=windowsgui` and verifies the PE GUI subsystem.
+- Redesigned the dashboard around connection status, current node, package traffic and mainstream proxy quick actions.
 - Upgraded the Go module/toolchain to Go 1.27.3.
 - Added direct and proxied network diagnostics with exit IP, geolocation, ASN, Cloudflare edge, latency, jitter and optional download speed.
 - Removed external detection-site links; only directly integrated network diagnostics remain.

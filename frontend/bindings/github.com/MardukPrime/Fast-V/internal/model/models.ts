@@ -52,6 +52,9 @@ export interface DashboardSummary {
     "settings": Settings;
     "recentSubscriptions": SubscriptionView[] | null;
     "activeNode": NodeView | null;
+    "uploadBytes": number;
+    "downloadBytes": number;
+    "totalBytes": number;
 }
 
 /**

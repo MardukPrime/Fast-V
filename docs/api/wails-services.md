@@ -218,3 +218,10 @@
 ```text
 upload=1024; download=2048; total=1048576; expire=1893456000
 ```
+## DashboardSummary 用量字段
+
+| 字段 | 说明 |
+|---|---|
+| uploadBytes | 所有订阅上传流量合计 |
+| downloadBytes | 所有订阅下载流量合计 |
+| totalBytes | 所有订阅套餐流量合计 |

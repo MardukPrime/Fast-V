@@ -29,8 +29,12 @@ func (s *DashboardService) Summary() model.DashboardSummary {
 	snapshot := s.store.Snapshot()
 	active := 0
 	lastUpdated := ""
+	var uploadBytes, downloadBytes, totalBytes int64
 	for _, sub := range snapshot.Subscriptions {
 		if sub.Enabled {
+			uploadBytes += sub.UploadBytes
+			downloadBytes += sub.DownloadBytes
+			totalBytes += sub.TotalBytes
 			active++
 		}
 		if sub.UpdatedAt > lastUpdated {
@@ -77,5 +81,8 @@ func (s *DashboardService) Summary() model.DashboardSummary {
 		Settings:            snapshot.Settings,
 		RecentSubscriptions: recentViews,
 		ActiveNode:          activeNode,
+		UploadBytes:         uploadBytes,
+		DownloadBytes:       downloadBytes,
+		TotalBytes:          totalBytes,
 	}
 }

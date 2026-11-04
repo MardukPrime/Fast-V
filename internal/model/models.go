@@ -132,6 +132,9 @@ type DashboardSummary struct {
 	Settings            Settings           `json:"settings"`
 	RecentSubscriptions []SubscriptionView `json:"recentSubscriptions"`
 	ActiveNode          *NodeView          `json:"activeNode"`
+	UploadBytes         int64              `json:"uploadBytes"`
+	DownloadBytes       int64              `json:"downloadBytes"`
+	TotalBytes          int64              `json:"totalBytes"`
 }
 
 // UpdateAllResult summarizes a bulk subscription refresh.

@@ -289,7 +289,7 @@ func (c *Checker) measureDownload(ctx context.Context, client *http.Client) (int
 		return written, 0, err
 	}
 	if elapsed <= 0 {
-		return written, 0, errors.New("speed test completed too quickly")
+		elapsed = 0.001
 	}
 	mbps := float64(written) * 8 / elapsed / 1_000_000
 	return written, mbps, nil

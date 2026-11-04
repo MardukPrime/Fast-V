@@ -59,9 +59,28 @@ func (m *Manager) SetOnStateChange(callback func(model.ProxyState)) {
 func (m *Manager) State() model.ProxyState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.state
+	return m.enrichNodeState(m.state)
 }
 
+func (m *Manager) enrichNodeState(state model.ProxyState) model.ProxyState {
+	if state.NodeID != "" && state.NodeName != "" {
+		return state
+	}
+	node, ok := m.store.ActiveNode()
+	if !ok {
+		return state
+	}
+	state.NodeID = node.ID
+	state.NodeName = node.Name
+	state.NodeProtocol = node.Protocol
+	state.NodeAddress = node.Address
+	state.NodePort = node.Port
+	if sub, err := m.store.FindSubscription(node.SubscriptionID); err == nil {
+		state.NodeSubscription = sub.Name
+	}
+	state.ProxyMode = m.store.Settings().ProxyMode
+	return state
+}
 func (m *Manager) SetOnLog(callback func(model.LogEntry)) {
 	m.logsMu.Lock()
 	defer m.logsMu.Unlock()
@@ -132,7 +151,7 @@ func logLevel(line string) string {
 func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.mu.Lock()
 	if m.cmd != nil {
-		state := m.state
+		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
 		return state, nil
 	}
@@ -286,7 +305,7 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.mu.Lock()
 	if m.cmd == nil {
 		m.state = model.ProxyState{Status: "stopped"}
-		state := m.state
+		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
 		if cleanup := m.takeTunCleanup(); cleanup != nil {
 			_ = cleanup()
@@ -321,7 +340,7 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.done = nil
 	m.job = nil
 	m.state = model.ProxyState{Status: "stopped"}
-	state := m.state
+	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
 	m.emit(state)
 	return state, nil
@@ -393,7 +412,7 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 			}
 		}
 	}
-	state := m.state
+	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
 	m.emit(state)
 }
@@ -409,7 +428,7 @@ func (m *Manager) fail(message string) (model.ProxyState, error) {
 	m.appendLog("error", "system", message)
 	m.mu.Lock()
 	m.state = model.ProxyState{Status: "error", Error: message}
-	state := m.state
+	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
 	m.emit(state)
 	return state, errors.New(message)
