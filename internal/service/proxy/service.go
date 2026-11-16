@@ -31,6 +31,12 @@ const (
 	proxyFailoverFailureThreshold = 2
 	// proxyURLTestBudget bounds a URL latency round triggered by the UI.
 	proxyURLTestBudget = 35 * time.Second
+	// trafficHistoryFlushInterval is how often accumulated live traffic deltas are
+	// persisted into the daily traffic history. The sampler delivers a sample
+	// every two seconds, so writing each delta straight to the store would
+	// rewrite the data file thirty times a minute; batching keeps the cost
+	// negligible while still recording every byte.
+	trafficHistoryFlushInterval = 60 * time.Second
 )
 
 // ProxyService is the Wails adapter for local proxy start, stop and testing.
@@ -53,11 +59,21 @@ type ProxyService struct {
 
 	resultsMu      sync.RWMutex
 	urlTestResults []model.NodeLatency
+
+	// traffic batches live traffic samples into the store's daily history so the
+	// data file is only rewritten once per flush interval (plus proxy stop and
+	// service shutdown) instead of every sampling tick.
+	traffic *trafficRecorder
 }
 
 func New(st *store.Store, coreProvider proxyruntime.CoreInfoProvider) *ProxyService {
 	manager := proxyruntime.NewManager(st, coreProvider)
-	service := &ProxyService{store: st, manager: manager, core: coreProvider}
+	service := &ProxyService{
+		store:   st,
+		manager: manager,
+		core:    coreProvider,
+		traffic: newTrafficRecorder(st, trafficHistoryFlushInterval),
+	}
 	manager.SetOnStateChange(service.emit)
 	manager.SetOnLog(service.emitLog)
 	manager.SetOnTraffic(service.emitTraffic)
@@ -102,6 +118,9 @@ func (s *ProxyService) ServiceShutdown() error {
 		<-done
 	}
 	_, err := s.manager.Stop()
+	// Persist the traffic deltas accumulated since the last periodic flush before
+	// the service goes away.
+	s.flushTrafficHistory()
 	return err
 }
 
@@ -202,7 +221,11 @@ func (s *ProxyService) Restart() (model.ProxyState, error) {
 func (s *ProxyService) Stop() (model.ProxyState, error) {
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
-	return s.manager.Stop()
+	state, err := s.manager.Stop()
+	// The traffic sampler stops with the proxy; write the remaining deltas now
+	// instead of waiting for a flush interval that may never come.
+	s.flushTrafficHistory()
+	return state, err
 }
 
 func (s *ProxyService) State() model.ProxyState {
@@ -487,10 +510,150 @@ func (s *ProxyService) emit(state model.ProxyState) {
 	if app := application.Get(); app != nil {
 		app.Event.Emit("proxy:state", state)
 	}
+	// A stopped or failed proxy produces no further live samples, so persist the
+	// pending traffic deltas now instead of waiting for the next interval.
+	if state.Status == "stopped" || state.Status == "error" {
+		s.flushTrafficHistory()
+	}
 }
 
 func (s *ProxyService) emitTraffic(stats model.TrafficStats) {
 	if app := application.Get(); app != nil {
 		app.Event.Emit("proxy:traffic", stats)
 	}
+	// Accumulate the delta in memory; persistence happens once per flush interval
+	// (or when the proxy stops) so the sampler's two second tick never rewrites
+	// the store file.
+	if err := s.observeTraffic(stats); err != nil {
+		s.manager.AppendLog("warning", "stats", "保存流量历史失败: "+err.Error())
+	}
+}
+
+// observeTraffic forwards one live sample to the traffic recorder. It is a small
+// wrapper so the event emission above stays independent from persistence.
+func (s *ProxyService) observeTraffic(stats model.TrafficStats) error {
+	if s.traffic == nil {
+		return nil
+	}
+	return s.traffic.observe(stats)
+}
+
+// flushTrafficHistory persists accumulated live traffic deltas into the daily
+// history immediately. Failures are logged and never fail the proxy operation.
+func (s *ProxyService) flushTrafficHistory() {
+	if s.traffic == nil {
+		return
+	}
+	if err := s.traffic.flush(); err != nil {
+		s.manager.AppendLog("warning", "stats", "保存流量历史失败: "+err.Error())
+	}
+}
+
+// trafficRecorder batches live traffic deltas in memory and writes them into the
+// store's daily history at most once per flush interval. Live samples arrive
+// every two seconds; accumulating them until the interval elapsed (or until the
+// proxy stops / the service shuts down) keeps the disk cost negligible while
+// still recording every byte.
+type trafficRecorder struct {
+	store    *store.Store
+	interval time.Duration
+	// now is overridable in tests; nil means time.Now.
+	now func() time.Time
+
+	mu            sync.Mutex
+	pendingUplink int64
+	pendingDown   int64
+	lastFlushAt   time.Time
+}
+
+func newTrafficRecorder(st *store.Store, interval time.Duration) *trafficRecorder {
+	if interval <= 0 {
+		interval = trafficHistoryFlushInterval
+	}
+	recorder := &trafficRecorder{store: st, interval: interval, now: time.Now}
+	recorder.lastFlushAt = recorder.clock()
+	return recorder
+}
+
+// observe adds one live sample to the pending totals and flushes them once the
+// flush interval elapsed. Snapshots that report an error or a stopped proxy are
+// ignored: on error the sampler repeats the last successful window's deltas, so
+// counting them would double count traffic.
+func (r *trafficRecorder) observe(stats model.TrafficStats) error {
+	if r == nil || r.store == nil || !stats.Running || stats.Error != "" {
+		return nil
+	}
+	uplink, downlink := stats.UplinkBytes, stats.DownlinkBytes
+	if uplink < 0 {
+		uplink = 0
+	}
+	if downlink < 0 {
+		downlink = 0
+	}
+	r.mu.Lock()
+	r.pendingUplink += uplink
+	r.pendingDown += downlink
+	if r.pendingUplink+r.pendingDown == 0 || !r.flushDueLocked() {
+		r.mu.Unlock()
+		return nil
+	}
+	pendingUplink, pendingDown := r.takePendingLocked()
+	r.mu.Unlock()
+	return r.persist(pendingUplink, pendingDown)
+}
+
+// flush writes every pending delta immediately. It is used when the proxy stops
+// or the service shuts down so no traffic is lost between two intervals.
+func (r *trafficRecorder) flush() error {
+	if r == nil || r.store == nil {
+		return nil
+	}
+	r.mu.Lock()
+	uplink, downlink := r.takePendingLocked()
+	r.mu.Unlock()
+	return r.persist(uplink, downlink)
+}
+
+// pending returns the currently buffered totals. It is only used by tests.
+func (r *trafficRecorder) pending() (int64, int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.pendingUplink, r.pendingDown
+}
+
+// flushDueLocked reports whether the next flush is due. The caller must hold r.mu.
+func (r *trafficRecorder) flushDueLocked() bool {
+	return !r.clock().Before(r.lastFlushAt.Add(r.interval))
+}
+
+// takePendingLocked returns and clears the pending totals, recording the flush
+// time. The caller must hold r.mu.
+func (r *trafficRecorder) takePendingLocked() (int64, int64) {
+	uplink, downlink := r.pendingUplink, r.pendingDown
+	r.pendingUplink, r.pendingDown = 0, 0
+	r.lastFlushAt = r.clock()
+	return uplink, downlink
+}
+
+// persist writes one batch into the store. On failure the bytes are put back
+// into the pending totals so the next sample retries instead of dropping them.
+func (r *trafficRecorder) persist(uplink, downlink int64) error {
+	if uplink == 0 && downlink == 0 {
+		return nil
+	}
+	if err := r.store.AddTrafficBytes(uplink, downlink, r.clock()); err != nil {
+		r.mu.Lock()
+		r.pendingUplink += uplink
+		r.pendingDown += downlink
+		r.mu.Unlock()
+		return err
+	}
+	return nil
+}
+
+func (r *trafficRecorder) clock() time.Time {
+	if r.now == nil {
+		return time.Now()
+	}
+	return r.now()
 }

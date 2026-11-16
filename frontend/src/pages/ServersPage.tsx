@@ -14,7 +14,7 @@ type EditorTab = "form" | "json";
 
 type SortMode = "default" | "name" | "latency" | "favorite";
 
-type BatchAction = "enable" | "disable" | "copy" | "delete";
+type BatchAction = "enable" | "disable" | "copy" | "delete" | "tag";
 
 const sortOptions: { value: SortMode; label: string }[] = [
   { value: "default", label: "默认顺序" },
@@ -41,6 +41,25 @@ const tlsOptions = [
 
 function protocolLabel(protocol: string) {
   return protocol === "shadowsocks" ? "Shadowsocks" : protocol.toUpperCase();
+}
+
+// Mirrors store.NormalizeTag on the backend: a tag is trimmed, has at most 24
+// characters (runes) and must not contain newlines or control characters.
+const TAG_MAX_LENGTH = 24;
+
+const tagCharCount = (value: string) => Array.from(value.trim()).length;
+
+function validateNodeTag(value: string): string {
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (char === "\n" || char === "\r" || code < 0x20 || code === 0x7f) {
+      return "标签不能包含换行或控制字符";
+    }
+  }
+  if (tagCharCount(value) > TAG_MAX_LENGTH) {
+    return `标签最多 ${TAG_MAX_LENGTH} 个字符`;
+  }
+  return "";
 }
 
 function CopyLinkIcon() {
@@ -77,6 +96,9 @@ export default function ServersPage(props: ServersProps) {
   const [search, setSearch] = createSignal("");
   const [protocol, setProtocol] = createSignal("");
   const [subscriptionID, setSubscriptionID] = createSignal("");
+  const [tagFilter, setTagFilter] = createSignal("");
+  // Tag dictionary from NodeService.Tags(); refreshed with every node reload.
+  const [tags, setTags] = createSignal<string[]>([]);
   const [latencies, setLatencies] = createSignal<Record<string, NodeLatency>>({});
   // Real proxy-chain HTTP latencies (NodeService.TestURL). They take priority
   // over the TCP reachability values above in the latency column.
@@ -114,6 +136,15 @@ export default function ServersPage(props: ServersProps) {
   const [importResult, setImportResult] = createSignal<NodeImportResult | null>(null);
   const [pageNotice, setPageNotice] = createSignal("");
 
+  // Shared tag editor dialog: either one node (tagEditorNode) or the current
+  // batch selection (tagEditorIDs). Both paths submit to the tag service.
+  const [tagEditorOpen, setTagEditorOpen] = createSignal(false);
+  const [tagEditorNode, setTagEditorNode] = createSignal<NodeView | null>(null);
+  const [tagEditorIDs, setTagEditorIDs] = createSignal<string[]>([]);
+  const [tagValue, setTagValue] = createSignal("");
+  const [tagError, setTagError] = createSignal("");
+  const [tagBusy, setTagBusy] = createSignal(false);
+
   // URL latency tests run a temporary Xray-core process and may take seconds.
   // Never touch signals after the page has been disposed.
   let alive = true;
@@ -131,11 +162,27 @@ export default function ServersPage(props: ServersProps) {
   const [editorError, setEditorError] = createSignal("");
   const [editorMessage, setEditorMessage] = createSignal("");
 
+  // The tag dictionary is best-effort: a failed call must neither hide nodes nor
+  // surface a page error, the next reload simply retries.
+  const refreshTags = async () => {
+    try {
+      const list = await NodeService.Tags();
+      if (!alive) return;
+      const next = (list ?? []).filter((tag) => tag.trim() !== "");
+      setTags(next);
+      // Drop a filter whose tag no longer exists so the list is not stuck empty.
+      setTagFilter((current) => current && !next.includes(current) ? "" : current);
+    } catch {
+      // Keep the previous options.
+    }
+  };
+
   const load = async () => {
     setLoading(true);
     setError("");
     try {
       setNodes((await NodeService.List({ search: "", protocol: "", subscriptionId: "" })) ?? []);
+      await refreshTags();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -155,11 +202,13 @@ export default function ServersPage(props: ServersProps) {
 
   const filteredNodes = createMemo(() => {
     const keyword = search().trim().toLowerCase();
+    const tag = tagFilter();
     return nodes().filter((node) => {
       if (protocol() && node.protocol.toLowerCase() !== protocol()) return false;
       if (subscriptionID() && node.subscriptionId !== subscriptionID()) return false;
+      if (tag && node.tag !== tag) return false;
       if (!keyword) return true;
-      const haystack = [node.name, node.protocol, node.address, node.subscriptionName].join(" ").toLowerCase();
+      const haystack = [node.name, node.tag, node.protocol, node.address, node.subscriptionName].join(" ").toLowerCase();
       return haystack.includes(keyword);
     });
   });
@@ -508,6 +557,117 @@ export default function ServersPage(props: ServersProps) {
     }
   };
 
+  // ---- Node tags ----------------------------------------------------------
+  const openTagEditor = () => {
+    setTagError("");
+    setTagEditorOpen(true);
+  };
+
+  const openNodeTagEditor = (node: NodeView) => {
+    setTagEditorNode(node);
+    setTagEditorIDs([]);
+    setTagValue(node.tag);
+    openTagEditor();
+  };
+
+  const openBatchTagEditor = () => {
+    if (batchBusyActive()) return;
+    const ids = [...selectedIDs()];
+    if (ids.length === 0) return;
+    // Prefill only when every selected node already shares one tag; otherwise
+    // leave the field empty so overwriting a mixed selection stays deliberate.
+    const selected = nodes().filter((node) => ids.includes(node.id));
+    const first = selected[0]?.tag ?? "";
+    const common = first && selected.every((node) => node.tag === first) ? first : "";
+    setTagEditorNode(null);
+    setTagEditorIDs(ids);
+    setTagValue(common);
+    openTagEditor();
+  };
+
+  const closeTagEditor = () => {
+    if (tagBusy()) return;
+    setTagEditorOpen(false);
+    setTagEditorNode(null);
+    setTagEditorIDs([]);
+    setTagValue("");
+    setTagError("");
+  };
+
+  // Live validation keeps the save button honest: an invalid draft is never
+  // sent to the backend (which would reject it anyway).
+  const applyTagInput = (value: string) => {
+    setTagValue(value);
+    setTagError(validateNodeTag(value));
+  };
+
+  const clearTagInput = () => {
+    setTagValue("");
+    setTagError("");
+  };
+
+  const reportTagBatchResult = (tag: string, result: BatchResult, requested: number) => {
+    const errors = result.errors ?? [];
+    if (result.affected > 0) {
+      const partial = requested > result.affected;
+      if (tag) {
+        showPageNotice(partial
+          ? `已为 ${result.affected} / ${requested} 个节点设置标签「${tag}」，其余节点失败。`
+          : `已为 ${result.affected} 个节点设置标签「${tag}」。`);
+      } else {
+        showPageNotice(partial
+          ? `已清除 ${result.affected} / ${requested} 个节点的标签，其余节点失败。`
+          : `已清除 ${result.affected} 个节点的标签。`);
+      }
+    } else if (errors.length === 0) {
+      setError("设置标签失败：后端没有更新任何节点。");
+    }
+    if (errors.length > 0) {
+      const head = errors.slice(0, 2).join("；");
+      setError(errors.length > 2 ? `${head}；等共 ${errors.length} 个错误。` : head);
+    }
+  };
+
+  const submitTag = async () => {
+    if (tagBusy() || batchBusyActive()) return;
+    const validation = validateNodeTag(tagValue());
+    if (validation) {
+      setTagError(validation);
+      return;
+    }
+    // An empty (trimmed) tag is the documented way to clear it.
+    const tag = tagValue().trim();
+    const single = tagEditorNode();
+    const ids = single ? [single.id] : tagEditorIDs();
+    if (ids.length === 0) return;
+    setTagBusy(true);
+    setTagError("");
+    setError("");
+    try {
+      if (single) {
+        const updated = await NodeService.SetTag(single.id, tag);
+        setNodes((current) => current.map((item) => item.id === single.id ? updated : item));
+        showPageNotice(tag ? `已为「${single.name}」设置标签「${tag}」。` : `已清除「${single.name}」的标签。`);
+        await refreshTags();
+      } else {
+        setBatchBusy("tag");
+        const result = await NodeService.SetTagBatch(ids, tag);
+        await load();
+        clearSelection();
+        reportTagBatchResult(tag, result, ids.length);
+      }
+      setTagEditorOpen(false);
+      setTagEditorNode(null);
+      setTagEditorIDs([]);
+      setTagValue("");
+    } catch (err) {
+      setTagError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTagBusy(false);
+      setBatchBusy("");
+    }
+  };
+
   // ---- Share QR codes -----------------------------------------------------
   const closeQRCode = () => {
     qrRequest += 1;
@@ -765,7 +925,7 @@ export default function ServersPage(props: ServersProps) {
             <input
               value={search()}
               onInput={(event) => setSearch(event.currentTarget.value)}
-              placeholder="搜索节点、地址或订阅"
+              placeholder="搜索节点、标签、地址或订阅"
             />
           </label>
           <select class="quick-switch-select" value={activeNodeID()} onChange={(event) => switchActiveNode(event.currentTarget.value)} disabled={nodes().length === 0 || busyID() !== ""}>
@@ -782,6 +942,10 @@ export default function ServersPage(props: ServersProps) {
             <option value="">全部订阅</option>
             <For each={subscriptions()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
           </select>
+          <select class="node-tag-filter" value={tagFilter()} onChange={(event) => setTagFilter(event.currentTarget.value)} title="按标签筛选节点" aria-label="按标签筛选节点">
+            <option value="">全部标签</option>
+            <For each={tags()}>{(tag) => <option value={tag}>{tag}</option>}</For>
+          </select>
           <select class="node-sort" value={sortMode()} onChange={(event) => { const value = event.currentTarget.value; if (isSortMode(value)) setSortMode(value); }} aria-label="节点排序方式">
             <For each={sortOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
           </select>
@@ -797,7 +961,7 @@ export default function ServersPage(props: ServersProps) {
           <div classList={{ "node-batch-bar": true, active: selectedCount() > 0 }} aria-label="批量操作">
             <Show
               when={selectedCount() > 0}
-              fallback={<span class="node-batch-hint">勾选左侧复选框即可批量启用、禁用、复制或删除节点。</span>}
+              fallback={<span class="node-batch-hint">勾选左侧复选框即可批量启用、禁用、复制、删除或设置标签。</span>}
             >
               <span class="node-batch-count">已选 <strong>{selectedCount()}</strong> 项</span>
             </Show>
@@ -820,6 +984,9 @@ export default function ServersPage(props: ServersProps) {
               </button>
               <button class="btn secondary compact" type="button" onClick={() => void runBatchCopyLinks()} disabled={batchBusyActive() || selectedCount() === 0}>
                 <CopyLinkIcon /> {batchBusy() === "copy" ? "复制中..." : "批量复制链接"}
+              </button>
+              <button class="btn secondary compact" type="button" onClick={openBatchTagEditor} disabled={batchBusyActive() || selectedCount() === 0}>
+                <Icon name="edit" size={13} /> 设置标签
               </button>
               <button class="btn danger compact" type="button" onClick={() => void runBatchDelete()} disabled={batchBusyActive() || selectedCount() === 0}>
                 <Icon name="trash" size={13} /> {batchBusy() === "delete" ? "删除中..." : "批量删除"}
@@ -903,6 +1070,18 @@ export default function ServersPage(props: ServersProps) {
                         <strong title={node.name}>{node.name}</strong>
                         <Show when={node.manual}>
                           <span class="tag manual" title="通过分享链接手动导入的节点">手动</span>
+                        </Show>
+                        <Show when={node.tag}>
+                          <button
+                            type="button"
+                            class="tag node-tag-chip"
+                            onClick={() => openNodeTagEditor(node)}
+                            disabled={batchBusyActive() || tagBusy()}
+                            title={`标签：${node.tag}（点击编辑）`}
+                            aria-label={`编辑 ${node.name} 的标签：${node.tag}`}
+                          >
+                            {node.tag}
+                          </button>
                         </Show>
                       </div>
                       <small>{node.subscriptionName || (node.manual ? "手动添加" : "")}</small>
@@ -1037,6 +1216,87 @@ export default function ServersPage(props: ServersProps) {
               <button class="btn ghost" type="button" onClick={closeImport} disabled={importBusy()}>关闭</button>
               <button class="btn primary" type="button" onClick={importNodes} disabled={importBusy() || !importText().trim()}>
                 <Icon name="plus" size={14} /> {importBusy() ? "导入中..." : "导入"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={tagEditorOpen()}>
+        <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeTagEditor(); }}>
+          <div class="modal node-tag-modal">
+            <div class="modal-heading">
+              <div>
+                <h3>{tagEditorNode() ? "编辑节点标签" : "批量设置标签"}</h3>
+                <span>{tagEditorNode()
+                  ? `节点：${tagEditorNode()?.name ?? ""}`
+                  : `已选 ${tagEditorIDs().length} 个节点，保存后覆盖原有标签`}</span>
+              </div>
+              <button class="icon-button" onClick={closeTagEditor} disabled={tagBusy()} aria-label="关闭">
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div class="node-tag-body">
+              <label class="node-tag-field">
+                <span>标签名称</span>
+                <input
+                  class="node-tag-input"
+                  value={tagValue()}
+                  placeholder="例如：香港、备用、低延迟；留空表示清除标签"
+                  onInput={(event) => applyTagInput(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void submitTag();
+                    }
+                  }}
+                  disabled={tagBusy()}
+                  aria-label="节点标签"
+                />
+              </label>
+              <div class="node-tag-meta">
+                <span classList={{ "node-tag-counter": true, over: tagCharCount(tagValue()) > TAG_MAX_LENGTH }}>{tagCharCount(tagValue())} / {TAG_MAX_LENGTH}</span>
+                <button class="btn ghost compact node-tag-clear" type="button" onClick={clearTagInput} disabled={tagBusy() || !tagValue().trim()}>
+                  <Icon name="close" size={12} /> 清除标签
+                </button>
+              </div>
+
+              <Show when={tags().length > 0}>
+                <div class="node-tag-presets">
+                  <span class="node-tag-presets-label">已有标签</span>
+                  <div class="node-tag-preset-list">
+                    <For each={tags()}>
+                      {(tag) => (
+                        <button
+                          classList={{ "node-tag-preset": true, active: tagValue().trim() === tag }}
+                          type="button"
+                          onClick={() => { setTagValue(tag); setTagError(""); }}
+                          disabled={tagBusy()}
+                          title={tag}
+                        >
+                          {tag}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+
+              <p class="node-tag-hint">
+                <Icon name="alert" size={12} />
+                <span>标签最多 {TAG_MAX_LENGTH} 个字符，不能包含换行或控制字符；留空保存会清除标签。</span>
+              </p>
+
+              <Show when={tagError()}>
+                <div class="alert error"><span class="alert-message"><Icon name="alert" size={14} /> {tagError()}</span></div>
+              </Show>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn ghost" type="button" onClick={closeTagEditor} disabled={tagBusy()}>取消</button>
+              <button class="btn primary" type="button" onClick={() => void submitTag()} disabled={tagBusy() || validateNodeTag(tagValue()) !== "" || (tagEditorIDs().length === 0 && !tagEditorNode())}>
+                <Icon name="check" size={14} /> {tagBusy() ? "保存中..." : tagValue().trim() ? "保存标签" : "清除标签"}
               </button>
             </div>
           </div>

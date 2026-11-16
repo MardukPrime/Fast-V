@@ -6938,3 +6938,704 @@ select {
   justify-content: flex-end;
 }
 
+/* ----------------------------------------------------------------
+   M7 · Traffic history, latency history & diagnostics self-check
+   Reusable pieces: the seven-day traffic chart on the dashboard, the
+   latency sample list and the self-check result list on the network
+   page. Appended last on purpose so it can refine the glass layers
+   above without editing any existing rule.
+   ---------------------------------------------------------------- */
+
+/* Dashboard · 最近 7 天流量 */
+.traffic-history-panel {
+  padding: 20px 22px;
+}
+
+.traffic-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+}
+
+.traffic-history-total {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-history-total strong {
+  color: var(--text-secondary);
+  font-weight: 650;
+}
+
+.traffic-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.traffic-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.traffic-legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.traffic-legend-dot.downlink {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+}
+
+.traffic-legend-dot.uplink {
+  background: var(--success);
+}
+
+.traffic-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.traffic-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.traffic-day-total {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-day.today .traffic-day-total {
+  color: var(--text);
+}
+
+.traffic-day-plot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 132px;
+  padding: 0 6px;
+}
+
+.traffic-day-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  width: min(100%, 58px);
+  height: 100%;
+}
+
+.traffic-day-bar {
+  display: block;
+  width: 100%;
+  transition: filter 120ms ease;
+}
+
+.traffic-day-bar.downlink {
+  border-radius: 0 0 3px 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+}
+
+.traffic-day-bar.uplink {
+  border-radius: 3px 3px 0 0;
+  background: var(--success);
+}
+
+.traffic-day:hover .traffic-day-bar {
+  filter: brightness(1.12);
+}
+
+.traffic-day-zero {
+  display: block;
+  width: min(100%, 58px);
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.traffic-day-label {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-day.today .traffic-day-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.traffic-history-loading,
+.network-history-loading,
+.selfcheck-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 168px;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.traffic-history-loading .network-pulse,
+.network-history-loading .network-pulse,
+.selfcheck-loading .network-pulse {
+  margin-bottom: 4px;
+}
+
+.traffic-history-loading strong,
+.network-history-loading strong,
+.selfcheck-loading strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.selfcheck-loading > span:last-child {
+  max-width: 440px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.traffic-history-alert,
+.network-history-alert,
+.selfcheck-alert {
+  margin-top: 14px;
+}
+
+/* Network · 延迟历史 */
+.network-history-panel,
+.selfcheck-panel {
+  padding: 20px 22px;
+}
+
+.network-history-actions,
+.selfcheck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.network-history-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 340px;
+  margin-top: 14px;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  scrollbar-gutter: stable;
+}
+
+.network-history-row {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) 88px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.network-history-row:last-child {
+  border-bottom: 0;
+}
+
+.network-history-row:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.network-history-time {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.network-history-node {
+  min-width: 0;
+}
+
+.network-history-node strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-history-error {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-history-value {
+  justify-self: end;
+}
+
+/* Network · 自检诊断 */
+.selfcheck-timestamp {
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.selfcheck-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.selfcheck-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.selfcheck-chip strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.selfcheck-chip.ok {
+  border-color: rgba(146, 223, 180, 0.24);
+  color: var(--success);
+  background: rgba(146, 223, 180, 0.07);
+}
+
+.selfcheck-chip.warn {
+  border-color: rgba(228, 193, 134, 0.24);
+  color: var(--warning);
+  background: rgba(228, 193, 134, 0.07);
+}
+
+.selfcheck-chip.error {
+  border-color: rgba(240, 163, 163, 0.24);
+  color: var(--danger);
+  background: rgba(240, 163, 163, 0.07);
+}
+
+.selfcheck-verdict {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.selfcheck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.selfcheck-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--glass-border-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.selfcheck-item.ok {
+  border-left-color: var(--success);
+}
+
+.selfcheck-item.warn {
+  border-left-color: var(--warning);
+}
+
+.selfcheck-item.error {
+  border-left-color: var(--danger);
+}
+
+.selfcheck-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 64px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.selfcheck-badge.ok {
+  color: var(--success);
+  background: rgba(146, 223, 180, 0.09);
+}
+
+.selfcheck-badge.warn {
+  color: var(--warning);
+  background: rgba(228, 193, 134, 0.09);
+}
+
+.selfcheck-badge.error {
+  color: var(--danger);
+  background: rgba(240, 163, 163, 0.09);
+}
+
+.selfcheck-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.selfcheck-name {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.selfcheck-detail {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.selfcheck-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.selfcheck-hint svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Light theme: the translucent dark tweaks above need an inverted tint. */
+:root[data-theme="light"] .traffic-day-zero {
+  background: rgba(15, 23, 32, 0.16);
+}
+
+:root[data-theme="light"] .network-history-list {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+:root[data-theme="light"] .network-history-row {
+  border-bottom-color: rgba(15, 23, 32, 0.07);
+}
+
+:root[data-theme="light"] .network-history-row:hover {
+  background: rgba(15, 23, 32, 0.035);
+}
+
+:root[data-theme="light"] .selfcheck-item {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* Narrow windows (960px minimum shell): keep the labels on one line. */
+@media (max-width: 1100px) {
+  .traffic-chart {
+    gap: 6px;
+  }
+
+  .traffic-day-plot {
+    height: 112px;
+  }
+}
+
+@media (max-width: 900px) {
+  .network-history-row {
+    grid-template-columns: 98px minmax(0, 1fr) 76px;
+    gap: 8px;
+    padding: 9px 11px;
+  }
+
+  .selfcheck-verdict {
+    width: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .traffic-day-bar {
+    transition: none;
+  }
+}
+
+/* ----------------------------------------------------------------
+   M8 · Node tags: row tag chips, the toolbar tag filter and the
+   shared tag editor dialog (single node and batch selection).
+   Appended last on purpose: the rules above are left untouched.
+   ---------------------------------------------------------------- */
+
+/* Toolbar · 标签筛选，宽度与其它筛选下拉保持一致 */
+.node-toolbar > select.node-tag-filter {
+  min-width: 112px;
+}
+
+/* Row · node tag chip (rendered only for nodes that have a tag) */
+.node-tag-chip {
+  display: inline-block;
+  flex: 0 0 auto;
+  max-width: 96px;
+  padding: 2px 8px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.node-tag-chip:hover:not(:disabled) {
+  border-color: rgba(185, 220, 242, 0.34);
+  color: var(--accent);
+  background: rgba(185, 220, 242, 0.09);
+}
+
+.node-tag-chip:focus-visible {
+  outline: 2px solid rgba(182, 216, 239, 0.65);
+  outline-offset: 1px;
+}
+
+:root[data-theme="light"] .node-tag-chip {
+  border-color: rgba(44, 67, 90, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .node-tag-chip:hover:not(:disabled) {
+  border-color: rgba(55, 111, 147, 0.32);
+  color: var(--accent-strong);
+  background: rgba(70, 123, 158, 0.1);
+}
+
+/* Tag editor dialog (single node + batch selection) */
+.node-tag-modal {
+  width: min(480px, 100%);
+}
+
+.node-tag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.node-tag-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-tag-field > span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.node-tag-input {
+  width: 100%;
+}
+
+.node-tag-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: -4px;
+}
+
+.node-tag-counter {
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-tag-counter.over {
+  color: var(--danger);
+}
+
+.node-tag-clear {
+  flex: 0 0 auto;
+}
+
+/* Existing tags offered as one-click chips */
+.node-tag-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"] .node-tag-presets {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.node-tag-presets-label {
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.node-tag-preset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.node-tag-preset {
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: 4px 10px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.045);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.node-tag-preset:hover:not(:disabled) {
+  border-color: var(--glass-border-strong);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.node-tag-preset.active {
+  border-color: rgba(185, 220, 242, 0.4);
+  color: var(--accent);
+  background: rgba(185, 220, 242, 0.1);
+}
+
+:root[data-theme="light"] .node-tag-preset {
+  border-color: rgba(44, 67, 90, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .node-tag-preset:hover:not(:disabled) {
+  border-color: rgba(55, 111, 147, 0.28);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+:root[data-theme="light"] .node-tag-preset.active {
+  border-color: rgba(70, 123, 158, 0.34);
+  color: var(--accent-strong);
+  background: rgba(70, 123, 158, 0.1);
+}
+
+.node-tag-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.node-tag-hint svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Narrow windows (960px minimum shell): keep the chip compact. */
+@media (max-width: 1160px) {
+  .node-tag-chip {
+    max-width: 76px;
+  }
+}
+
+@media (max-width: 620px) {
+  .node-tag-body {
+    padding: 14px;
+  }
+
+  .node-tag-preset-list {
+    max-height: 104px;
+  }
+}
+

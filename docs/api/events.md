@@ -9,6 +9,8 @@
 | core:state | CoreInfo | 状态变化 | 内核检测、检查、下载和安装状态 |
 | proxy:state | ProxyState | 状态变化 | 代理启动、运行、停止和异常状态 |
 | proxy:log | LogEntry | 日志行 | Xray stdout/stderr 和运行状态日志 |
+| proxy:traffic | TrafficStats | 每 2 秒（代理运行中） | 上下行窗口增量、会话累计与实时速率 |
+| app:update | UpdateInfo | 启动自动检查 / 手动检查后 | 应用更新检查结果 |
 | subscriptions:changed | 无 | 自动更新后 | 订阅自动更新完成 |
 
 ## 计划事件
@@ -16,7 +18,6 @@
 | 事件 | 载荷 | 说明 |
 |---|---|---|
 | core:log | LogBatch | 内核日志批量推送 |
-| proxy:traffic | TrafficSnapshot | 流量统计 |
 | speedtest:progress | SpeedTestProgress | 测速进度 |
 
 ## 规则

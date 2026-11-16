@@ -549,6 +549,18 @@ func TestTestURLWithoutCoreReportsPerNodeErrors(t *testing.T) {
 		t.Fatalf("expected a missing-core error: %+v", results[0])
 	}
 
+	// Failed measurements are recorded with their node name and error.
+	history := st.LatencyHistory(10)
+	if len(history) != 1 {
+		t.Fatalf("expected 1 recorded latency sample, got %+v", history)
+	}
+	if history[0].NodeID != "enabled-1" || history[0].NodeName != "Enabled" {
+		t.Fatalf("unexpected recorded sample: %+v", history[0])
+	}
+	if !strings.Contains(history[0].Error, "Xray-core") || history[0].CheckedAt == "" {
+		t.Fatalf("recorded failure sample must keep its error and timestamp: %+v", history[0])
+	}
+
 	explicit := service.TestURL([]string{"disabled-1", "missing"})
 	if len(explicit) != 2 {
 		t.Fatalf("expected 2 results, got %+v", explicit)
@@ -559,10 +571,22 @@ func TestTestURLWithoutCoreReportsPerNodeErrors(t *testing.T) {
 	if explicit[1].NodeID != "missing" || explicit[1].Error != "节点不存在" {
 		t.Fatalf("unexpected unknown node result: %+v", explicit[1])
 	}
+
+	history = st.LatencyHistory(10)
+	if len(history) != 3 {
+		t.Fatalf("expected 3 recorded latency samples, got %+v", history)
+	}
+	if history[1].NodeID != "disabled-1" || history[1].NodeName != "Disabled" || history[1].Error != "节点未启用" {
+		t.Fatalf("unexpected disabled node sample: %+v", history[1])
+	}
+	// Unknown node ids have no store record, so only the id is kept.
+	if history[2].NodeID != "missing" || history[2].NodeName != "" || history[2].Error != "节点不存在" {
+		t.Fatalf("unexpected unknown node sample: %+v", history[2])
+	}
 }
 
 func TestTestURLThroughRealCore(t *testing.T) {
-	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	binary := filepath.Join("..", "..", "..", ".fastv-data", "cores", "xray", "xray.exe")
 	if _, err := os.Stat(binary); err != nil {
 		t.Skip("local Xray binary not available")
 	}
@@ -590,6 +614,19 @@ func TestTestURLThroughRealCore(t *testing.T) {
 	}
 	if results[0].Error != "" || results[0].LatencyMS <= 0 {
 		t.Fatalf("real URL latency test failed: %+v", results[0])
+	}
+
+	// Successful measurements are recorded as well, with the measured latency.
+	history := st.LatencyHistory(10)
+	if len(history) != 1 {
+		t.Fatalf("expected 1 recorded latency sample, got %+v", history)
+	}
+	sample := history[0]
+	if sample.NodeID != "freedom-1" || sample.NodeName != "Freedom" || sample.Error != "" {
+		t.Fatalf("unexpected recorded sample: %+v", sample)
+	}
+	if sample.LatencyMS != results[0].LatencyMS || sample.CheckedAt != results[0].CheckedAt {
+		t.Fatalf("recorded sample does not match the measurement result: sample=%+v result=%+v", sample, results[0])
 	}
 }
 
@@ -816,5 +853,200 @@ func TestDeleteBatchUpdatesSubscriptionNodeCount(t *testing.T) {
 	}
 	if sub.NodeCount != 1 {
 		t.Fatalf("subscription node count was not updated: %+v", sub)
+	}
+}
+
+func TestSetTag(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+	id := imported.Nodes[0].ID
+
+	// Imported nodes start without a tag and NodeView carries it.
+	for _, view := range imported.Nodes {
+		if view.Tag != "" {
+			t.Fatalf("expected imported nodes to have no tag, got %+v", view)
+		}
+	}
+
+	view, err := service.SetTag(id, "  美国节点  ")
+	if err != nil {
+		t.Fatalf("SetTag failed: %v", err)
+	}
+	if view.Tag != "美国节点" || view.ID != id {
+		t.Fatalf("unexpected NodeView after SetTag: %+v", view)
+	}
+
+	// The list view exposes the stored tag too.
+	found := false
+	for _, item := range service.List(model.NodeFilter{}) {
+		if item.ID != id {
+			continue
+		}
+		found = true
+		if item.Tag != "美国节点" {
+			t.Fatalf("List did not carry the node tag: %+v", item)
+		}
+	}
+	if !found {
+		t.Fatal("tagged node missing from List")
+	}
+
+	// Clearing a tag with whitespace works like an empty string.
+	view, err = service.SetTag(id, "   ")
+	if err != nil {
+		t.Fatalf("clearing the tag failed: %v", err)
+	}
+	if view.Tag != "" {
+		t.Fatalf("expected an empty tag after clearing, got %q", view.Tag)
+	}
+
+	// Invalid tags are rejected with Chinese errors and change nothing.
+	if _, err := service.SetTag(id, "香港\n节点"); err == nil || !strings.Contains(err.Error(), "换行或控制字符") {
+		t.Fatalf("expected a Chinese newline error, got %v", err)
+	}
+	if _, err := service.SetTag(id, strings.Repeat("标", store.MaxTagLength+1)); err == nil || !strings.Contains(err.Error(), "标签最多 24 个字符") {
+		t.Fatalf("expected a Chinese length error, got %v", err)
+	}
+	if node, err := st.FindNode(id); err != nil || node.Tag != "" {
+		t.Fatalf("a rejected tag changed the stored value: %+v (err=%v)", node, err)
+	}
+
+	if _, err := service.SetTag("missing-node", "香港"); err == nil {
+		t.Fatal("expected an error for an unknown node id")
+	}
+}
+
+func TestSetTagBatch(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+	ids := make([]string, 0, len(imported.Nodes))
+	for _, view := range imported.Nodes {
+		ids = append(ids, view.ID)
+	}
+
+	if _, err := service.SetTagBatch(nil, "香港"); err == nil || !strings.Contains(err.Error(), "请先选择要设置标签的节点") {
+		t.Fatalf("expected a Chinese empty selection error, got %v", err)
+	}
+
+	// Partial failures are collected and do not abort the batch.
+	result, err := service.SetTagBatch([]string{ids[0], "missing-node", ids[2], ids[0]}, "香港")
+	if err != nil {
+		t.Fatalf("batch tagging failed: %v", err)
+	}
+	if result.Affected != 2 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "missing-node") {
+		t.Fatalf("unexpected batch result: %+v", result)
+	}
+	for _, id := range []string{ids[0], ids[2]} {
+		node, err := st.FindNode(id)
+		if err != nil || node.Tag != "香港" {
+			t.Fatalf("node %s tag was not applied: %+v (err=%v)", id, node, err)
+		}
+	}
+	if node, _ := st.FindNode(ids[1]); node.Tag != "" {
+		t.Fatalf("node outside the batch was tagged: %+v", node)
+	}
+
+	// An invalid tag is rejected before anything is written.
+	if _, err := service.SetTagBatch(ids, strings.Repeat("标", store.MaxTagLength+1)); err == nil || !strings.Contains(err.Error(), "标签最多 24 个字符") {
+		t.Fatalf("expected a Chinese length error, got %v", err)
+	}
+	for _, id := range ids {
+		if node, err := st.FindNode(id); err != nil || node.Tag == strings.Repeat("标", store.MaxTagLength+1) {
+			t.Fatalf("invalid batch tag was applied to %s: %+v (err=%v)", id, node, err)
+		}
+	}
+
+	// An empty tag clears the tags of the selected nodes.
+	result, err = service.SetTagBatch(ids, "")
+	if err != nil || result.Affected != 4 || len(result.Errors) != 0 {
+		t.Fatalf("batch clear failed: %+v (err=%v)", result, err)
+	}
+	if tags := service.Tags(); len(tags) != 0 {
+		t.Fatalf("expected no remaining tags, got %v", tags)
+	}
+}
+
+func TestTags(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+	ids := make([]string, 0, len(imported.Nodes))
+	for _, view := range imported.Nodes {
+		ids = append(ids, view.ID)
+	}
+
+	if tags := service.Tags(); len(tags) != 0 {
+		t.Fatalf("expected an empty tag dictionary, got %v", tags)
+	}
+	setTags := map[string]string{ids[0]: "香港", ids[1]: "us", ids[2]: "香港"}
+	for id, tag := range setTags {
+		if _, err := service.SetTag(id, tag); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := []string{"us", "香港"}
+	got := service.Tags()
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("expected deduplicated sorted tags %v, got %v", want, got)
+	}
+
+	// A new tag is inserted at its sorted position.
+	if _, err := service.SetTag(ids[3], "jp"); err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"jp", "us", "香港"}
+	got = service.Tags()
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
+	}
+}
+
+func TestSubscriptionRefreshKeepsNodeTags(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	parsed := []subdomain.ParsedNode{
+		{Name: "Alpha", Protocol: "vless", Address: "alpha.example.com", Port: 443, Raw: "vless://alpha"},
+		{Name: "Beta", Protocol: "trojan", Address: "beta.example.com", Port: 443, Raw: "trojan://beta"},
+	}
+	nodes := subdomain.BuildNodes("sub-tag", parsed)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-tag", Name: "Tag Sub"}, nodes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetTag(nodes[0].ID, "香港"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A refresh rebuilds every node id; the tag must follow the SourceKey.
+	if err := st.ReplaceSubscriptionNodes("sub-tag", subdomain.BuildNodes("sub-tag", parsed)); err != nil {
+		t.Fatal(err)
+	}
+	seen := make(map[string]string)
+	for _, item := range service.List(model.NodeFilter{}) {
+		seen[item.Name] = item.Tag
+	}
+	if got := seen["Alpha"]; got != "香港" {
+		t.Fatalf("expected Alpha to keep its tag after a refresh, got %q (all: %+v)", got, seen)
+	}
+	if got := seen["Beta"]; got != "" {
+		t.Fatalf("expected Beta to stay untagged, got %q", got)
+	}
+	if tags := service.Tags(); len(tags) != 1 || tags[0] != "香港" {
+		t.Fatalf("expected the tag dictionary to keep the surviving tag, got %v", tags)
 	}
 }

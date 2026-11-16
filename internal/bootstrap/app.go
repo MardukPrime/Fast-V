@@ -8,14 +8,17 @@ import (
 
 	"github.com/MardukPrime/Fast-V/internal/buildinfo"
 	"github.com/MardukPrime/Fast-V/internal/platform"
+	"github.com/MardukPrime/Fast-V/internal/selfcheck"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
 	backupservice "github.com/MardukPrime/Fast-V/internal/service/backup"
 	"github.com/MardukPrime/Fast-V/internal/service/core"
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
+	historyservice "github.com/MardukPrime/Fast-V/internal/service/history"
 	"github.com/MardukPrime/Fast-V/internal/service/node"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
 	routingservice "github.com/MardukPrime/Fast-V/internal/service/routing"
+	selfcheckservice "github.com/MardukPrime/Fast-V/internal/service/selfcheck"
 	"github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/service/subscription"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -44,6 +47,8 @@ func Run(assets embed.FS) error {
 	settingsSvc := settings.New(st)
 	routingSvc := routingservice.New(st)
 	backupSvc := backupservice.New(st)
+	historySvc := historyservice.New(st)
+	selfcheckSvc := selfcheckservice.New(selfcheck.NewChecker(st, coreSvc, proxySvc))
 
 	app := application.New(application.Options{
 		Name:        buildinfo.ProductName,
@@ -59,6 +64,8 @@ func Run(assets embed.FS) error {
 			application.NewService(settingsSvc),
 			application.NewService(routingSvc),
 			application.NewService(backupSvc),
+			application.NewService(historySvc),
+			application.NewService(selfcheckSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

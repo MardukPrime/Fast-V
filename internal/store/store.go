@@ -14,9 +14,61 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 const storeVersion = 4
+
+// History retention limits. Traffic is aggregated per local calendar day and
+// latency samples keep the newest entries; both are exposed by the services so
+// the frontend clamps request parameters against the same limits.
+const (
+	// MaxTrafficHistoryDays is how many daily traffic aggregates are retained.
+	MaxTrafficHistoryDays = 180
+	// MaxLatencyHistorySamples is how many URL latency samples are retained.
+	MaxLatencyHistorySamples = 300
+	// localDateLayout is the day key used for daily traffic aggregation.
+	localDateLayout = "2006-01-02"
+)
+
+// MaxTagLength is the maximum number of characters (runes) a node tag may
+// contain.
+const MaxTagLength = 24
+
+// NormalizeTag trims surrounding whitespace and validates a user-defined node
+// tag. It is the single source of truth for the tag rules, shared by the store,
+// subscription refreshes and the node service:
+//   - surrounding whitespace is trimmed;
+//   - an empty result means "no tag" (clearing a tag);
+//   - at most MaxTagLength characters (runes) are allowed;
+//   - newlines and control characters are rejected.
+func NormalizeTag(tag string) (string, error) {
+	normalized := strings.TrimSpace(tag)
+	if normalized == "" {
+		return "", nil
+	}
+	for _, r := range normalized {
+		if r == '\n' || r == '\r' || unicode.IsControl(r) {
+			return "", errors.New("标签不能包含换行或控制字符")
+		}
+	}
+	if utf8.RuneCountInString(normalized) > MaxTagLength {
+		return "", fmt.Errorf("标签最多 %d 个字符", MaxTagLength)
+	}
+	return normalized, nil
+}
+
+// normalizeLoadedTag applies the tag rules to a record read from disk or a
+// backup. Invalid persisted tags are dropped instead of breaking the load, and
+// submit values are always validated on write.
+func normalizeLoadedTag(tag string) string {
+	normalized, err := NormalizeTag(tag)
+	if err != nil {
+		return ""
+	}
+	return normalized
+}
 
 // Aliases keep the storage package decoupled from frontend service packages.
 type Settings = model.Settings
@@ -24,12 +76,14 @@ type Subscription = model.Subscription
 type Node = model.Node
 
 type storeData struct {
-	Version       int                 `json:"version"`
-	Settings      Settings            `json:"settings"`
-	Subscriptions []Subscription      `json:"subscriptions"`
-	Nodes         []Node              `json:"nodes"`
-	ActiveNodeID  string              `json:"activeNodeId"`
-	RoutingRules  []model.RoutingRule `json:"routingRules"`
+	Version        int                   `json:"version"`
+	Settings       Settings              `json:"settings"`
+	Subscriptions  []Subscription        `json:"subscriptions"`
+	Nodes          []Node                `json:"nodes"`
+	ActiveNodeID   string                `json:"activeNodeId"`
+	RoutingRules   []model.RoutingRule   `json:"routingRules"`
+	TrafficHistory []model.DailyTraffic  `json:"trafficHistory"`
+	LatencyHistory []model.LatencySample `json:"latencyHistory"`
 }
 
 // Store persists subscriptions, nodes and settings in a user-local JSON file.
@@ -85,10 +139,12 @@ func DefaultSettings() Settings {
 
 func defaultStoreData() storeData {
 	return storeData{
-		Version:       storeVersion,
-		Settings:      DefaultSettings(),
-		Subscriptions: []Subscription{},
-		Nodes:         []Node{},
+		Version:        storeVersion,
+		Settings:       DefaultSettings(),
+		Subscriptions:  []Subscription{},
+		Nodes:          []Node{},
+		TrafficHistory: []model.DailyTraffic{},
+		LatencyHistory: []model.LatencySample{},
 	}
 }
 
@@ -174,8 +230,15 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Nodes == nil {
 		loaded.Nodes = []Node{}
 	}
+	// History is optional data: repair and cap what was loaded so a hand-edited
+	// or truncated file can never break the normal store contract.
+	loaded.TrafficHistory = normalizeTrafficHistory(loaded.TrafficHistory)
+	loaded.LatencyHistory = normalizeLatencyHistory(loaded.LatencyHistory)
 
 	for i := range loaded.Nodes {
+		// Tags are user data that must always satisfy the write-time rules, even
+		// when the file was hand edited.
+		loaded.Nodes[i].Tag = normalizeLoadedTag(loaded.Nodes[i].Tag)
 		if loaded.Nodes[i].SourceKey == "" {
 			key := loaded.Nodes[i].Raw
 			if key == "" {
@@ -272,6 +335,8 @@ func (s *Store) snapshotLocked() storeData {
 	out.Subscriptions = append([]Subscription{}, s.data.Subscriptions...)
 	out.Nodes = append([]Node{}, s.data.Nodes...)
 	out.RoutingRules = append([]model.RoutingRule{}, s.data.RoutingRules...)
+	out.TrafficHistory = append([]model.DailyTraffic{}, s.data.TrafficHistory...)
+	out.LatencyHistory = append([]model.LatencySample{}, s.data.LatencyHistory...)
 	return out
 }
 
@@ -315,6 +380,21 @@ func (s *Store) Restore(data []byte) (model.BackupResult, error) {
 	return result, nil
 }
 
+// backupDocument is the raw backup shape used by Restore. The history sections
+// are kept as raw JSON so a missing or malformed history can never make an
+// otherwise valid configuration backup unrestorable; downtime data is optional
+// and must never block a configuration import.
+type backupDocument struct {
+	Version        int                 `json:"version"`
+	Settings       Settings            `json:"settings"`
+	Subscriptions  []Subscription      `json:"subscriptions"`
+	Nodes          []Node              `json:"nodes"`
+	ActiveNodeID   string              `json:"activeNodeId"`
+	RoutingRules   []model.RoutingRule `json:"routingRules"`
+	TrafficHistory json.RawMessage     `json:"trafficHistory"`
+	LatencyHistory json.RawMessage     `json:"latencyHistory"`
+}
+
 func parseBackup(data []byte) (storeData, error) {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" {
@@ -324,9 +404,19 @@ func parseBackup(data []byte) (storeData, error) {
 		return storeData{}, errors.New("备份内容缺少配置数据")
 	}
 
-	var parsed storeData
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+	var document backupDocument
+	if err := json.Unmarshal([]byte(trimmed), &document); err != nil {
 		return storeData{}, fmt.Errorf("备份文件不是有效的 JSON: %w", err)
+	}
+	parsed := storeData{
+		Version:        document.Version,
+		Settings:       document.Settings,
+		Subscriptions:  document.Subscriptions,
+		Nodes:          document.Nodes,
+		ActiveNodeID:   document.ActiveNodeID,
+		RoutingRules:   document.RoutingRules,
+		TrafficHistory: parseTrafficHistory(document.TrafficHistory),
+		LatencyHistory: parseLatencyHistory(document.LatencyHistory),
 	}
 	if parsed.Version <= 0 {
 		return storeData{}, errors.New("备份文件缺少有效的版本信息")
@@ -353,6 +443,35 @@ func parseBackup(data []byte) (storeData, error) {
 	restored.Version = storeVersion
 	normalizeRestoredData(&restored)
 	return restored, nil
+}
+
+// parseTrafficHistory decodes the optional traffic history section of a backup.
+// A missing, null or malformed section is treated as empty so damaged
+// throughput data never blocks restoring the configuration itself.
+func parseTrafficHistory(raw json.RawMessage) []model.DailyTraffic {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return []model.DailyTraffic{}
+	}
+	var entries []model.DailyTraffic
+	if err := json.Unmarshal([]byte(trimmed), &entries); err != nil {
+		return []model.DailyTraffic{}
+	}
+	return entries
+}
+
+// parseLatencyHistory decodes the optional latency history section of a backup.
+// Like the traffic section it degrades to an empty list instead of failing.
+func parseLatencyHistory(raw json.RawMessage) []model.LatencySample {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return []model.LatencySample{}
+	}
+	var samples []model.LatencySample
+	if err := json.Unmarshal([]byte(trimmed), &samples); err != nil {
+		return []model.LatencySample{}
+	}
+	return samples
 }
 
 func validateBackup(data storeData) error {
@@ -429,6 +548,82 @@ func findNodeByID(nodes []Node, id string) (Node, bool) {
 	return Node{}, false
 }
 
+// normalizeTrafficHistory repairs a traffic history slice loaded from disk or a
+// backup: entries without a usable date are dropped, duplicate days are summed,
+// the result is sorted by date and only the newest MaxTrafficHistoryDays days are
+// kept. It is idempotent for data produced by AddTrafficBytes, so Export/Restore
+// round trips stay stable.
+func normalizeTrafficHistory(entries []model.DailyTraffic) []model.DailyTraffic {
+	out := []model.DailyTraffic{}
+	if len(entries) == 0 {
+		return out
+	}
+	byDate := make(map[string]model.DailyTraffic, len(entries))
+	for _, entry := range entries {
+		date := normalizeLocalDate(entry.Date)
+		if date == "" {
+			continue
+		}
+		current := byDate[date]
+		current.Date = date
+		if entry.UplinkBytes > 0 {
+			current.UplinkBytes += entry.UplinkBytes
+		}
+		if entry.DownlinkBytes > 0 {
+			current.DownlinkBytes += entry.DownlinkBytes
+		}
+		byDate[date] = current
+	}
+	if len(byDate) == 0 {
+		return out
+	}
+	dates := make([]string, 0, len(byDate))
+	for date := range byDate {
+		dates = append(dates, date)
+	}
+	sort.Strings(dates)
+	if len(dates) > MaxTrafficHistoryDays {
+		dates = dates[len(dates)-MaxTrafficHistoryDays:]
+	}
+	out = make([]model.DailyTraffic, 0, len(dates))
+	for _, date := range dates {
+		out = append(out, byDate[date])
+	}
+	return out
+}
+
+// normalizeLatencyHistory repairs a latency sample slice loaded from disk or a
+// backup: whitespace is trimmed, negative latencies are clamped, samples without
+// any node reference are dropped and only the newest MaxLatencyHistorySamples
+// samples are kept in their original order.
+func normalizeLatencyHistory(samples []model.LatencySample) []model.LatencySample {
+	out := make([]model.LatencySample, 0, len(samples))
+	for _, sample := range samples {
+		sample.NodeID = strings.TrimSpace(sample.NodeID)
+		sample.NodeName = strings.TrimSpace(sample.NodeName)
+		if sample.NodeID == "" && sample.NodeName == "" {
+			continue
+		}
+		if sample.LatencyMS < 0 {
+			sample.LatencyMS = 0
+		}
+		out = append(out, sample)
+	}
+	if len(out) > MaxLatencyHistorySamples {
+		out = append([]model.LatencySample(nil), out[len(out)-MaxLatencyHistorySamples:]...)
+	}
+	return out
+}
+
+// normalizeLocalDate validates and canonicalizes a "YYYY-MM-DD" day key.
+func normalizeLocalDate(value string) string {
+	parsed, err := time.Parse(localDateLayout, strings.TrimSpace(value))
+	if err != nil {
+		return ""
+	}
+	return parsed.Format(localDateLayout)
+}
+
 func (s *Store) update(fn func(*storeData) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -500,6 +695,9 @@ func (s *Store) AddSubscription(sub Subscription, nodes []Node) error {
 	return s.update(func(data *storeData) error {
 		nextOrder := nextNodeOrder(data.Nodes)
 		for i := range nodes {
+			// Tags are user data owned by the node, never by the subscription
+			// payload, so newly added subscription nodes always start without one.
+			nodes[i].Tag = ""
 			if nodes[i].Order == 0 {
 				nodes[i].Order = nextOrder
 				nextOrder++
@@ -520,6 +718,15 @@ func (s *Store) AddSubscription(sub Subscription, nodes []Node) error {
 func (s *Store) AddManualNodes(nodes []Node) error {
 	if len(nodes) == 0 {
 		return nil
+	}
+	// Imported nodes normally carry no tag; a caller-provided tag is normalized
+	// with the same rules as SetNodeTag so invalid tags never reach the store.
+	for i := range nodes {
+		normalized, err := NormalizeTag(nodes[i].Tag)
+		if err != nil {
+			return err
+		}
+		nodes[i].Tag = normalized
 	}
 	return s.update(func(data *storeData) error {
 		nextOrder := nextNodeOrder(data.Nodes)
@@ -580,12 +787,15 @@ func (s *Store) ReplaceSubscriptionNodes(id string, nodes []Node) error {
 			if old, ok := oldBySource[nodes[i].SourceKey]; ok {
 				nodes[i].ID = old.ID
 				nodes[i].Enabled = old.Enabled
-				// Favorites and the user-defined order belong to the node, not to
-				// the subscription payload, so they survive every refresh.
+				// Favorites, the user-defined order and tags belong to the node,
+				// not to the subscription payload, so they survive every refresh.
 				nodes[i].Favorite = old.Favorite
 				nodes[i].Order = old.Order
+				nodes[i].Tag = old.Tag
 				continue
 			}
+			// A node that appears for the first time has no user data yet.
+			nodes[i].Tag = ""
 			nodes[i].Order = nextOrder
 			nextOrder++
 		}
@@ -707,6 +917,27 @@ func (s *Store) ListNodes() []Node {
 	return out
 }
 
+// ListTags returns the distinct non-empty tags of all nodes sorted in ascending
+// (byte) order. The dictionary is what the UI offers as tag filters.
+func (s *Store) ListTags() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	seen := make(map[string]struct{}, len(s.data.Nodes))
+	tags := make([]string, 0, len(s.data.Nodes))
+	for _, node := range s.data.Nodes {
+		if node.Tag == "" {
+			continue
+		}
+		if _, ok := seen[node.Tag]; ok {
+			continue
+		}
+		seen[node.Tag] = struct{}{}
+		tags = append(tags, node.Tag)
+	}
+	sort.Strings(tags)
+	return tags
+}
+
 // nextNodeOrder returns the order value to use for the next appended node.
 func nextNodeOrder(nodes []Node) int {
 	next := 0
@@ -797,6 +1028,28 @@ func (s *Store) SetNodeFavorite(id string, favorite bool) (Node, error) {
 				continue
 			}
 			data.Nodes[i].Favorite = favorite
+			updated = data.Nodes[i]
+			return nil
+		}
+		return errors.New("node not found")
+	})
+	return updated, err
+}
+
+// SetNodeTag sets or clears (empty tag) the user-defined tag of a node. Tags are
+// kept by subscription refreshes like favorites and the user-defined order.
+func (s *Store) SetNodeTag(id string, tag string) (Node, error) {
+	normalized, err := NormalizeTag(tag)
+	if err != nil {
+		return Node{}, err
+	}
+	var updated Node
+	err = s.update(func(data *storeData) error {
+		for i := range data.Nodes {
+			if data.Nodes[i].ID != id {
+				continue
+			}
+			data.Nodes[i].Tag = normalized
 			updated = data.Nodes[i]
 			return nil
 		}
@@ -964,6 +1217,114 @@ func (s *Store) ActiveNode() (Node, bool) {
 	}
 	return Node{}, false
 }
+
+// AddTrafficBytes adds one traffic delta to the aggregate of the local calendar
+// day that contains at. Deltas of the same day are summed, days are kept in
+// ascending order and only the newest MaxTrafficHistoryDays days are retained.
+// Zero deltas are ignored so a flush with nothing to record does not touch disk.
+func (s *Store) AddTrafficBytes(uplink, downlink int64, at time.Time) error {
+	if uplink < 0 {
+		uplink = 0
+	}
+	if downlink < 0 {
+		downlink = 0
+	}
+	if uplink == 0 && downlink == 0 {
+		return nil
+	}
+	date := trafficDateKey(at)
+	return s.update(func(data *storeData) error {
+		data.TrafficHistory = addTrafficBytes(data.TrafficHistory, date, uplink, downlink)
+		return nil
+	})
+}
+
+// trafficDateKey returns the local "YYYY-MM-DD" key of at; the zero time is
+// treated as now.
+func trafficDateKey(at time.Time) string {
+	if at.IsZero() {
+		at = time.Now()
+	}
+	return at.In(time.Local).Format(localDateLayout)
+}
+
+// addTrafficBytes upserts one day entry into an ascending history slice and
+// trims days beyond the retention limit.
+func addTrafficBytes(entries []model.DailyTraffic, date string, uplink, downlink int64) []model.DailyTraffic {
+	index := sort.Search(len(entries), func(i int) bool { return entries[i].Date >= date })
+	if index < len(entries) && entries[index].Date == date {
+		entries[index].UplinkBytes += uplink
+		entries[index].DownlinkBytes += downlink
+	} else {
+		entries = append(entries, model.DailyTraffic{})
+		copy(entries[index+1:], entries[index:])
+		entries[index] = model.DailyTraffic{Date: date, UplinkBytes: uplink, DownlinkBytes: downlink}
+	}
+	if len(entries) > MaxTrafficHistoryDays {
+		entries = append([]model.DailyTraffic(nil), entries[len(entries)-MaxTrafficHistoryDays:]...)
+	}
+	return entries
+}
+
+// TrafficHistory returns up to days of the newest daily traffic aggregates in
+// ascending date order. days <= 0 (or larger than the stored history) returns
+// everything that is retained. The result is always a fresh copy.
+func (s *Store) TrafficHistory(days int) []model.DailyTraffic {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := s.data.TrafficHistory
+	if days <= 0 || days > len(entries) {
+		days = len(entries)
+	}
+	out := make([]model.DailyTraffic, days)
+	copy(out, entries[len(entries)-days:])
+	return out
+}
+
+// AddLatencySamples appends latency samples in one batch write. The newest
+// MaxLatencyHistorySamples samples are retained and the input order (newest
+// last) is preserved.
+func (s *Store) AddLatencySamples(samples []model.LatencySample) error {
+	normalized := normalizeLatencyHistory(samples)
+	if len(normalized) == 0 {
+		return nil
+	}
+	return s.update(func(data *storeData) error {
+		combined := make([]model.LatencySample, 0, len(data.LatencyHistory)+len(normalized))
+		combined = append(combined, data.LatencyHistory...)
+		combined = append(combined, normalized...)
+		if len(combined) > MaxLatencyHistorySamples {
+			combined = append([]model.LatencySample(nil), combined[len(combined)-MaxLatencyHistorySamples:]...)
+		}
+		data.LatencyHistory = combined
+		return nil
+	})
+}
+
+// LatencyHistory returns up to limit of the newest latency samples in their
+// recorded order (chronological, newest last). limit <= 0 returns everything that
+// is retained. The result is always a fresh copy.
+func (s *Store) LatencyHistory(limit int) []model.LatencySample {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := s.data.LatencyHistory
+	if limit <= 0 || limit > len(entries) {
+		limit = len(entries)
+	}
+	out := make([]model.LatencySample, limit)
+	copy(out, entries[len(entries)-limit:])
+	return out
+}
+
+// ClearHistory removes all recorded traffic and latency history in one write.
+func (s *Store) ClearHistory() error {
+	return s.update(func(data *storeData) error {
+		data.TrafficHistory = []model.DailyTraffic{}
+		data.LatencyHistory = []model.LatencySample{}
+		return nil
+	})
+}
+
 func newID() string {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

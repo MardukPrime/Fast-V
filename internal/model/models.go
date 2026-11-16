@@ -120,6 +120,7 @@ type Node struct {
 	Enabled        bool   `json:"enabled"`
 	Favorite       bool   `json:"favorite"`
 	Order          int    `json:"order"`
+	Tag            string `json:"tag"`
 	SourceKey      string `json:"sourceKey"`
 	OutboundJSON   string `json:"outboundJson"`
 }
@@ -136,6 +137,7 @@ type NodeView struct {
 	Port             int    `json:"port"`
 	Enabled          bool   `json:"enabled"`
 	Favorite         bool   `json:"favorite"`
+	Tag              string `json:"tag"`
 	Active           bool   `json:"active"`
 }
 
@@ -306,6 +308,7 @@ func NodeViewFrom(node Node, subscriptionName string, activeID string) NodeView 
 		Port:             node.Port,
 		Enabled:          node.Enabled,
 		Favorite:         node.Favorite,
+		Tag:              node.Tag,
 		Active:           node.ID == activeID,
 	}
 }

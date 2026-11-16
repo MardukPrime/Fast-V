@@ -105,6 +105,34 @@ export function SetFavorite(id: string, favorite: boolean): $CancellablePromise<
     return $Call.ByID(4247381173, id, favorite);
 }
 
+/**
+ * SetTag sets the user-defined tag of one node; an empty tag clears it. Tags are
+ * validated by the store (surrounding whitespace trimmed, at most
+ * store.MaxTagLength characters, no newlines or control characters) and survive
+ * subscription refreshes like favorites and the user-defined order.
+ */
+export function SetTag(id: string, tag: string): $CancellablePromise<model$0.NodeView> {
+    return $Call.ByID(4189026699, id, tag);
+}
+
+/**
+ * SetTagBatch applies one tag to several nodes at once (an empty tag clears the
+ * tag). The tag follows the same normalization rules as SetTag and is validated
+ * once up front, so an invalid tag never changes a single node. Individual node
+ * failures are collected in BatchResult.Errors instead of aborting the batch.
+ */
+export function SetTagBatch(ids: string[] | null, tag: string): $CancellablePromise<model$0.BatchResult> {
+    return $Call.ByID(2527847005, ids, tag);
+}
+
+/**
+ * Tags returns every tag currently used by a node, deduplicated and sorted in
+ * ascending order. It is the dictionary the UI uses to build tag filters.
+ */
+export function Tags(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(362794154);
+}
+
 export function TestLatency(ids: string[] | null): $CancellablePromise<model$0.NodeLatency[] | null> {
     return $Call.ByID(3941718459, ids);
 }

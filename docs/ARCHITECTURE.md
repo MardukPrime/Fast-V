@@ -243,15 +243,26 @@ main.go
   -> internal/model
 
 internal/core          -> internal/model, standard library
-internal/proxy         -> internal/model, standard library
-internal/subscription  -> internal/model, standard library
+internal/proxy         -> internal/model, internal/nodeconfig, internal/routing, standard library
+internal/subscription  -> internal/model, internal/nodeconfig, standard library
 internal/nodeconfig    -> internal/model, standard library
 internal/routing       -> internal/model, standard library
 internal/diagnostics   -> internal/model, standard library
 internal/store         -> internal/model, standard library
+internal/platform      -> standard library / OS APIs
+internal/update        -> internal/model, net/http
+internal/selfcheck     -> internal/model, internal/proxy, internal/platform, standard library
 internal/service/*     -> internal/core, internal/proxy, internal/subscription, internal/diagnostics, internal/routing, internal/store, internal/model, Wails
 internal/bootstrap     -> all concrete implementations
 ```
+
+新增模块约定：
+
+- `internal/update`：应用更新检查（GitHub Release API + semver），无 Wails 依赖。
+- `internal/selfcheck`：健康检查引擎，依赖通过接口注入（设置、内核、代理状态、HTTP 客户端、配置校验函数），便于单测。
+- `internal/platform/systemproxy_*`：Windows 系统代理设置与恢复；`autostart_*`：开机自启（HKCU Run）；非 Windows 提供空实现。
+- `internal/bootstrap/tray.go`：系统托盘与窗口行为（关闭/最小化到托盘），只在组合根中接线，不进入业务包。
+- `internal/service/history`、`internal/service/selfcheck`、`internal/service/backup`：新增 Wails 服务适配层。
 
 禁止：
 

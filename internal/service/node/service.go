@@ -134,6 +134,47 @@ func (s *NodeService) SetFavorite(id string, favorite bool) (model.NodeView, err
 	return *s.view(item), nil
 }
 
+// SetTag sets the user-defined tag of one node; an empty tag clears it. Tags are
+// validated by the store (surrounding whitespace trimmed, at most
+// store.MaxTagLength characters, no newlines or control characters) and survive
+// subscription refreshes like favorites and the user-defined order.
+func (s *NodeService) SetTag(id string, tag string) (model.NodeView, error) {
+	item, err := s.store.SetNodeTag(id, tag)
+	if err != nil {
+		return model.NodeView{}, err
+	}
+	return *s.view(item), nil
+}
+
+// SetTagBatch applies one tag to several nodes at once (an empty tag clears the
+// tag). The tag follows the same normalization rules as SetTag and is validated
+// once up front, so an invalid tag never changes a single node. Individual node
+// failures are collected in BatchResult.Errors instead of aborting the batch.
+func (s *NodeService) SetTagBatch(ids []string, tag string) (model.BatchResult, error) {
+	result := model.BatchResult{Errors: make([]string, 0)}
+	ids = uniqueNodeIDs(ids)
+	if len(ids) == 0 {
+		return result, errors.New("请先选择要设置标签的节点")
+	}
+	if _, err := store.NormalizeTag(tag); err != nil {
+		return result, err
+	}
+	for _, id := range ids {
+		if _, err := s.SetTag(id, tag); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("节点 %s 设置标签失败: %v", id, err))
+			continue
+		}
+		result.Affected++
+	}
+	return result, nil
+}
+
+// Tags returns every tag currently used by a node, deduplicated and sorted in
+// ascending order. It is the dictionary the UI uses to build tag filters.
+func (s *NodeService) Tags() []string {
+	return s.store.ListTags()
+}
+
 // Reorder persists a drag-and-drop ordering for the node list.
 func (s *NodeService) Reorder(ids []string) error {
 	return s.store.ReorderNodes(ids)
@@ -445,7 +486,39 @@ func (s *NodeService) TestURL(ids []string) []model.NodeLatency {
 	// Keep the temporary measurement config next to the normal runtime config so
 	// it never depends on a writable OS temp directory.
 	tempDir := filepath.Join(s.store.DataDir(), "runtime")
-	return proxyruntime.URLTestNodes(ctx, s.core, s.store.ListNodes(), s.store.Settings(), ids, tempDir)
+	results := proxyruntime.URLTestNodes(ctx, s.core, s.store.ListNodes(), s.store.Settings(), ids, tempDir)
+	s.recordLatencyHistory(results)
+	return results
+}
+
+// recordLatencyHistory appends one URL latency round (successes and failures) to
+// the persisted latency history in a single batch write. The node name is
+// resolved from the store; the measurement engine only returns ids. Recording is
+// best-effort: a store failure must never change the measurement result returned
+// to the caller.
+func (s *NodeService) recordLatencyHistory(results []model.NodeLatency) {
+	if len(results) == 0 {
+		return
+	}
+	names := make(map[string]string)
+	for _, item := range s.store.ListNodes() {
+		names[item.ID] = item.Name
+	}
+	samples := make([]model.LatencySample, 0, len(results))
+	for _, result := range results {
+		checkedAt := result.CheckedAt
+		if checkedAt == "" {
+			checkedAt = model.NowRFC3339()
+		}
+		samples = append(samples, model.LatencySample{
+			NodeID:    result.NodeID,
+			NodeName:  names[result.NodeID],
+			LatencyMS: result.LatencyMS,
+			Error:     result.Error,
+			CheckedAt: checkedAt,
+		})
+	}
+	_ = s.store.AddLatencySamples(samples)
 }
 
 func (s *NodeService) view(item model.Node) *model.NodeView {

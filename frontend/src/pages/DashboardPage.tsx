@@ -1,10 +1,11 @@
-import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { Events } from "@wailsio/runtime";
 
 import { DashboardService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/dashboard";
+import { Service as HistoryService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/history";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
-import type { AppInfo, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView, TrafficStats } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { AppInfo, DailyTraffic, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView, TrafficStats } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type DashboardProps = {
@@ -61,6 +62,64 @@ function formatRate(value: number) {
   return `${rate.toFixed(1)} B/s`;
 }
 
+// The weekly chart always shows a rolling seven-day window, so the backend only
+// has to provide the days that actually recorded traffic.
+const TRAFFIC_HISTORY_DAYS = 7;
+const TRAFFIC_HISTORY_REFRESH_MS = 30_000;
+
+type TrafficDay = {
+  date: string;
+  label: string;
+  uplinkBytes: number;
+  downlinkBytes: number;
+  totalBytes: number;
+  downlinkPercent: number;
+  uplinkPercent: number;
+  today: boolean;
+};
+
+function localDateKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function buildTrafficWindow(entries: DailyTraffic[]): TrafficDay[] {
+  const byDate = new Map<string, DailyTraffic>();
+  for (const entry of entries) {
+    if (entry?.date) byDate.set(entry.date, entry);
+  }
+  const now = new Date();
+  const days: TrafficDay[] = [];
+  for (let offset = TRAFFIC_HISTORY_DAYS - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+    const key = localDateKey(date);
+    const entry = byDate.get(key);
+    const uplinkBytes = Math.max(0, entry?.uplinkBytes ?? 0);
+    const downlinkBytes = Math.max(0, entry?.downlinkBytes ?? 0);
+    days.push({
+      date: key,
+      label: key.slice(5),
+      uplinkBytes,
+      downlinkBytes,
+      totalBytes: uplinkBytes + downlinkBytes,
+      downlinkPercent: 0,
+      uplinkPercent: 0,
+      today: offset === 0,
+    });
+  }
+  // Bar heights are relative to the busiest day so the chart always fills the
+  // plot area; the two stacked segments together never exceed 100%.
+  const maxTotal = days.reduce((max, day) => Math.max(max, day.totalBytes), 0);
+  if (maxTotal > 0) {
+    for (const day of days) {
+      day.downlinkPercent = (day.downlinkBytes / maxTotal) * 100;
+      day.uplinkPercent = (day.uplinkBytes / maxTotal) * 100;
+    }
+  }
+  return days;
+}
+
 function sessionTotalBytes(stats: TrafficStats | null) {
   if (!stats) return 0;
   return Math.max(0, stats.totalUplinkBytes) + Math.max(0, stats.totalDownlinkBytes);
@@ -105,6 +164,23 @@ export default function DashboardPage(props: DashboardProps) {
   const [error, setError] = createSignal("");
   const [clock, setClock] = createSignal(Date.now());
   const [traffic, setTraffic] = createSignal<TrafficStats | null>(null);
+  const [trafficHistory, setTrafficHistory] = createSignal<DailyTraffic[]>([]);
+  const [historyLoading, setHistoryLoading] = createSignal(true);
+  const [historyError, setHistoryError] = createSignal("");
+
+  // Traffic history failures are non-fatal: the live proxy keeps working and the
+  // card keeps showing the last successfully loaded window.
+  const loadTrafficHistory = async () => {
+    try {
+      const days = await HistoryService.Traffic(TRAFFIC_HISTORY_DAYS);
+      setTrafficHistory(days ?? []);
+      setHistoryError("");
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -165,6 +241,22 @@ export default function DashboardPage(props: DashboardProps) {
       window.clearInterval(timer);
     });
   });
+
+  // Persisted daily traffic: load once, then refresh every 30s while the proxy
+  // runs because the backend keeps flushing live deltas into today's aggregate.
+  // The proxy state itself is a dependency so the final flushed numbers show up
+  // as soon as the proxy stops, without polling in the background.
+  createEffect(() => {
+    const running = isRunning();
+    void loadTrafficHistory();
+    if (!running) return;
+    const timer = window.setInterval(() => { void loadTrafficHistory(); }, TRAFFIC_HISTORY_REFRESH_MS);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
+  const trafficWindow = createMemo(() => buildTrafficWindow(trafficHistory()));
+  const trafficWindowTotal = createMemo(() => trafficWindow().reduce((sum, day) => sum + day.totalBytes, 0));
+  const trafficHasData = createMemo(() => trafficWindowTotal() > 0);
 
   const totalSessionTraffic = () => sessionTotalBytes(traffic());
   const downlinkRateLabel = () => (isRunning() ? formatRate(traffic()?.downlinkRate ?? 0) : "—");
@@ -353,6 +445,76 @@ export default function DashboardPage(props: DashboardProps) {
           </section>
         </aside>
       </div>
+
+      <section class="glass-panel traffic-history-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>最近 7 天流量</h3>
+            <span>每日通过本地代理的上行 / 下行总量，历史保存在本地</span>
+          </div>
+          <div class="traffic-history-meta">
+            <Show when={trafficHasData()}>
+              <span class="traffic-history-total">
+                7 天合计 <strong>{formatBytes(trafficWindowTotal())}</strong>
+              </span>
+            </Show>
+            <div class="traffic-legend">
+              <span class="traffic-legend-item"><i class="traffic-legend-dot downlink" /> 下行</span>
+              <span class="traffic-legend-item"><i class="traffic-legend-dot uplink" /> 上行</span>
+            </div>
+          </div>
+        </div>
+
+        <Show when={historyError()}>
+          <div class="alert error traffic-history-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> 流量历史加载失败：{historyError()}</span>
+            <button class="btn ghost" onClick={() => { void loadTrafficHistory(); }}>重试</button>
+          </div>
+        </Show>
+
+        <Show
+          when={historyLoading()}
+          fallback={
+            <Show
+              when={trafficHasData()}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="speed" size={22} /></div>
+                  <strong>还没有流量历史</strong>
+                  <span>启动代理并产生流量后，这里会显示每天的上行与下行总量。</span>
+                </div>
+              }
+            >
+              <div class="traffic-chart" role="img" aria-label="最近 7 天每天的上行与下行流量柱状图">
+                <For each={trafficWindow()}>
+                  {(day) => (
+                    <div classList={{ "traffic-day": true, today: day.today }}>
+                      <span class="traffic-day-total">{formatBytes(day.totalBytes)}</span>
+                      <div
+                        class="traffic-day-plot"
+                        title={`${day.date} · 下行 ${formatBytes(day.downlinkBytes)} · 上行 ${formatBytes(day.uplinkBytes)}`}
+                      >
+                        <Show when={day.totalBytes > 0} fallback={<span class="traffic-day-zero" />}>
+                          <div class="traffic-day-stack">
+                            <span class="traffic-day-bar downlink" style={{ height: `${day.downlinkPercent}%` }} />
+                            <span class="traffic-day-bar uplink" style={{ height: `${day.uplinkPercent}%` }} />
+                          </div>
+                        </Show>
+                      </div>
+                      <span class="traffic-day-label">{day.label}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          }
+        >
+          <div class="traffic-history-loading">
+            <span class="network-pulse" />
+            <strong>正在读取流量历史…</strong>
+          </div>
+        </Show>
+      </section>
 
       <section class="glass-panel recent-panel dashboard-recent">
         <div class="panel-heading">

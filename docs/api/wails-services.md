@@ -7,6 +7,32 @@
 | 方法 | 输入 | 输出 | 说明 |
 |---|---|---|---|
 | Info | - | AppInfo | 应用名称、版本、平台和构建信息 |
+| IsElevated | - | bool | 当前进程是否以管理员权限运行 |
+| RestartAsAdmin | - | - | 以管理员权限重新启动 |
+| AutostartEnabled | - | bool | 读取开机自启状态（HKCU Run） |
+| SetAutostart | enabled | bool | 设置开机自启并返回新状态 |
+| CheckUpdate | - | UpdateInfo | 检查应用更新（GitHub Release） |
+
+## BackupService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Export | - | string | 导出完整配置 JSON（含节点凭据，注意保管） |
+| Import | data | BackupResult | 校验并恢复配置，返回恢复数量 |
+
+## HistoryService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Traffic | days | []DailyTraffic | 最近 N 天每日上下行流量（1-180） |
+| Latencies | limit | []LatencySample | 最近 N 条 URL 延迟样本（1-300） |
+| Clear | - | - | 清空流量与延迟历史 |
+
+## SelfCheckService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Run | - | []CheckResult | 运行 10 项自检（内核/配置/端口/权限/系统代理/网络/Geo/数据目录/订阅） |
 
 ## DashboardService
 
@@ -24,12 +50,13 @@
 | UpdateAll | - | UpdateAllResult | 更新全部启用订阅 |
 | Delete | id | - | 删除订阅及其节点 |
 | Nodes | id | []NodeView | 查看订阅解析出的节点 |
+| QRCode | id | string | 订阅链接二维码（PNG data URL，不暴露 URL 文本） |
 
 ## NodeService
 
 | 方法 | 输入 | 输出 | 说明 |
 |---|---|---|---|
-| List | NodeFilter | []NodeView | 搜索和筛选节点 |
+| List | NodeFilter | []NodeView | 搜索和筛选节点（后端按 Order 稳定排序） |
 | Active | - | NodeView | 获取当前节点 |
 | SetActive | id | NodeView | 设置当前节点 |
 | Config | id | NodeConfig | 提取可编辑节点配置 |
@@ -38,6 +65,17 @@
 | SetEnabled | id, enabled | NodeView | 启用或禁用节点 |
 | Delete | id | - | 删除节点 |
 | TestLatency | ids | []NodeLatency | 直接 TCP 连通性测试 |
+| TestURL | ids | []NodeLatency | 真实链路 URL 延迟测速（批量临时内核） |
+| ImportLinks | text | NodeImportResult | 从分享链接/剪贴板批量导入手动节点 |
+| ExportLinks | ids | []NodeLink | 导出分享链接（为空导出全部） |
+| QRCode | id | string | 节点分享链接二维码（PNG data URL） |
+| SetFavorite | id, favorite | NodeView | 收藏/取消收藏 |
+| Reorder | ids | - | 手动排序 |
+| SetEnabledBatch | ids, enabled | BatchResult | 批量启用/禁用 |
+| DeleteBatch | ids | BatchResult | 批量删除 |
+| SetTag | id, tag | NodeView | 设置节点标签（空标签清除） |
+| SetTagBatch | ids, tag | BatchResult | 批量设置标签 |
+| Tags | - | []string | 已有标签列表 |
 
 ## SettingsService
 
@@ -70,6 +108,8 @@
 | Restart | - | ProxyState | 重启正在运行的代理 |
 | Logs | - | []LogEntry | 获取捕获的 Xray 运行日志 |
 | ClearLogs | - | - | 清空运行日志 |
+| Traffic | - | TrafficStats | 实时流量（窗口增量、会话累计、速率） |
+| TestURL | ids | []NodeLatency | 真实链路 URL 延迟（复用临时内核测速） |
 
 ## RoutingService
 
@@ -80,6 +120,10 @@
 | Delete | id | - | 删除规则 |
 | Reorder | ids | - | 按给定顺序重排规则 |
 | Reset | - | []RoutingRule | 恢复默认规则 |
+| Presets | - | []RoutingPreset | 内置规则预设 |
+| ApplyPreset | id | []RoutingRule | 应用预设（替换全部规则） |
+| Import | rules | []RoutingRule | 原子导入规则（任一非法则不落盘） |
+
 ## DiagnosticsService
 
 | 方法 | 输入 | 输出 | 说明 |
@@ -122,6 +166,20 @@
 | xraySockoptDomainStrategy | sockopt.domainStrategy |
 | xraySockoptJson | 高级 sockopt JSON，覆盖同名字段 |
 | xrayFinalMaskJson | outbound.streamSettings.finalmask JSON 对象 |
+| systemProxyMode | Windows 系统代理：system（自动设置/恢复）或 off |
+| statsEnabled | 启用 Xray StatsService 实时流量统计（默认开启） |
+| allowLan | 本地入站监听 0.0.0.0（局域网共享） |
+| inboundAuthEnabled | SOCKS 入站用户名/密码认证 |
+| inboundUsername / inboundPassword | 入站认证凭据（密码 ≥6 位） |
+| autoSelectEnabled | 按 URL 延迟自动选择最优节点（TUN 下暂停） |
+| autoSelectIntervalMinutes | 自动选路间隔（1-1440 分钟） |
+| autoSelectToleranceMs | 切换容差（0-5000 ms，避免抖动） |
+| failoverEnabled | 连续健康检查失败自动故障切换 |
+| loadBalanceEnabled | 启用 Xray 多节点负载均衡（需 ≥2 个启用节点，TUN 下回退单节点） |
+| loadBalanceMode | leastPing / leastLoad / roundRobin |
+| closeToTray | 关闭窗口时隐藏到托盘（而非退出） |
+| minimizeToTray | 最小化时隐藏到托盘（best effort） |
+| autoCheckUpdate | 启动时自动检查应用更新 |
 
 ## 契约规则
 
@@ -147,6 +205,8 @@
 | localAddr | 本地 SOCKS/HTTP 地址 |
 | startedAt | 启动时间 |
 | pid | Xray 进程 PID |
+
+负载均衡模式下 `nodeId` 为空、`nodeName` 为「负载均衡（N 个节点）」，其余字段不变。
 ## NetworkProbe 字段
 
 | 字段 | 说明 |

@@ -32,6 +32,17 @@ export interface BatchResult {
 }
 
 /**
+ * CheckResult is one diagnostics self-check outcome.
+ */
+export interface CheckResult {
+    "id": string;
+    "name": string;
+    "status": string;
+    "detail": string;
+    "hint": string;
+}
+
+/**
  * CoreInfo describes the locally installed Xray-core and the latest known release.
  */
 export interface CoreInfo {
@@ -53,6 +64,15 @@ export interface CoreUpdateResult {
     "updated": boolean;
     "info": CoreInfo;
     "message": string;
+}
+
+/**
+ * DailyTraffic aggregates one day of through-proxy traffic.
+ */
+export interface DailyTraffic {
+    "date": string;
+    "uplinkBytes": number;
+    "downlinkBytes": number;
 }
 
 /**
@@ -91,6 +111,17 @@ export interface GeoDataInfo {
     "geoIp": GeoDataFile | null;
     "geoSite": GeoDataFile | null;
     "files": GeoDataFile[] | null;
+}
+
+/**
+ * LatencySample is one recorded URL latency measurement.
+ */
+export interface LatencySample {
+    "nodeId": string;
+    "nodeName": string;
+    "latencyMs": number;
+    "error": string;
+    "checkedAt": string;
 }
 
 /**
@@ -223,6 +254,7 @@ export interface NodeView {
     "port": number;
     "enabled": boolean;
     "favorite": boolean;
+    "tag": string;
     "active": boolean;
 }
 

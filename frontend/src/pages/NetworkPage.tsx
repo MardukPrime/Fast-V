@@ -1,8 +1,10 @@
-import { createSignal, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 
 
 import { DiagnosticsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
-import type { NetworkProbe, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import { Service as HistoryService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/history";
+import { Service as SelfCheckService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/selfcheck";
+import type { CheckResult, LatencySample, NetworkProbe, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type NetworkPageProps = {
@@ -18,6 +20,40 @@ function flagEmoji(countryCode: string) {
 
 function modeLabel(mode: string) {
   return mode === "proxy" ? "代理出口" : "直连出口";
+}
+
+const LATENCY_HISTORY_LIMIT = 20;
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function formatSampleTime(value: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+// Reuse the latency colour scale of the servers list: <100ms good, <300ms mid,
+// anything slower (or failed) bad. A zero/NaN measurement is shown as unknown.
+function latencyTone(latencyMs: number) {
+  if (!Number.isFinite(latencyMs) || latencyMs <= 0) return "unknown";
+  if (latencyMs < 100) return "good";
+  if (latencyMs < 300) return "mid";
+  return "bad";
+}
+
+function checkTone(status: string) {
+  if (status === "ok") return "ok";
+  if (status === "warn") return "warn";
+  return "error";
+}
+
+function checkStatusLabel(status: string) {
+  if (status === "ok") return "通过";
+  if (status === "warn") return "警告";
+  return "失败";
 }
 
 function ProbeCard(props: {
@@ -97,6 +133,87 @@ export default function NetworkPage(props: NetworkPageProps) {
   const [includeSpeed, setIncludeSpeed] = createSignal(false);
   const [error, setError] = createSignal("");
 
+  const [latencies, setLatencies] = createSignal<LatencySample[]>([]);
+  const [latencyLoading, setLatencyLoading] = createSignal(true);
+  const [latencyError, setLatencyError] = createSignal("");
+  const [clearingHistory, setClearingHistory] = createSignal(false);
+  const [selfCheckResults, setSelfCheckResults] = createSignal<CheckResult[] | null>(null);
+  const [selfCheckBusy, setSelfCheckBusy] = createSignal(false);
+  const [selfCheckError, setSelfCheckError] = createSignal("");
+  const [selfCheckAt, setSelfCheckAt] = createSignal("");
+
+  const loadLatencies = async () => {
+    setLatencyLoading(true);
+    setLatencyError("");
+    try {
+      const samples = await HistoryService.Latencies(LATENCY_HISTORY_LIMIT);
+      // The backend returns samples oldest-first; the newest measurement is the
+      // most interesting one, so the list is shown newest-first.
+      setLatencies((samples ?? []).slice().reverse());
+    } catch (err) {
+      setLatencyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLatencyLoading(false);
+    }
+  };
+
+  const clearHistory = async () => {
+    if (clearingHistory()) return;
+    const confirmed = window.confirm(
+      "确定要清除全部流量与延迟历史记录吗？\n\n该操作不可撤销，订阅、节点和设置不受影响。"
+    );
+    if (!confirmed) return;
+    setClearingHistory(true);
+    setLatencyError("");
+    try {
+      await HistoryService.Clear();
+      await loadLatencies();
+    } catch (err) {
+      setLatencyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setClearingHistory(false);
+    }
+  };
+
+  // The self-check can take several seconds (core validation, network probe), so
+  // it only runs on demand; the last in-memory result is kept while the page is
+  // mounted instead of re-running on every visit.
+  const runSelfCheck = async () => {
+    if (selfCheckBusy()) return;
+    setSelfCheckBusy(true);
+    setSelfCheckError("");
+    try {
+      const results = await SelfCheckService.Run();
+      setSelfCheckResults(results ?? []);
+      setSelfCheckAt(new Date().toLocaleTimeString());
+    } catch (err) {
+      setSelfCheckError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSelfCheckBusy(false);
+    }
+  };
+
+  const selfCheckSummary = createMemo(() => {
+    let ok = 0;
+    let warn = 0;
+    let error = 0;
+    for (const result of selfCheckResults() ?? []) {
+      const tone = checkTone(result.status);
+      if (tone === "ok") ok += 1;
+      else if (tone === "warn") warn += 1;
+      else error += 1;
+    }
+    return { total: ok + warn + error, ok, warn, error };
+  });
+
+  const selfCheckVerdict = () => {
+    const { total, warn, error } = selfCheckSummary();
+    if (total === 0) return "自检没有返回结果";
+    if (error > 0) return `发现 ${error} 项失败，按提示修复后可重新自检`;
+    if (warn > 0) return `检查完成，${warn} 项需要关注`;
+    return "全部检查通过";
+  };
+
   const proxyAvailable = () => props.proxyState.status === "running";
 
   const checkMode = async (mode: "direct" | "proxy") => {
@@ -123,6 +240,10 @@ export default function NetworkPage(props: NetworkPageProps) {
 
   onMount(() => {
     void checkMode("direct");
+  });
+
+  onMount(() => {
+    void loadLatencies();
   });
 
   const sameExit = () => Boolean(direct()?.ip && proxied()?.ip && direct()!.ip === proxied()!.ip);
@@ -183,6 +304,186 @@ export default function NetworkPage(props: NetworkPageProps) {
           </Show>
         </section>
       </Show>
+
+      <section class="glass-panel network-history-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>延迟历史</h3>
+            <span>
+              {latencies().length > 0
+                ? `最近 ${latencies().length} 次 URL 测速结果，按时间倒序`
+                : "URL 测速结果会记录在这里"}
+            </span>
+          </div>
+          <div class="network-history-actions">
+            <button
+              class="icon-button"
+              onClick={() => { void loadLatencies(); }}
+              disabled={latencyLoading()}
+              aria-label="刷新延迟历史"
+              title="刷新延迟历史"
+            >
+              <Icon name="refresh" size={14} />
+            </button>
+            <button
+              class="btn danger"
+              onClick={() => { void clearHistory(); }}
+              disabled={clearingHistory() || latencyLoading() || latencies().length === 0}
+            >
+              <Icon name="trash" size={13} /> {clearingHistory() ? "清除中..." : "清除历史"}
+            </button>
+          </div>
+        </div>
+
+        <Show when={latencyError()}>
+          <div class="alert error network-history-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> 延迟历史操作失败：{latencyError()}</span>
+            <button class="btn ghost" onClick={() => { void loadLatencies(); }}>重试</button>
+          </div>
+        </Show>
+
+        <Show
+          when={latencyLoading() && latencies().length === 0}
+          fallback={
+            <Show
+              when={latencies().length > 0}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="speed" size={22} /></div>
+                  <strong>还没有延迟历史</strong>
+                  <span>在服务器页面执行 URL 测速后，每个节点的结果都会记录在这里。</span>
+                </div>
+              }
+            >
+              <div class="network-history-list" role="list">
+                <For each={latencies()}>
+                  {(sample) => (
+                    <div class="network-history-row" role="listitem">
+                      <span class="network-history-time">{formatSampleTime(sample.checkedAt)}</span>
+                      <span class="network-history-node">
+                        <strong title={sample.nodeId || sample.nodeName}>{sample.nodeName || "未知节点"}</strong>
+                        <Show when={sample.error}>
+                          <small class="network-history-error" title={sample.error}>{sample.error}</small>
+                        </Show>
+                      </span>
+                      <span class="network-history-value">
+                        <Show
+                          when={sample.error}
+                          fallback={
+                            <Show
+                              when={sample.latencyMs > 0}
+                              fallback={<span class="latency unknown">—</span>}
+                            >
+                              <span class={`latency ${latencyTone(sample.latencyMs)}`}>{sample.latencyMs} ms</span>
+                            </Show>
+                          }
+                        >
+                          <span class="latency bad">失败</span>
+                        </Show>
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          }
+        >
+          <div class="network-history-loading">
+            <span class="network-pulse" />
+            <strong>正在读取延迟历史…</strong>
+          </div>
+        </Show>
+      </section>
+
+      <section class="glass-panel selfcheck-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>一键自检</h3>
+            <span>检查内核、配置、端口、权限、网络、Geo 数据、数据目录与订阅状态</span>
+          </div>
+          <div class="selfcheck-actions">
+            <Show when={selfCheckAt()}>
+              <span class="selfcheck-timestamp">上次自检 {selfCheckAt()}</span>
+            </Show>
+            <button class="btn glass" onClick={() => { void runSelfCheck(); }} disabled={selfCheckBusy()}>
+              <Icon name={selfCheckBusy() ? "refresh" : "check"} size={14} />
+              {selfCheckBusy() ? "自检中..." : selfCheckResults() ? "重新自检" : "开始自检"}
+            </button>
+          </div>
+        </div>
+
+        <Show when={selfCheckError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> 自检执行失败：{selfCheckError()}</span>
+            <button class="btn ghost" onClick={() => { void runSelfCheck(); }}>重试</button>
+          </div>
+        </Show>
+
+        <Show
+          when={selfCheckBusy()}
+          fallback={
+            <Show
+              when={selfCheckResults()}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="check" size={22} /></div>
+                  <strong>尚未运行自检</strong>
+                  <span>点击「开始自检」检查当前配置和运行环境；自检可能需要数秒。</span>
+                </div>
+              }
+            >
+              <div class="selfcheck-summary">
+                <span class="selfcheck-chip ok"><strong>{selfCheckSummary().ok}</strong> 项通过</span>
+                <span class="selfcheck-chip warn"><strong>{selfCheckSummary().warn}</strong> 项警告</span>
+                <span class="selfcheck-chip error"><strong>{selfCheckSummary().error}</strong> 项失败</span>
+                <span class="selfcheck-verdict">{selfCheckVerdict()}</span>
+              </div>
+              <div class="selfcheck-list" role="list">
+                <For each={selfCheckResults() ?? []}>
+                  {(result) => (
+                    <div
+                      classList={{
+                        "selfcheck-item": true,
+                        ok: checkTone(result.status) === "ok",
+                        warn: checkTone(result.status) === "warn",
+                        error: checkTone(result.status) === "error",
+                      }}
+                      role="listitem"
+                    >
+                      <span
+                        classList={{
+                          "selfcheck-badge": true,
+                          ok: checkTone(result.status) === "ok",
+                          warn: checkTone(result.status) === "warn",
+                          error: checkTone(result.status) === "error",
+                        }}
+                      >
+                        <Icon name={checkTone(result.status) === "ok" ? "check" : "alert"} size={12} />
+                        {checkStatusLabel(result.status)}
+                      </span>
+                      <div class="selfcheck-body">
+                        <strong class="selfcheck-name">{result.name || result.id}</strong>
+                        <Show when={result.detail}>
+                          <p class="selfcheck-detail">{result.detail}</p>
+                        </Show>
+                        <Show when={result.hint}>
+                          <p class="selfcheck-hint"><Icon name="alert" size={11} /> {result.hint}</p>
+                        </Show>
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          }
+        >
+          <div class="selfcheck-loading">
+            <span class="network-pulse" />
+            <strong>正在执行自检…</strong>
+            <span>逐步检查内核、配置、端口、权限与网络，最多需要约 30 秒，请稍候。</span>
+          </div>
+        </Show>
+      </section>
 
       <section class="panel network-tools-panel">
         <div class="panel-heading">
