@@ -1,7 +1,10 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+
+import { Events } from "@wailsio/runtime";
 
 import { DashboardService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/dashboard";
-import type { AppInfo, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
+import type { AppInfo, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView, TrafficStats } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type DashboardProps = {
@@ -51,6 +54,18 @@ function formatBytes(value: number) {
   return `${value} B`;
 }
 
+function formatRate(value: number) {
+  const rate = Number.isFinite(value) && value > 0 ? value : 0;
+  if (rate >= 1024 ** 2) return `${(rate / 1024 ** 2).toFixed(1)} MB/s`;
+  if (rate >= 1024) return `${(rate / 1024).toFixed(1)} KB/s`;
+  return `${rate.toFixed(1)} B/s`;
+}
+
+function sessionTotalBytes(stats: TrafficStats | null) {
+  if (!stats) return 0;
+  return Math.max(0, stats.totalUplinkBytes) + Math.max(0, stats.totalDownlinkBytes);
+}
+
 function usagePercent(upload: number, download: number, total: number) {
   if (!total || total <= 0) return 0;
   return Math.min(100, Math.round(((upload + download) / total) * 100));
@@ -89,6 +104,7 @@ export default function DashboardPage(props: DashboardProps) {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal("");
   const [clock, setClock] = createSignal(Date.now());
+  const [traffic, setTraffic] = createSignal<TrafficStats | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -114,6 +130,53 @@ export default function DashboardPage(props: DashboardProps) {
   const quotaPercent = () => usagePercent(summary()?.uploadBytes ?? 0, summary()?.downloadBytes ?? 0, totalBytes());
   const isRunning = () => props.proxyState.status === "running";
   const canStart = () => Boolean(activeNode()) && summary()?.coreStatus !== "not_installed" && summary()?.coreStatus !== "error";
+
+  // Live traffic: subscribe to the "proxy:traffic" broadcast while the proxy runs,
+  // and poll every second as a fallback because broadcasts can be missed while the
+  // dashboard page is not mounted. Both are torn down when the proxy stops or the
+  // page unmounts.
+  createEffect(() => {
+    if (!isRunning()) {
+      setTraffic(null);
+      return;
+    }
+    let alive = true;
+    let inFlight = false;
+    const offTraffic = Events.On("proxy:traffic", (event) => {
+      setTraffic(event.data as TrafficStats);
+    });
+    const poll = async () => {
+      if (!alive || inFlight) return;
+      inFlight = true;
+      try {
+        const stats = await ProxyService.Traffic();
+        if (alive) setTraffic(stats);
+      } catch {
+        // Keep the last good sample; the next tick retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => { void poll(); }, 1000);
+    onCleanup(() => {
+      alive = false;
+      offTraffic();
+      window.clearInterval(timer);
+    });
+  });
+
+  const totalSessionTraffic = () => sessionTotalBytes(traffic());
+  const downlinkRateLabel = () => (isRunning() ? formatRate(traffic()?.downlinkRate ?? 0) : "—");
+  const uplinkRateLabel = () => (isRunning() ? formatRate(traffic()?.uplinkRate ?? 0) : "—");
+  const sessionTotalLabel = () => (isRunning() ? formatBytes(totalSessionTraffic()) : "0 B");
+  const sessionRateLabel = () => (isRunning() ? `↓ ${formatRate(traffic()?.downlinkRate ?? 0)} · ↑ ${formatRate(traffic()?.uplinkRate ?? 0)}` : "↓ — · ↑ —");
+  const downlinkShare = () => {
+    const stats = traffic();
+    const total = sessionTotalBytes(stats);
+    if (!stats || total <= 0) return 0;
+    return Math.min(100, Math.max(0, Math.round((stats.totalDownlinkBytes / total) * 100)));
+  };
 
   return (
     <div class="page-stack dashboard-page">
@@ -143,6 +206,7 @@ export default function DashboardPage(props: DashboardProps) {
               <Show when={isRunning()}>
                 <span><Icon name="speed" size={12} /> 运行 {formatUptime(props.proxyState.startedAt, clock())}</span>
               </Show>
+              <span title="实时速率：下行 / 上行">↓ {downlinkRateLabel()} / ↑ {uplinkRateLabel()}</span>
               <Show when={summary()?.coreVersion}>
                 <span><Icon name="server" size={12} /> Xray {summary()?.coreVersion}</span>
               </Show>
@@ -203,6 +267,26 @@ export default function DashboardPage(props: DashboardProps) {
         <div class="glass-panel dashboard-stat">
           <span class="dashboard-stat-icon amber"><Icon name="server" size={17} /></span>
           <div><span>Xray 内核</span><strong>{coreStatusLabel(summary()?.coreStatus ?? "")}</strong><small>{summary()?.coreVersion || "未安装"}</small></div>
+        </div>
+        <div class="glass-panel dashboard-stat" style={{ "grid-column": "1 / -1" }}>
+          <span class="dashboard-stat-icon green"><Icon name="speed" size={17} /></span>
+          <div>
+            <div style={{ display: "flex", "align-items": "baseline", "flex-wrap": "wrap", gap: "2px 16px" }}>
+              <span>本次会话流量</span>
+              <strong style={{ "margin-top": "0" }}>{sessionTotalLabel()}</strong>
+              <small style={{ "margin-top": "0" }} title={traffic()?.error || "实时速率：下行 / 上行"}>{sessionRateLabel()}</small>
+            </div>
+            <Show when={isRunning() && totalSessionTraffic() > 0}>
+              <div
+                class="dashboard-progress"
+                style={{ display: "flex" }}
+                title={`下行 ${downlinkShare()}% · 上行 ${100 - downlinkShare()}%`}
+              >
+                <span style={{ width: `${downlinkShare()}%`, background: "var(--accent)" }} />
+                <span style={{ width: `${100 - downlinkShare()}%`, background: "var(--success)" }} />
+              </div>
+            </Show>
+          </div>
         </div>
       </section>
 

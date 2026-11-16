@@ -325,6 +325,151 @@ func TestAPIConfigPassesXrayValidation(t *testing.T) {
 	}
 }
 
+func TestBuildConfigIncludesStatsAPIWhenStatsEnabled(t *testing.T) {
+	settings := testSettings()
+	settings.StatsEnabled = true
+	settings.XrayAPIEnabled = false
+	settings.XrayAPIPort = 10086
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Stats"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+
+	api, ok := config["api"].(map[string]any)
+	if !ok || api["tag"] != "api" {
+		t.Fatalf("stats mode must generate api config: %+v", config["api"])
+	}
+	services, _ := api["services"].([]any)
+	mustContainValue(t, services, "StatsService")
+	if _, ok := config["stats"]; !ok {
+		t.Fatal("stats mode must generate stats config")
+	}
+	policy, ok := config["policy"].(map[string]any)
+	if !ok {
+		t.Fatalf("stats mode must generate policy config: %+v", config["policy"])
+	}
+	system, _ := policy["system"].(map[string]any)
+	if system["statsOutboundUplink"] != true || system["statsOutboundDownlink"] != true {
+		t.Fatalf("outbound traffic counters are not enabled: %+v", system)
+	}
+
+	inbounds := config["inbounds"].([]any)
+	if len(inbounds) != 2 {
+		t.Fatalf("expected local and api inbounds, got %+v", inbounds)
+	}
+	apiInbound, _ := inbounds[1].(map[string]any)
+	if apiInbound["tag"] != "api-in" || apiInbound["protocol"] != "dokodemo-door" {
+		t.Fatalf("unexpected api inbound: %+v", apiInbound)
+	}
+	if int(apiInbound["port"].(float64)) != 10086 {
+		t.Fatalf("unexpected api inbound port: %+v", apiInbound)
+	}
+
+	rules, _ := config["routing"].(map[string]any)["rules"].([]any)
+	if len(rules) == 0 {
+		t.Fatal("routing rules are missing")
+	}
+	first, _ := rules[0].(map[string]any)
+	if first["outboundTag"] != "api" {
+		t.Fatalf("api routing rule is missing: %+v", first)
+	}
+	mustContainValue(t, first["inboundTag"], "api-in")
+}
+
+func TestBuildConfigOmitsStatsAPIWhenDisabled(t *testing.T) {
+	settings := testSettings()
+	settings.StatsEnabled = false
+	settings.XrayAPIEnabled = false
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#NoStats"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"api", "stats", "policy"} {
+		if value, ok := config[key]; ok {
+			t.Fatalf("expected no %q config when stats/API are disabled, got %+v", key, value)
+		}
+	}
+	if inbounds := config["inbounds"].([]any); len(inbounds) != 1 {
+		t.Fatalf("expected a single inbound, got %+v", inbounds)
+	}
+	rules := config["routing"].(map[string]any)["rules"].([]any)
+	for _, rule := range rules {
+		if entry, ok := rule.(map[string]any); ok && entry["outboundTag"] == "api" {
+			t.Fatalf("unexpected api routing rule: %+v", entry)
+		}
+	}
+}
+
+func TestStatsConfigPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	cases := []struct {
+		name   string
+		modify func(*model.Settings)
+	}{
+		{"stats only", func(settings *model.Settings) {
+			settings.StatsEnabled = true
+			settings.XrayAPIEnabled = false
+		}},
+		{"stats with tun", func(settings *model.Settings) {
+			settings.StatsEnabled = true
+			settings.XrayAPIEnabled = false
+			settings.TunMode = true
+		}},
+		{"api and stats", func(settings *model.Settings) {
+			settings.StatsEnabled = true
+			settings.XrayAPIEnabled = true
+		}},
+	}
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Stats"}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := testSettings()
+			settings.XrayAPIPort = 10086
+			tc.modify(&settings)
+			raw, err := BuildConfig(node, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(t.TempDir(), "stats-config.json")
+			if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("xray stats config validation failed: %v\n%s", err, output)
+			}
+		})
+	}
+}
+
+func mustContainValue(t *testing.T, values any, want string) {
+	t.Helper()
+	list, ok := values.([]any)
+	if !ok {
+		t.Fatalf("expected a list, got %+v", values)
+	}
+	for _, value := range list {
+		if value == want {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %+v", want, list)
+}
+
 func TestBuildConfigUsesAdvancedNetworkSettings(t *testing.T) {
 	settings := testSettings()
 	settings.TunMode = true

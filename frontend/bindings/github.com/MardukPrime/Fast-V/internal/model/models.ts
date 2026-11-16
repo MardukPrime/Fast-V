@@ -15,6 +15,15 @@ export interface AppInfo {
 }
 
 /**
+ * BackupResult summarizes a configuration restore.
+ */
+export interface BackupResult {
+    "restoredSubscriptions": number;
+    "restoredNodes": number;
+    "restoredRules": number;
+}
+
+/**
  * CoreInfo describes the locally installed Xray-core and the latest known release.
  */
 export interface CoreInfo {
@@ -129,6 +138,8 @@ export interface NodeConfig {
     "method": string;
     "security": string;
     "flow": string;
+    "encryption": string;
+    "mldsa65Verify": string;
     "network": string;
     "tls": string;
     "serverName": string;
@@ -162,6 +173,16 @@ export interface NodeFilter {
 }
 
 /**
+ * NodeImportResult summarizes a paste/import of share links.
+ */
+export interface NodeImportResult {
+    "imported": number;
+    "skipped": number;
+    "nodes": NodeView[] | null;
+    "errors": string[] | null;
+}
+
+/**
  * NodeLatency is the result of a direct TCP reachability check.
  */
 export interface NodeLatency {
@@ -172,17 +193,28 @@ export interface NodeLatency {
 }
 
 /**
+ * NodeLink is one exported share link.
+ */
+export interface NodeLink {
+    "id": string;
+    "name": string;
+    "link": string;
+}
+
+/**
  * NodeView is the frontend-safe node representation.
  */
 export interface NodeView {
     "id": string;
     "subscriptionId": string;
     "subscriptionName": string;
+    "manual": boolean;
     "name": string;
     "protocol": string;
     "address": string;
     "port": number;
     "enabled": boolean;
+    "favorite": boolean;
     "active": boolean;
 }
 
@@ -261,7 +293,13 @@ export interface Settings {
     "xraySockoptDomainStrategy": string;
     "xraySockoptJson": string;
     "xrayFinalMaskJson": string;
+    "systemProxyMode": string;
     "tunMode": boolean;
+    "statsEnabled": boolean;
+    "autoSelectEnabled": boolean;
+    "autoSelectIntervalMinutes": number;
+    "autoSelectToleranceMs": number;
+    "failoverEnabled": boolean;
     "testUrl": string;
     "xrayApiEnabled": boolean;
     "xrayApiPort": number;
@@ -292,6 +330,21 @@ export interface SubscriptionView {
     "totalBytes": number;
     "expireAt": number;
     "usageUpdatedAt": string;
+}
+
+/**
+ * TrafficStats describes live through-proxy traffic for the running core.
+ */
+export interface TrafficStats {
+    "running": boolean;
+    "uplinkBytes": number;
+    "downlinkBytes": number;
+    "uplinkRate": number;
+    "downlinkRate": number;
+    "totalUplinkBytes": number;
+    "totalDownlinkBytes": number;
+    "updatedAt": string;
+    "error": string;
 }
 
 /**

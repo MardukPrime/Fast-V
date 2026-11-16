@@ -39,6 +39,9 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}
 
+	if input.SystemProxyMode != "system" && input.SystemProxyMode != "off" {
+		return model.Settings{}, errors.New("invalid system proxy mode")
+	}
 	if input.DockTransparency < 5 || input.DockTransparency > 90 {
 		return model.Settings{}, errors.New("dock transparency must be between 5 and 90")
 	}
@@ -108,6 +111,12 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	}
 	if input.UpdateIntervalMinutes < 15 || input.UpdateIntervalMinutes > 1440 {
 		return model.Settings{}, fmt.Errorf("update interval must be between 15 and 1440 minutes")
+	}
+	if input.AutoSelectIntervalMinutes < 1 || input.AutoSelectIntervalMinutes > 1440 {
+		return model.Settings{}, errors.New("自动选路间隔必须在 1-1440 分钟之间")
+	}
+	if input.AutoSelectToleranceMS < 0 || input.AutoSelectToleranceMS > 5000 {
+		return model.Settings{}, errors.New("自动选路切换容差必须在 0-5000 毫秒之间")
 	}
 
 	if err := s.store.SaveSettings(input); err != nil {

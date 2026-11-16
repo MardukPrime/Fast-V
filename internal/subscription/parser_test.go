@@ -55,3 +55,120 @@ func TestParseContentRejectsUnsupportedInput(t *testing.T) {
 		t.Fatal("expected error for unsupported input")
 	}
 }
+
+func TestParseLinkSupportsAllProtocols(t *testing.T) {
+	vmessLink := testVMessLink(t, "VMess Node", "vmess.example.com", 443)
+	links := []struct {
+		raw      string
+		protocol string
+		address  string
+		port     int
+		name     string
+	}{
+		{vmessLink, "vmess", "vmess.example.com", 443, "VMess Node"},
+		{"vless://00000000-0000-0000-0000-000000000002@vless.example.com:8443?security=reality&type=tcp#VLESS%20Node", "vless", "vless.example.com", 8443, "VLESS Node"},
+		{"trojan://password@trojan.example.com:443#Trojan%20Node", "trojan", "trojan.example.com", 443, "Trojan Node"},
+		{"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@ss.example.com:8388#SS%20Node", "shadowsocks", "ss.example.com", 8388, "SS Node"},
+	}
+	for _, item := range links {
+		node, err := ParseLink(item.raw)
+		if err != nil {
+			t.Fatalf("%s: parse link failed: %v", item.protocol, err)
+		}
+		if node.Protocol != item.protocol || node.Address != item.address || node.Port != item.port || node.Name != item.name {
+			t.Fatalf("unexpected %s node: %+v", item.protocol, node)
+		}
+		if node.Raw != item.raw {
+			t.Fatalf("raw link was not preserved: %q", node.Raw)
+		}
+	}
+}
+
+func TestParseLinkRejectsInvalidLinks(t *testing.T) {
+	cases := []string{
+		"",
+		"   ",
+		"http://example.com",
+		"vmess://not-base64",
+		"vless://user@example.com",
+		"not a share link",
+	}
+	for _, raw := range cases {
+		if _, err := ParseLink(raw); err == nil {
+			t.Fatalf("expected error for %q", raw)
+		}
+	}
+}
+
+func TestParseLinksHandlesClipboardTextAndDedupes(t *testing.T) {
+	vmessLink := testVMessLink(t, "VMess Node", "vmess.example.com", 443)
+	vlessLink := "vless://00000000-0000-0000-0000-000000000002@vless.example.com:443?security=tls&type=ws#VLESS%20Node"
+	text := strings.Join([]string{
+		"# 我的节点列表",
+		"",
+		"  " + vmessLink + "  ",
+		vlessLink,
+		vlessLink, // duplicate paste
+		"trojan://password@trojan.example.com:443#Trojan%20Node",
+		"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@ss.example.com:8388#SS%20Node",
+		"this line is not a share link",
+	}, "\r\n")
+
+	nodes, issues := ParseLinksWithIssues(text)
+	if len(nodes) != 4 {
+		t.Fatalf("expected 4 unique nodes, got %d: %+v", len(nodes), nodes)
+	}
+	if len(issues) != 1 {
+		t.Fatalf("expected 1 rejected line, got %d: %+v", len(issues), issues)
+	}
+	for _, node := range nodes {
+		if _, err := ParseLink(node.Raw); err != nil {
+			t.Fatalf("parsed node raw link is not reusable: %v (%q)", err, node.Raw)
+		}
+	}
+}
+
+func TestParseLinksAcceptsBase64SubscriptionBody(t *testing.T) {
+	links := []string{
+		testVMessLink(t, "VMess Node", "vmess.example.com", 443),
+		"vless://00000000-0000-0000-0000-000000000002@vless.example.com:443#VLESS%20Node",
+		"trojan://password@trojan.example.com:443#Trojan%20Node",
+		"ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@ss.example.com:8388#SS%20Node",
+	}
+	content := base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n")))
+
+	nodes, err := ParseLinks(content)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if len(nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(nodes))
+	}
+	if nodes[3].Protocol != "shadowsocks" {
+		t.Fatalf("unexpected node order: %+v", nodes[3])
+	}
+}
+
+func TestParseLinksRejectsEmptyOrUnusableText(t *testing.T) {
+	if _, err := ParseLinks(""); err == nil {
+		t.Fatal("expected error for empty text")
+	}
+	if _, err := ParseLinks("# only a comment\n// another comment"); err == nil {
+		t.Fatal("expected error when nothing can be parsed")
+	}
+}
+
+func testVMessLink(t *testing.T, name, address string, port int) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"ps":   name,
+		"add":  address,
+		"port": port,
+		"id":   "00000000-0000-0000-0000-000000000001",
+		"net":  "ws",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "vmess://" + base64.StdEncoding.EncodeToString(payload)
+}

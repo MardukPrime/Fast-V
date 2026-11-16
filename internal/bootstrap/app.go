@@ -9,6 +9,7 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/buildinfo"
 	"github.com/MardukPrime/Fast-V/internal/platform"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
+	backupservice "github.com/MardukPrime/Fast-V/internal/service/backup"
 	"github.com/MardukPrime/Fast-V/internal/service/core"
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
@@ -39,9 +40,10 @@ func Run(assets embed.FS) error {
 	diagnosticsSvc := diagnosticsservice.New(proxySvc)
 	dashboardSvc := dashboard.New(st, coreSvc)
 	subSvc := subscription.New(st)
-	nodeSvc := node.New(st)
+	nodeSvc := node.New(st, coreSvc)
 	settingsSvc := settings.New(st)
 	routingSvc := routingservice.New(st)
+	backupSvc := backupservice.New(st)
 
 	app := application.New(application.Options{
 		Name:        buildinfo.ProductName,
@@ -56,6 +58,7 @@ func Run(assets embed.FS) error {
 			application.NewService(nodeSvc),
 			application.NewService(settingsSvc),
 			application.NewService(routingSvc),
+			application.NewService(backupSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -78,7 +81,7 @@ func Run(assets embed.FS) error {
 		MinWidth:         960,
 		MinHeight:        640,
 		Frameless:        true,
-		BackgroundColour: application.NewRGB(15, 18, 25),
+		BackgroundColour: application.NewRGB(238, 242, 247),
 		URL:              "/",
 	})
 

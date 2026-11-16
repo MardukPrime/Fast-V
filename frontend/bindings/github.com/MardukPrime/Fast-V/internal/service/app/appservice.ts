@@ -14,6 +14,13 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as model$0 from "../../model/models.js";
 
+/**
+ * AutostartEnabled reports whether FastV is registered to start with Windows.
+ */
+export function AutostartEnabled(): $CancellablePromise<boolean> {
+    return $Call.ByID(1046604721);
+}
+
 export function Info(): $CancellablePromise<model$0.AppInfo> {
     return $Call.ByID(545960859);
 }
@@ -24,4 +31,12 @@ export function IsElevated(): $CancellablePromise<boolean> {
 
 export function RestartAsAdmin(): $CancellablePromise<void> {
     return $Call.ByID(3747228385);
+}
+
+/**
+ * SetAutostart enables or disables launching FastV when the user logs in and
+ * returns the state that is in effect afterwards.
+ */
+export function SetAutostart(enabled: boolean): $CancellablePromise<boolean> {
+    return $Call.ByID(2358568998, enabled);
 }

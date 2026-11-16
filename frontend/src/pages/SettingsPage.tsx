@@ -3,9 +3,10 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Events } from "@wailsio/runtime";
 
 import { AppService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
+import { Service as BackupService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/backup";
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { CoreInfo, GeoDataInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BackupResult, CoreInfo, GeoDataInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type SettingsProps = {
@@ -15,9 +16,10 @@ type SettingsProps = {
 };
 
 const defaults: Settings = {
-  theme: "dark",
+  theme: "light",
   language: "zh-CN",
   layoutMode: "sidebar",
+  systemProxyMode: "system",
   dockTransparency: 28,
   autoUpdate: false,
   updateIntervalMinutes: 360,
@@ -43,6 +45,11 @@ const defaults: Settings = {
   xraySockoptJson: "",
   xrayFinalMaskJson: "",
   tunMode: false,
+  statsEnabled: true,
+  autoSelectEnabled: false,
+  autoSelectIntervalMinutes: 10,
+  autoSelectToleranceMs: 80,
+  failoverEnabled: false,
   testUrl: "https://www.gstatic.com/generate_204",
   xrayApiEnabled: false,
   xrayApiPort: 10085,
@@ -148,6 +155,19 @@ function writeSectionState(key: string, value: boolean) {
     // Ignore storage failures; collapse state is non-critical.
   }
 }
+
+function errorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function formatBackupTimestamp(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+const autoSelectIntervalRange = { min: 1, max: 1440 };
+const autoSelectToleranceRange = { min: 0, max: 5000 };
+
 export default function SettingsPage(props: SettingsProps) {
   const [settings, setSettings] = createSignal<Settings>(defaults);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
@@ -161,6 +181,18 @@ export default function SettingsPage(props: SettingsProps) {
   const [error, setError] = createSignal("");
   const [clientExpanded, setClientExpanded] = createSignal(readSectionState("fastv.settings.clientOpen", false));
   const [coreExpanded, setCoreExpanded] = createSignal(readSectionState("fastv.settings.coreOpen", false));
+  const [autoSelectExpanded, setAutoSelectExpanded] = createSignal(readSectionState("fastv.settings.autoSelectOpen", false));
+  const [statsExpanded, setStatsExpanded] = createSignal(readSectionState("fastv.settings.statsOpen", false));
+  const [integrationExpanded, setIntegrationExpanded] = createSignal(readSectionState("fastv.settings.integrationOpen", false));
+  const [backupExpanded, setBackupExpanded] = createSignal(readSectionState("fastv.settings.backupOpen", false));
+  const [autostartEnabled, setAutostartEnabled] = createSignal(false);
+  const [autostartBusy, setAutostartBusy] = createSignal(false);
+  const [autostartError, setAutostartError] = createSignal("");
+  const [backupBusy, setBackupBusy] = createSignal("");
+  const [backupMessage, setBackupMessage] = createSignal("");
+  const [backupError, setBackupError] = createSignal("");
+  const [importResult, setImportResult] = createSignal<BackupResult | null>(null);
+  let backupFileInput: HTMLInputElement | undefined;
 
   const load = async () => {
     setLoading(true);
@@ -185,6 +217,16 @@ export default function SettingsPage(props: SettingsProps) {
   onMount(load);
 
   onMount(() => {
+    void (async () => {
+      try {
+        setAutostartEnabled(await AppService.AutostartEnabled());
+      } catch (err) {
+        setAutostartError(`读取开机自启状态失败：${errorMessage(err)}`);
+      }
+    })();
+  });
+
+  onMount(() => {
     const off = Events.On("core:state", (event) => {
       const info = event.data as CoreInfo;
       setCore(info);
@@ -199,8 +241,27 @@ export default function SettingsPage(props: SettingsProps) {
     setSettings({ ...settings(), [key]: value });
   };
 
+  const validateAutoSelect = () => {
+    const current = settings();
+    const interval = current.autoSelectIntervalMinutes;
+    const tolerance = current.autoSelectToleranceMs;
+    if (!Number.isFinite(interval) || interval < autoSelectIntervalRange.min || interval > autoSelectIntervalRange.max) {
+      return `自动选路间隔必须在 ${autoSelectIntervalRange.min}-${autoSelectIntervalRange.max} 分钟之间。`;
+    }
+    if (!Number.isFinite(tolerance) || tolerance < autoSelectToleranceRange.min || tolerance > autoSelectToleranceRange.max) {
+      return `切换容差必须在 ${autoSelectToleranceRange.min}-${autoSelectToleranceRange.max} 毫秒之间。`;
+    }
+    return "";
+  };
+
   const save = async (event: Event) => {
     event.preventDefault();
+    const validationError = validateAutoSelect();
+    if (validationError) {
+      setMessage("");
+      setError(validationError);
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -234,6 +295,71 @@ export default function SettingsPage(props: SettingsProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleAutostart = async (enabled: boolean) => {
+    if (autostartBusy()) return;
+    const previous = autostartEnabled();
+    setAutostartError("");
+    setAutostartEnabled(enabled);
+    setAutostartBusy(true);
+    try {
+      setAutostartEnabled(await AppService.SetAutostart(enabled));
+      setMessage(enabled ? "已开启开机自启。" : "已关闭开机自启。");
+    } catch (err) {
+      setAutostartEnabled(previous);
+      setAutostartError(`设置开机自启失败：${errorMessage(err)}`);
+    } finally {
+      setAutostartBusy(false);
+    }
+  };
+
+  const exportBackup = async () => {
+    setBackupBusy("export");
+    setBackupMessage("");
+    setBackupError("");
+    try {
+      const data = await BackupService.Export();
+      const blob = new Blob([data], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `fastv-backup-${formatBackupTimestamp(new Date())}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupMessage(`备份已导出为 fastv-backup-${formatBackupTimestamp(new Date())}.json。`);
+    } catch (err) {
+      setBackupError(`导出备份失败：${errorMessage(err)}`);
+    } finally {
+      setBackupBusy("");
+    }
+  };
+
+  const importBackup = async (file: File | null) => {
+    if (!file) return;
+    setBackupBusy("import");
+    setBackupMessage("");
+    setBackupError("");
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const result = await BackupService.Import(text);
+      setImportResult(result);
+      setBackupMessage("备份已导入，请重启代理后生效。");
+      try {
+        const restored = await SettingsService.Get();
+        setSettings(restored);
+        props.onSaved(restored);
+      } catch {
+        // The restore already succeeded; a stale form is better than a false error.
+      }
+    } catch (err) {
+      setBackupError(`导入备份失败：${errorMessage(err)}`);
+    } finally {
+      setBackupBusy("");
     }
   };
 
@@ -394,7 +520,23 @@ export default function SettingsPage(props: SettingsProps) {
             </label>
           </div>
 
-          <div class="setting-block">
+                    <div class="setting-block">
+            <div class="setting-label">
+              <strong>Windows 系统代理</strong>
+              <small>启动代理时自动设置 Windows 系统代理，停止代理或退出 FastV 时恢复原设置。TUN 模式会自动跳过。</small>
+            </div>
+            <label class="switch-row">
+              <span>
+                <strong>自动设置系统代理</strong>
+                <small>{settings().tunMode ? "当前已启用 TUN 模式，将跳过系统代理设置。" : `系统代理将指向 127.0.0.1:${settings().xrayLocalPort}`}</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().systemProxyMode === "system" }}>
+                <input type="checkbox" checked={settings().systemProxyMode === "system"} onChange={(event) => update("systemProxyMode", event.currentTarget.checked ? "system" : "off")} />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+          </div>
+<div class="setting-block">
             <div class="setting-label">
               <strong>默认代理模式</strong>
               <small>生成 Xray 路由规则时使用：规则分流、全局代理或全部直连。</small>
@@ -824,6 +966,282 @@ export default function SettingsPage(props: SettingsProps) {
               </span>
             </label>
           </Show>
+          </div>
+        </details>
+
+        <details
+          class="panel settings-section"
+          open={autoSelectExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setAutoSelectExpanded(open);
+            writeSectionState("fastv.settings.autoSelectOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
+            <div class="heading-with-icon">
+              <span class="heading-icon"><Icon name="route" size={17} /></span>
+              <div>
+                <h3>智能选路</h3>
+                <span>按 URL 延迟自动选择节点，并在节点异常时自动切换</span>
+              </div>
+            </div>
+            <span class="settings-section-meta">
+              <span classList={{ "tag": true, success: settings().autoSelectEnabled, neutral: !settings().autoSelectEnabled }}>
+                {settings().autoSelectEnabled ? "自动选路已开启" : "自动选路已关闭"}
+              </span>
+              <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+            </span>
+          </summary>
+          <div class="settings-section-body">
+            <label class="switch-row">
+              <span>
+                <strong>自动选择最优节点</strong>
+                <small>按选路间隔对所有节点做 URL 延迟测速，自动切换到延迟最低的可用节点。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().autoSelectEnabled }}>
+                <input
+                  type="checkbox"
+                  checked={settings().autoSelectEnabled}
+                  onChange={(event) => update("autoSelectEnabled", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+
+            <div class="settings-grid">
+              <label>
+                <span>选路间隔（分钟）</span>
+                <input
+                  type="number"
+                  min={autoSelectIntervalRange.min}
+                  max={autoSelectIntervalRange.max}
+                  step="1"
+                  value={settings().autoSelectIntervalMinutes}
+                  onInput={(event) => update("autoSelectIntervalMinutes", Number(event.currentTarget.value))}
+                />
+                <small>允许范围 {autoSelectIntervalRange.min}-{autoSelectIntervalRange.max} 分钟，间隔越短切换越及时，测速开销也越大。</small>
+              </label>
+              <label>
+                <span>切换容差（毫秒）</span>
+                <input
+                  type="number"
+                  min={autoSelectToleranceRange.min}
+                  max={autoSelectToleranceRange.max}
+                  step="1"
+                  value={settings().autoSelectToleranceMs}
+                  onInput={(event) => update("autoSelectToleranceMs", Number(event.currentTarget.value))}
+                />
+                <small>允许范围 {autoSelectToleranceRange.min}-{autoSelectToleranceRange.max} 毫秒，新节点需要快出容差值才会切换，避免频繁抖动。</small>
+              </label>
+            </div>
+
+            <label class="switch-row">
+              <span>
+                <strong>故障自动切换</strong>
+                <small>代理健康检查失败时，自动切换到延迟最低的可用节点。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().failoverEnabled }}>
+                <input
+                  type="checkbox"
+                  checked={settings().failoverEnabled}
+                  onChange={(event) => update("failoverEnabled", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+
+            <p class="settings-note">
+              <Icon name="alert" size={13} />
+              <span>自动选路需要 URL 测速；TUN 模式开启时会暂停自动选路。保存设置后重启代理生效。</span>
+            </p>
+          </div>
+        </details>
+
+        <details
+          class="panel settings-section"
+          open={statsExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setStatsExpanded(open);
+            writeSectionState("fastv.settings.statsOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
+            <div class="heading-with-icon">
+              <span class="heading-icon"><Icon name="speed" size={17} /></span>
+              <div>
+                <h3>流量统计</h3>
+                <span>通过 Xray API 采集实时速率与累计流量</span>
+              </div>
+            </div>
+            <span class="settings-section-meta">
+              <span classList={{ "tag": true, success: settings().statsEnabled, neutral: !settings().statsEnabled }}>
+                {settings().statsEnabled ? "统计已开启" : "统计已关闭"}
+              </span>
+              <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+            </span>
+          </summary>
+          <div class="settings-section-body">
+            <label class="switch-row">
+              <span>
+                <strong>启用流量统计</strong>
+                <small>启动代理后通过 Xray API 的 StatsService 轮询上/下行流量，用于仪表盘实时速率与累计流量。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().statsEnabled }}>
+                <input
+                  type="checkbox"
+                  checked={settings().statsEnabled}
+                  onChange={(event) => update("statsEnabled", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+
+            <Show when={!settings().xrayApiEnabled}>
+              <div class="settings-inline-warning">
+                <Icon name="alert" size={13} />
+                <span>流量统计需要先在内核设置中开启「Xray API 与本地统计」，当前 API 端口为 {settings().xrayApiPort}。</span>
+              </div>
+            </Show>
+
+            <p class="settings-note">
+              <Icon name="speed" size={13} />
+              <span>Xray API 端口（当前 {settings().xrayApiPort}）用于统计采样；关闭统计后仪表盘不再显示实时流量，但不影响代理转发。</span>
+            </p>
+          </div>
+        </details>
+
+        <details
+          class="panel settings-section"
+          open={integrationExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setIntegrationExpanded(open);
+            writeSectionState("fastv.settings.integrationOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
+            <div class="heading-with-icon">
+              <span class="heading-icon"><Icon name="maximize" size={17} /></span>
+              <div>
+                <h3>系统集成</h3>
+                <span>开机自启等 Windows 系统级行为</span>
+              </div>
+            </div>
+            <span class="settings-section-meta">
+              <span classList={{ "tag": true, success: autostartEnabled(), neutral: !autostartEnabled() }}>
+                {autostartEnabled() ? "开机自启已开启" : "开机自启已关闭"}
+              </span>
+              <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+            </span>
+          </summary>
+          <div class="settings-section-body">
+            <label class="switch-row">
+              <span>
+                <strong>开机自启</strong>
+                <small>{autostartEnabled() ? "已在当前用户的开机启动项（HKCU Run）中注册 FastV。" : "FastV 不会随 Windows 登录自动启动。"}</small>
+              </span>
+              <span classList={{ "switch": true, on: autostartEnabled() }}>
+                <input
+                  type="checkbox"
+                  checked={autostartEnabled()}
+                  disabled={autostartBusy()}
+                  onChange={(event) => { void toggleAutostart(event.currentTarget.checked); }}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+
+            <Show when={autostartBusy()}>
+              <p class="settings-note"><Icon name="refresh" size={13} /><span>正在更新开机启动项...</span></p>
+            </Show>
+
+            <Show when={autostartError()}>
+              <div class="alert error settings-inline-alert">
+                <span class="alert-message"><Icon name="alert" size={15} /> {autostartError()}</span>
+              </div>
+            </Show>
+
+            <p class="settings-note">
+              <Icon name="external" size={13} />
+              <span>开机自启按当前 FastV.exe 路径注册；移动或重命名程序后需要重新开启一次。</span>
+            </p>
+          </div>
+        </details>
+
+        <details
+          class="panel settings-section"
+          open={backupExpanded()}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setBackupExpanded(open);
+            writeSectionState("fastv.settings.backupOpen", open);
+          }}
+        >
+          <summary class="panel-heading settings-section-summary">
+            <div class="heading-with-icon">
+              <span class="heading-icon"><Icon name="subscription" size={17} /></span>
+              <div>
+                <h3>备份与恢复</h3>
+                <span>导出或导入完整配置（设置、订阅、节点与路由规则）</span>
+              </div>
+            </div>
+            <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+          </summary>
+          <div class="settings-section-body">
+            <div class="backup-actions">
+              <button class="btn secondary" type="button" onClick={exportBackup} disabled={backupBusy() !== ""}>
+                <Icon name="external" size={14} /> {backupBusy() === "export" ? "导出中..." : "导出备份"}
+              </button>
+              <button class="btn secondary" type="button" onClick={() => backupFileInput?.click()} disabled={backupBusy() !== ""}>
+                <Icon name="plus" size={14} /> {backupBusy() === "import" ? "导入中..." : "导入备份"}
+              </button>
+              <input
+                ref={(element) => { backupFileInput = element; }}
+                class="backup-file-input"
+                type="file"
+                accept="application/json"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  event.currentTarget.value = "";
+                  void importBackup(file);
+                }}
+              />
+            </div>
+
+            <Show when={backupMessage()}>
+              <div class="alert success settings-inline-alert">
+                <span class="alert-message"><Icon name="check" size={15} /> {backupMessage()}</span>
+              </div>
+            </Show>
+            <Show when={backupError()}>
+              <div class="alert error settings-inline-alert">
+                <span class="alert-message"><Icon name="alert" size={15} /> {backupError()}</span>
+              </div>
+            </Show>
+
+            <Show when={importResult()}>
+              {(result) => (
+                <div class="backup-result">
+                  <div class="backup-result-head">
+                    <Icon name="check" size={14} />
+                    <strong>备份已恢复</strong>
+                  </div>
+                  <div class="backup-result-grid">
+                    <div><span>订阅</span><strong>{result().restoredSubscriptions}</strong></div>
+                    <div><span>节点</span><strong>{result().restoredNodes}</strong></div>
+                    <div><span>路由规则</span><strong>{result().restoredRules}</strong></div>
+                  </div>
+                  <p class="backup-result-hint">导入已覆盖当前配置；代理不会自动重启，请重启代理后生效。</p>
+                </div>
+              )}
+            </Show>
+
+            <p class="settings-note">
+              <Icon name="alert" size={13} />
+              <span>备份文件包含节点凭据（UUID、密码等），请妥善保管，不要上传到公开位置；导入会覆盖当前配置。</span>
+            </p>
           </div>
         </details>
 

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/platform"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
 
@@ -27,19 +28,22 @@ type CoreInfoProvider interface {
 
 // Manager owns the Xray process and the local proxy state.
 type Manager struct {
-	mu            sync.RWMutex
-	store         *store.Store
-	core          CoreInfoProvider
-	cmd           *exec.Cmd
-	done          chan struct{}
-	job           *processJob
-	state         model.ProxyState
-	onStateChange func(model.ProxyState)
-	tunCleanup    func() error
-	logsMu        sync.Mutex
-	logs          []model.LogEntry
-	logSeq        int64
-	onLog         func(model.LogEntry)
+	mu                 sync.RWMutex
+	store              *store.Store
+	core               CoreInfoProvider
+	cmd                *exec.Cmd
+	done               chan struct{}
+	job                *processJob
+	state              model.ProxyState
+	onStateChange      func(model.ProxyState)
+	sampler            *trafficSampler
+	onTraffic          func(model.TrafficStats)
+	tunCleanup         func() error
+	systemProxyCleanup func() error
+	logsMu             sync.Mutex
+	logs               []model.LogEntry
+	logSeq             int64
+	onLog              func(model.LogEntry)
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -54,6 +58,69 @@ func (m *Manager) SetOnStateChange(callback func(model.ProxyState)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.onStateChange = callback
+}
+
+// SetOnTraffic registers the callback invoked with every live traffic sample.
+// The callback runs on the sampler goroutine and must not call back into the
+// manager in a blocking way.
+func (m *Manager) SetOnTraffic(callback func(model.TrafficStats)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onTraffic = callback
+}
+
+// Traffic returns the latest live traffic snapshot. Once the proxy is stopped
+// (or if it was never running) a zero value with Running=false is returned.
+func (m *Manager) Traffic() model.TrafficStats {
+	m.mu.RLock()
+	sampler := m.sampler
+	running := m.cmd != nil && m.state.Status == "running"
+	m.mu.RUnlock()
+	if sampler == nil || !running {
+		return model.TrafficStats{}
+	}
+	return sampler.stats()
+}
+
+// startTrafficSampler starts polling the Xray stats API. It does nothing for an
+// invalid API port, when the proxy is no longer running, or if a sampler is
+// already active.
+func (m *Manager) startTrafficSampler(corePath string, apiPort int) {
+	if corePath == "" || apiPort <= 0 {
+		return
+	}
+	m.mu.Lock()
+	if m.sampler != nil || m.cmd == nil || m.state.Status != "running" {
+		m.mu.Unlock()
+		return
+	}
+	sampler := newTrafficSampler(m.emitTraffic)
+	m.sampler = sampler
+	m.mu.Unlock()
+	sampler.start(context.Background(), corePath, apiPort)
+}
+
+// stopTrafficSampler cancels the sampling goroutine and clears the runtime
+// traffic state. Concurrent callers (Stop, monitor, fail) are harmless.
+func (m *Manager) stopTrafficSampler() {
+	m.mu.Lock()
+	sampler := m.sampler
+	m.sampler = nil
+	m.mu.Unlock()
+	if sampler == nil {
+		return
+	}
+	sampler.stop()
+	m.emitTraffic(model.TrafficStats{})
+}
+
+func (m *Manager) emitTraffic(stats model.TrafficStats) {
+	m.mu.RLock()
+	callback := m.onTraffic
+	m.mu.RUnlock()
+	if callback != nil {
+		callback(stats)
+	}
 }
 
 func (m *Manager) State() model.ProxyState {
@@ -170,6 +237,21 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Unlock()
 		return m.fail("Xray-core is not installed")
 	}
+	// The stats/management API shares the settings API port. An invalid or
+	// conflicting port would make Xray fail to bind the inbound, so keep the
+	// proxy usable: an explicitly requested API fails fast, otherwise the
+	// best-effort traffic statistics are skipped for this run.
+	statsSkippedForPort := false
+	if settings.StatsEnabled || settings.XrayAPIEnabled {
+		if settings.XrayAPIPort <= 0 || settings.XrayAPIPort == settings.XrayLocalPort {
+			if settings.XrayAPIEnabled {
+				m.mu.Unlock()
+				return m.fail("Xray API 端口无效或与本地代理端口相同，请在设置中修改")
+			}
+			settings.StatsEnabled = false
+			statsSkippedForPort = true
+		}
+	}
 	if settings.TunMode {
 		if err := preflightTun(coreInfo.Path); err != nil {
 			m.mu.Unlock()
@@ -222,6 +304,9 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.state = state
 	m.mu.Unlock()
 	m.emit(state)
+	if statsSkippedForPort {
+		m.appendLog("warning", "stats", fmt.Sprintf("Xray API 端口 %d 与本地代理端口相同，已跳过实时流量统计", settings.XrayAPIPort))
+	}
 
 	m.appendLog("info", "core", "正在校验 Xray 配置")
 	testCmd := exec.CommandContext(ctx, coreInfo.Path, "run", "-test", "-config", configPath)
@@ -279,6 +364,19 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	}
 
 	m.appendLog("info", "core", "本地入站已就绪: "+state.LocalAddr)
+	if settings.SystemProxyMode == "system" && !settings.TunMode {
+		cleanup, proxyErr := platform.EnableSystemProxy(state.LocalAddr)
+		if proxyErr != nil {
+			m.appendLog("warning", "system", "Windows 系统代理设置失败: "+proxyErr.Error()+"；代理仍会继续运行，请手动配置系统代理或使用 TUN 模式")
+		} else {
+			m.mu.Lock()
+			m.systemProxyCleanup = cleanup
+			m.mu.Unlock()
+			m.appendLog("info", "system", "Windows 系统代理已启用: "+state.LocalAddr)
+		}
+	} else if settings.TunMode && settings.SystemProxyMode == "system" {
+		m.appendLog("info", "system", "TUN 模式已接管系统流量，跳过 Windows 系统代理")
+	}
 	if settings.TunMode {
 		cleanup, routeErr := setupTunRoutes(tunInterfaceName, resolvedIP)
 		if routeErr != nil {
@@ -299,14 +397,20 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	m.mu.Unlock()
 	m.appendLog("info", "core", "代理已进入运行状态")
 	m.emit(state)
+	if settings.StatsEnabled || settings.XrayAPIEnabled {
+		m.appendLog("info", "stats", fmt.Sprintf("实时流量统计已启用（采样间隔 %s）", trafficSampleInterval))
+		m.startTrafficSampler(coreInfo.Path, settings.XrayAPIPort)
+	}
 	return state, nil
 }
 func (m *Manager) Stop() (model.ProxyState, error) {
+	defer m.stopSystemProxy()
 	m.mu.Lock()
 	if m.cmd == nil {
 		m.state = model.ProxyState{Status: "stopped"}
 		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
+		m.stopTrafficSampler()
 		if cleanup := m.takeTunCleanup(); cleanup != nil {
 			_ = cleanup()
 		}
@@ -320,6 +424,7 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.mu.Unlock()
 	m.emit(m.State())
 	m.appendLog("info", "core", "正在停止 Xray-core")
+	m.stopTrafficSampler()
 	if cleanup := m.takeTunCleanup(); cleanup != nil {
 		_ = cleanup()
 	}
@@ -394,9 +499,11 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	} else {
 		m.appendLog("info", "core", "Xray-core 已退出")
 	}
+	m.stopSystemProxy()
 	if cleanup := m.takeTunCleanup(); cleanup != nil {
 		_ = cleanup()
 	}
+	m.stopTrafficSampler()
 
 	m.mu.Lock()
 	if m.cmd == cmd {
@@ -417,6 +524,21 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	m.emit(state)
 }
 
+func (m *Manager) stopSystemProxy() {
+	cleanup := m.takeSystemProxyCleanup()
+	if cleanup != nil {
+		_ = cleanup()
+		m.appendLog("info", "system", "Windows 系统代理已恢复")
+	}
+}
+
+func (m *Manager) takeSystemProxyCleanup() func() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cleanup := m.systemProxyCleanup
+	m.systemProxyCleanup = nil
+	return cleanup
+}
 func (m *Manager) takeTunCleanup() func() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -430,6 +552,8 @@ func (m *Manager) fail(message string) (model.ProxyState, error) {
 	m.state = model.ProxyState{Status: "error", Error: message}
 	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
+	m.stopSystemProxy()
+	m.stopTrafficSampler()
 	m.emit(state)
 	return state, errors.New(message)
 }

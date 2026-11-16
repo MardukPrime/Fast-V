@@ -24,6 +24,10 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 		return nil, err
 	}
 
+	// The stats API is required both for the optional management API and for the
+	// live traffic dashboard; either feature enables the same Xray API config.
+	apiStatsEnabled := settings.XrayAPIEnabled || settings.StatsEnabled
+
 	inbounds := make([]any, 0, 3)
 	if settings.TunMode {
 		inbounds = append(inbounds, map[string]any{
@@ -53,7 +57,7 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			"destOverride": []string{"http", "tls", "quic"},
 		},
 	})
-	if settings.XrayAPIEnabled {
+	if apiStatsEnabled {
 		inbounds = append(inbounds, map[string]any{
 			"tag":      "api-in",
 			"listen":   "127.0.0.1",
@@ -75,13 +79,13 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			map[string]any{"tag": "direct", "protocol": "freedom"},
 			map[string]any{"tag": "block", "protocol": "blackhole"},
 		},
-		"routing": buildRouting(settings.ProxyMode, customRules, settings.XrayAPIEnabled, settings.XrayDomainStrategy),
+		"routing": buildRouting(settings.ProxyMode, customRules, apiStatsEnabled, settings.XrayDomainStrategy),
 		"dns": map[string]any{
 			"servers":       splitList(settings.XrayDNSServers),
 			"queryStrategy": settings.XrayDNSStrategy,
 		},
 	}
-	if settings.XrayAPIEnabled {
+	if apiStatsEnabled {
 		config["api"] = map[string]any{
 			"tag": "api",
 			"services": []string{

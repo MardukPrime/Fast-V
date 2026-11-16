@@ -47,7 +47,13 @@ type Settings struct {
 	XraySockoptDomainStrategy string `json:"xraySockoptDomainStrategy"`
 	XraySockoptJSON           string `json:"xraySockoptJson"`
 	XrayFinalMaskJSON         string `json:"xrayFinalMaskJson"`
+	SystemProxyMode           string `json:"systemProxyMode"`
 	TunMode                   bool   `json:"tunMode"`
+	StatsEnabled              bool   `json:"statsEnabled"`
+	AutoSelectEnabled         bool   `json:"autoSelectEnabled"`
+	AutoSelectIntervalMinutes int    `json:"autoSelectIntervalMinutes"`
+	AutoSelectToleranceMS     int    `json:"autoSelectToleranceMs"`
+	FailoverEnabled           bool   `json:"failoverEnabled"`
 	TestURL                   string `json:"testUrl"`
 	XrayAPIEnabled            bool   `json:"xrayApiEnabled"`
 	XrayAPIPort               int    `json:"xrayApiPort"`
@@ -103,6 +109,8 @@ type Node struct {
 	Port           int    `json:"port"`
 	Raw            string `json:"raw"`
 	Enabled        bool   `json:"enabled"`
+	Favorite       bool   `json:"favorite"`
+	Order          int    `json:"order"`
 	SourceKey      string `json:"sourceKey"`
 	OutboundJSON   string `json:"outboundJson"`
 }
@@ -112,12 +120,36 @@ type NodeView struct {
 	ID               string `json:"id"`
 	SubscriptionID   string `json:"subscriptionId"`
 	SubscriptionName string `json:"subscriptionName"`
+	Manual           bool   `json:"manual"`
 	Name             string `json:"name"`
 	Protocol         string `json:"protocol"`
 	Address          string `json:"address"`
 	Port             int    `json:"port"`
 	Enabled          bool   `json:"enabled"`
+	Favorite         bool   `json:"favorite"`
 	Active           bool   `json:"active"`
+}
+
+// NodeImportResult summarizes a paste/import of share links.
+type NodeImportResult struct {
+	Imported int        `json:"imported"`
+	Skipped  int        `json:"skipped"`
+	Nodes    []NodeView `json:"nodes"`
+	Errors   []string   `json:"errors"`
+}
+
+// NodeLink is one exported share link.
+type NodeLink struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Link string `json:"link"`
+}
+
+// BackupResult summarizes a configuration restore.
+type BackupResult struct {
+	RestoredSubscriptions int `json:"restoredSubscriptions"`
+	RestoredNodes         int `json:"restoredNodes"`
+	RestoredRules         int `json:"restoredRules"`
 }
 
 // DashboardSummary is the data shown on the overview page.
@@ -208,11 +240,13 @@ func NodeViewFrom(node Node, subscriptionName string, activeID string) NodeView 
 		ID:               node.ID,
 		SubscriptionID:   node.SubscriptionID,
 		SubscriptionName: subscriptionName,
+		Manual:           node.SubscriptionID == "",
 		Name:             node.Name,
 		Protocol:         node.Protocol,
 		Address:          node.Address,
 		Port:             node.Port,
 		Enabled:          node.Enabled,
+		Favorite:         node.Favorite,
 		Active:           node.ID == activeID,
 	}
 }
@@ -259,6 +293,19 @@ type ProxyTestResult struct {
 	CheckedAt  string `json:"checkedAt"`
 }
 
+// TrafficStats describes live through-proxy traffic for the running core.
+type TrafficStats struct {
+	Running       bool   `json:"running"`
+	UplinkBytes   int64  `json:"uplinkBytes"`
+	DownlinkBytes int64  `json:"downlinkBytes"`
+	UplinkRate    int64  `json:"uplinkRate"`
+	DownlinkRate  int64  `json:"downlinkRate"`
+	TotalUplink   int64  `json:"totalUplinkBytes"`
+	TotalDownlink int64  `json:"totalDownlinkBytes"`
+	UpdatedAt     string `json:"updatedAt"`
+	Error         string `json:"error"`
+}
+
 // NetworkProbe describes the public exit and basic network quality for one mode.
 type NetworkProbe struct {
 	Mode          string  `json:"mode"`
@@ -297,6 +344,8 @@ type NodeConfig struct {
 	Method        string   `json:"method"`
 	Security      string   `json:"security"`
 	Flow          string   `json:"flow"`
+	Encryption    string   `json:"encryption"`
+	Mldsa65Verify string   `json:"mldsa65Verify"`
 	Network       string   `json:"network"`
 	TLS           string   `json:"tls"`
 	ServerName    string   `json:"serverName"`

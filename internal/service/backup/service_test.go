@@ -1,0 +1,435 @@
+package backup
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/platform"
+	"github.com/MardukPrime/Fast-V/internal/store"
+)
+
+func newTestStore(t *testing.T) *store.Store {
+	t.Helper()
+
+	st, err := store.NewStoreAt(filepath.Join(t.TempDir(), "data.json"))
+	if err != nil {
+		t.Fatalf("create test store: %v", err)
+	}
+	return st
+}
+
+// seedConfiguration fills a store with data covering every part of the backup
+// format: settings, a subscription with nodes, a manual favorite node, routing
+// rules and an explicit active node.
+func seedConfiguration(t *testing.T, st *store.Store) {
+	t.Helper()
+
+	settings := store.DefaultSettings()
+	settings.Theme = "dark"
+	settings.Language = "en-US"
+	settings.XrayLocalPort = 20808
+	settings.StatsEnabled = false
+	if err := st.SaveSettings(settings); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+
+	raw1 := "vless://11111111-2222-3333-4444-555555555555@node1.example.com:443?security=tls#node-1"
+	raw2 := "trojan://password@node2.example.com:443#node-2"
+	sub := store.Subscription{
+		ID:        "sub-1",
+		Name:      "示例订阅",
+		URL:       "https://example.com/sub?token=secret",
+		Enabled:   true,
+		CreatedAt: "2026-01-01T00:00:00Z",
+		UpdatedAt: "2026-01-02T00:00:00Z",
+	}
+	nodes := []store.Node{
+		{
+			ID: "node-1", SubscriptionID: "sub-1", Name: "节点一", Protocol: "vless",
+			Address: "node1.example.com", Port: 443, Raw: raw1, Enabled: true,
+			Favorite: true, SourceKey: model.SourceKey(raw1),
+		},
+		{
+			ID: "node-2", SubscriptionID: "sub-1", Name: "节点二", Protocol: "trojan",
+			Address: "node2.example.com", Port: 443, Raw: raw2, Enabled: true,
+			SourceKey: model.SourceKey(raw2),
+		},
+	}
+	if err := st.AddSubscription(sub, nodes); err != nil {
+		t.Fatalf("add subscription: %v", err)
+	}
+
+	manualRaw := "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@manual.example.com:8388#manual"
+	if err := st.AddManualNodes([]store.Node{{
+		ID: "node-manual", Name: "手动节点", Protocol: "ss", Address: "manual.example.com",
+		Port: 8388, Raw: manualRaw, Enabled: true, Favorite: true,
+	}}); err != nil {
+		t.Fatalf("add manual node: %v", err)
+	}
+
+	if _, err := st.SaveRoutingRule(model.RoutingRule{
+		ID: "rule-1", Name: "直连示例", Type: "domain_suffix", Value: "example.com",
+		Action: "direct", Enabled: true,
+	}); err != nil {
+		t.Fatalf("save routing rule: %v", err)
+	}
+
+	if _, err := st.SetActiveNode("node-2"); err != nil {
+		t.Fatalf("set active node: %v", err)
+	}
+}
+
+func exportVersion(t *testing.T, data []byte) int {
+	t.Helper()
+
+	var doc struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal export: %v", err)
+	}
+	if doc.Version <= 0 {
+		t.Fatalf("export has no version, got %d", doc.Version)
+	}
+	return doc.Version
+}
+
+func TestStoreExportRestoreRoundTrip(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+
+	before, err := st.Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(before, &payload); err != nil {
+		t.Fatalf("export is not valid JSON: %v", err)
+	}
+	for _, key := range []string{"version", "settings", "subscriptions", "nodes", "activeNodeId", "routingRules"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("export is missing %q", key)
+		}
+	}
+
+	// Replace the configuration with something different so the restore has
+	// something real to roll back.
+	if err := st.SaveSettings(store.DefaultSettings()); err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+	if err := st.DeleteSubscription("sub-1"); err != nil {
+		t.Fatalf("delete subscription: %v", err)
+	}
+	if err := st.DeleteNode("node-manual"); err != nil {
+		t.Fatalf("delete manual node: %v", err)
+	}
+	if _, err := st.SaveRoutingRule(model.RoutingRule{
+		ID: "rule-2", Name: "额外规则", Type: "domain", Value: "extra.example.com",
+		Action: "direct", Enabled: true,
+	}); err != nil {
+		t.Fatalf("save extra rule: %v", err)
+	}
+
+	result, err := st.Restore(before)
+	if err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if result.RestoredSubscriptions != 1 || result.RestoredNodes != 3 || result.RestoredRules != 1 {
+		t.Fatalf("unexpected restore result: %+v", result)
+	}
+
+	after, err := st.Export()
+	if err != nil {
+		t.Fatalf("export after restore: %v", err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("restored configuration differs from the export\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+
+	settings := st.Settings()
+	if settings.Theme != "dark" || settings.Language != "en-US" || settings.XrayLocalPort != 20808 || settings.StatsEnabled {
+		t.Fatalf("settings were not restored: %+v", settings)
+	}
+
+	subscriptions := st.ListSubscriptions()
+	if len(subscriptions) != 1 || subscriptions[0].ID != "sub-1" || subscriptions[0].URL != "https://example.com/sub?token=secret" {
+		t.Fatalf("subscriptions were not restored: %+v", subscriptions)
+	}
+	if subscriptions[0].NodeCount != 2 {
+		t.Fatalf("subscription node count was not restored: %+v", subscriptions[0])
+	}
+
+	nodes := st.ListNodes()
+	if len(nodes) != 3 {
+		t.Fatalf("expected 3 restored nodes, got %d", len(nodes))
+	}
+	wantOrder := []string{"node-1", "node-2", "node-manual"}
+	for i, want := range wantOrder {
+		if nodes[i].ID != want {
+			t.Fatalf("unexpected node order at %d: got %s, want %s", i, nodes[i].ID, want)
+		}
+	}
+	if !nodes[0].Favorite || nodes[0].Raw != "vless://11111111-2222-3333-4444-555555555555@node1.example.com:443?security=tls#node-1" {
+		t.Fatalf("node favorite/raw was not restored: %+v", nodes[0])
+	}
+	if !nodes[2].Favorite || nodes[2].SubscriptionID != "" {
+		t.Fatalf("manual favorite node was not restored: %+v", nodes[2])
+	}
+	if !nodes[2].Enabled {
+		t.Fatalf("manual node enabled flag was not restored: %+v", nodes[2])
+	}
+
+	rules := st.ListRoutingRules()
+	if len(rules) != 1 || rules[0].ID != "rule-1" {
+		t.Fatalf("routing rules were not restored: %+v", rules)
+	}
+
+	active, ok := st.ActiveNode()
+	if !ok || active.ID != "node-2" {
+		t.Fatalf("active node was not restored: %+v (ok=%v)", active, ok)
+	}
+}
+
+func TestStoreRestoreRejectsInvalidBackupsWithoutChangingData(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+
+	before, err := st.Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	version := exportVersion(t, before)
+
+	cases := []struct {
+		name string
+		data string
+		want string
+	}{
+		{"空内容", "", "备份内容为空"},
+		{"损坏的 JSON", `{"version":`, "JSON"},
+		{"缺少版本信息", `{"settings":{},"subscriptions":[],"nodes":[],"routingRules":[]}`, "版本"},
+		{
+			"版本过新",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[],"nodes":[],"routingRules":[]}`, version+1),
+			"版本过新",
+		},
+		{
+			"重复的订阅 ID",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[{"id":"a","name":"a"},{"id":"a","name":"b"}],"nodes":[],"routingRules":[]}`, version),
+			"重复的订阅 ID",
+		},
+		{
+			"重复的节点 ID",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[],"nodes":[{"id":"n","name":"a"},{"id":"n","name":"b"}],"routingRules":[]}`, version),
+			"重复的节点 ID",
+		},
+		{
+			"节点缺少 ID",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[],"nodes":[{"name":"没有 ID"}],"routingRules":[]}`, version),
+			"节点缺少 ID",
+		},
+		{
+			"节点引用了不存在的订阅",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[],"nodes":[{"id":"n","subscriptionId":"missing"}],"routingRules":[]}`, version),
+			"不存在的订阅",
+		},
+		{
+			"路由规则缺少 ID",
+			fmt.Sprintf(`{"version":%d,"settings":{},"subscriptions":[],"nodes":[],"routingRules":[{"name":"没有 ID"}]}`, version),
+			"路由规则缺少 ID",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := st.Restore([]byte(tc.data)); err == nil {
+				t.Fatal("expected restore to fail")
+			} else if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err.Error(), tc.want)
+			}
+
+			after, err := st.Export()
+			if err != nil {
+				t.Fatalf("export after failed restore: %v", err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatalf("failed restore modified the store\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+		})
+	}
+}
+
+func TestStoreRestoreValidatesActiveNode(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+
+	exported, err := st.Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	patch := func(t *testing.T, mutate func(document map[string]any)) []byte {
+		t.Helper()
+		var document map[string]any
+		if err := json.Unmarshal(exported, &document); err != nil {
+			t.Fatalf("unmarshal export: %v", err)
+		}
+		mutate(document)
+		patched, err := json.Marshal(document)
+		if err != nil {
+			t.Fatalf("marshal patched backup: %v", err)
+		}
+		return patched
+	}
+
+	t.Run("missing active node is cleared", func(t *testing.T) {
+		data := patch(t, func(document map[string]any) {
+			document["activeNodeId"] = "missing-node"
+		})
+		if _, err := st.Restore(data); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		if active, ok := st.ActiveNode(); ok {
+			t.Fatalf("expected no active node, got %+v", active)
+		}
+	})
+
+	t.Run("disabled active node is cleared", func(t *testing.T) {
+		data := patch(t, func(document map[string]any) {
+			document["activeNodeId"] = "node-2"
+			nodes, _ := document["nodes"].([]any)
+			for _, raw := range nodes {
+				node, _ := raw.(map[string]any)
+				if node["id"] == "node-2" {
+					node["enabled"] = false
+				}
+			}
+		})
+		if _, err := st.Restore(data); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		if active, ok := st.ActiveNode(); ok {
+			t.Fatalf("expected no active node, got %+v", active)
+		}
+	})
+
+	t.Run("enabled active node is kept", func(t *testing.T) {
+		data := patch(t, func(document map[string]any) {
+			document["activeNodeId"] = "node-1"
+		})
+		if _, err := st.Restore(data); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+		active, ok := st.ActiveNode()
+		if !ok || active.ID != "node-1" {
+			t.Fatalf("expected node-1 to be active, got %+v (ok=%v)", active, ok)
+		}
+	})
+}
+
+func TestBackupServiceRoundTrip(t *testing.T) {
+	source := newTestStore(t)
+	seedConfiguration(t, source)
+
+	exported, err := New(source).Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if !strings.Contains(exported, `"version"`) {
+		t.Fatalf("exported backup is not versioned: %s", exported)
+	}
+
+	target := newTestStore(t)
+	result, err := New(target).Import(exported)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	if result.RestoredSubscriptions != 1 || result.RestoredNodes != 3 || result.RestoredRules != 1 {
+		t.Fatalf("unexpected import result: %+v", result)
+	}
+
+	reExported, err := New(target).Export()
+	if err != nil {
+		t.Fatalf("export after import: %v", err)
+	}
+	if reExported != exported {
+		t.Fatalf("imported configuration differs from the backup\nwant:\n%s\ngot:\n%s", exported, reExported)
+	}
+
+	if active, ok := target.ActiveNode(); !ok || active.ID != "node-2" {
+		t.Fatalf("active node was not imported: %+v (ok=%v)", active, ok)
+	}
+	if nodes := target.ListNodes(); len(nodes) != 3 || !nodes[0].Favorite {
+		t.Fatalf("nodes were not imported: %+v", nodes)
+	}
+}
+
+func TestBackupServiceImportRejectsInvalidData(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+
+	before, err := st.Export()
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		data string
+		want string
+	}{
+		{"空字符串", "", "备份内容为空"},
+		{"只有空白", "  \n\t ", "备份内容为空"},
+		{"损坏的 JSON", `{"version":`, "JSON"},
+		{"不是对象", `[]`, "JSON"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := New(st).Import(tc.data); err == nil {
+				t.Fatal("expected import to fail")
+			} else if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error %q does not contain %q", err.Error(), tc.want)
+			}
+
+			after, err := st.Export()
+			if err != nil {
+				t.Fatalf("export after failed import: %v", err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatal("failed import modified the configuration")
+			}
+		})
+	}
+}
+
+func TestAutostartPlatformBehavior(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The Windows implementation writes to HKCU\...\Run; tests only probe the
+		// read-only path so no registry state is modified.
+		if _, err := platform.AutostartEnabled(); err != nil {
+			t.Fatalf("query autostart state: %v", err)
+		}
+		if _, err := platform.IsEnabled(); err != nil {
+			t.Fatalf("query autostart state via IsEnabled: %v", err)
+		}
+		return
+	}
+
+	if _, err := platform.AutostartEnabled(); err == nil || !strings.Contains(err.Error(), "仅支持 Windows") {
+		t.Fatalf("expected unsupported autostart error, got %v", err)
+	}
+	if _, err := platform.IsEnabled(); err == nil || !strings.Contains(err.Error(), "仅支持 Windows") {
+		t.Fatalf("expected unsupported autostart error from IsEnabled, got %v", err)
+	}
+	if err := platform.SetAutostart(true); err == nil || !strings.Contains(err.Error(), "仅支持 Windows") {
+		t.Fatalf("expected unsupported SetAutostart error, got %v", err)
+	}
+}

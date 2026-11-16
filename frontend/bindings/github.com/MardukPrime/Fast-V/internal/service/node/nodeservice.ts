@@ -26,12 +26,37 @@ export function Delete(id: string): $CancellablePromise<void> {
     return $Call.ByID(3937961124, id);
 }
 
+/**
+ * ExportLinks returns share links for the requested node ids (all nodes when ids
+ * is empty). The original raw link is reused when it still matches the node
+ * protocol, otherwise it is rebuilt from the extracted node configuration.
+ */
+export function ExportLinks(ids: string[] | null): $CancellablePromise<model$0.NodeLink[] | null> {
+    return $Call.ByID(1331039150, ids);
+}
+
+/**
+ * ImportLinks parses pasted share links (multi-line text, clipboard content or a
+ * whole base64 subscription) and stores them as manual nodes. Links that are
+ * already known are skipped, unusable lines are reported in Errors.
+ */
+export function ImportLinks(text: string): $CancellablePromise<model$0.NodeImportResult> {
+    return $Call.ByID(442987495, text);
+}
+
 export function List(filter: model$0.NodeFilter): $CancellablePromise<model$0.NodeView[] | null> {
     return $Call.ByID(815656287, filter);
 }
 
 export function Preview(input: model$0.NodeConfig): $CancellablePromise<model$0.NodeConfigPreview> {
     return $Call.ByID(3740078081, input);
+}
+
+/**
+ * Reorder persists a drag-and-drop ordering for the node list.
+ */
+export function Reorder(ids: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(1103396134, ids);
 }
 
 export function SaveConfig(input: model$0.NodeConfig): $CancellablePromise<model$0.NodeView> {
@@ -46,6 +71,25 @@ export function SetEnabled(id: string, enabled: boolean): $CancellablePromise<mo
     return $Call.ByID(1395997942, id, enabled);
 }
 
+/**
+ * SetFavorite marks or unmarks a node as favorite. Favorites survive
+ * subscription refreshes.
+ */
+export function SetFavorite(id: string, favorite: boolean): $CancellablePromise<model$0.NodeView> {
+    return $Call.ByID(4247381173, id, favorite);
+}
+
 export function TestLatency(ids: string[] | null): $CancellablePromise<model$0.NodeLatency[] | null> {
     return $Call.ByID(3941718459, ids);
+}
+
+/**
+ * TestURL measures the real proxy-chain latency of the requested nodes: a
+ * temporary Xray-core process is started with one SOCKS inbound per node and the
+ * configured test URL is fetched through each node in turn. An empty ids list
+ * tests every enabled node; unknown or disabled nodes are reported individually
+ * in Error instead of being skipped.
+ */
+export function TestURL(ids: string[] | null): $CancellablePromise<model$0.NodeLatency[] | null> {
+    return $Call.ByID(2171455668, ids);
 }

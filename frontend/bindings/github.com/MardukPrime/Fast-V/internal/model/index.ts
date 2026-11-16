@@ -3,6 +3,7 @@
 
 export type {
     AppInfo,
+    BackupResult,
     CoreInfo,
     CoreUpdateResult,
     DashboardSummary,
@@ -13,7 +14,9 @@ export type {
     NodeConfig,
     NodeConfigPreview,
     NodeFilter,
+    NodeImportResult,
     NodeLatency,
+    NodeLink,
     NodeView,
     ProxyState,
     ProxyTestResult,
@@ -21,5 +24,6 @@ export type {
     Settings,
     SubscriptionInput,
     SubscriptionView,
+    TrafficStats,
     UpdateAllResult
 } from "./models.js";

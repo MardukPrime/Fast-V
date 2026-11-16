@@ -267,16 +267,20 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 已实现：
 
 - 订阅和节点管理
+- 节点分享链接导入 / 导出、剪贴板粘贴、手动节点、收藏与排序
 - 节点配置提取与编辑
+- TCP 连通性测速与真实链路 URL 延迟测速（批量临时内核）
+- 自动选择最优节点、故障自动切换
 - Xray 配置生成
-- Xray 内核更新
+- Xray 内核更新与 GeoData 更新
 - 本地代理启动和停止
-- 本地 SOCKS/HTTP 入站
-- Windows TUN
+- 本地 SOCKS/HTTP 入站、Windows TUN、Windows 系统代理
 - 路由规则
+- 实时流量统计（Xray StatsService，含上/下行速率与累计）
 - 网络诊断
 - 运行日志
-- 深色 / 浅色 / 跟随系统主题
+- 配置备份与恢复、开机自启
+- 深色 / 浅色 / 跟随系统主题（默认浅色）
 
 当前仅支持 Xray-core。
 
@@ -284,10 +288,10 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 
 - sing-box 内核
 - Hysteria2 / TUIC
-- 系统代理
-- 按进程分流
-- 流量统计
-- 测速历史
+- 按进程分流与规则集管理
+- 流量与测速历史
+- 托盘图标与最小化到托盘
+- 应用自更新
 - macOS / Linux 适配
 - 多语言界面
 - SQLite 存储选项

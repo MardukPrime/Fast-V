@@ -1,8 +1,8 @@
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
-import type { NodeConfig, NodeConfigPreview, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type ServersProps = {
@@ -10,6 +10,17 @@ type ServersProps = {
 };
 
 type EditorTab = "form" | "json";
+
+type SortMode = "default" | "name" | "latency" | "favorite";
+
+const sortOptions: { value: SortMode; label: string }[] = [
+  { value: "default", label: "默认顺序" },
+  { value: "name", label: "按名称" },
+  { value: "latency", label: "按延迟" },
+  { value: "favorite", label: "收藏优先" },
+];
+
+const isSortMode = (value: string): value is SortMode => sortOptions.some((option) => option.value === value);
 
 const protocolOptions = ["vmess", "vless", "trojan", "shadowsocks"];
 const networkOptions = [
@@ -29,6 +40,33 @@ function protocolLabel(protocol: string) {
   return protocol === "shadowsocks" ? "Shadowsocks" : protocol.toUpperCase();
 }
 
+function CopyLinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+    </svg>
+  );
+}
+
+function PasteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="9" y="4" width="11" height="16" rx="2" />
+      <path d="M9 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h9" />
+      <path d="M13 3v3" />
+    </svg>
+  );
+}
+
+function FavoriteStarIcon(props: { filled: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill={props.filled ? "currentColor" : "none"} stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3.4l2.65 5.37 5.93.86-4.29 4.18 1.01 5.9L12 17.03l-5.3 2.68 1.01-5.9-4.29-4.18 5.93-.86z" />
+    </svg>
+  );
+}
+
 export default function ServersPage(props: ServersProps) {
   const [nodes, setNodes] = createSignal<NodeView[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -37,9 +75,33 @@ export default function ServersPage(props: ServersProps) {
   const [protocol, setProtocol] = createSignal("");
   const [subscriptionID, setSubscriptionID] = createSignal("");
   const [latencies, setLatencies] = createSignal<Record<string, NodeLatency>>({});
+  // Real proxy-chain HTTP latencies (NodeService.TestURL). They take priority
+  // over the TCP reachability values above in the latency column.
+  const [urlLatencies, setUrlLatencies] = createSignal<Record<string, NodeLatency>>({});
   const [testingID, setTestingID] = createSignal("");
   const [testingAll, setTestingAll] = createSignal(false);
   const [busyID, setBusyID] = createSignal("");
+  const [sortMode, setSortMode] = createSignal<SortMode>("default");
+  const [copiedID, setCopiedID] = createSignal("");
+
+  const [importOpen, setImportOpen] = createSignal(false);
+  const [importText, setImportText] = createSignal("");
+  const [importBusy, setImportBusy] = createSignal(false);
+  const [importError, setImportError] = createSignal("");
+  const [importResult, setImportResult] = createSignal<NodeImportResult | null>(null);
+  const [pageNotice, setPageNotice] = createSignal("");
+
+  let copyTimer: number | undefined;
+  let pageNoticeTimer: number | undefined;
+  // URL latency tests run a temporary Xray-core process and may take seconds.
+  // Never touch signals after the page has been disposed.
+  let alive = true;
+
+  onCleanup(() => {
+    alive = false;
+    if (copyTimer !== undefined) window.clearTimeout(copyTimer);
+    if (pageNoticeTimer !== undefined) window.clearTimeout(pageNoticeTimer);
+  });
 
   const [editorConfig, setEditorConfig] = createSignal<NodeConfig | null>(null);
   const [editorPreview, setEditorPreview] = createSignal<NodeConfigPreview | null>(null);
@@ -79,6 +141,50 @@ export default function ServersPage(props: ServersProps) {
       const haystack = [node.name, node.protocol, node.address, node.subscriptionName].join(" ").toLowerCase();
       return haystack.includes(keyword);
     });
+  });
+
+  // NodeService.List already returns nodes in the persisted order, so keep that
+  // order stable for the "default" mode and only re-sort a copy for the others.
+  const nodeOrder = createMemo(() => {
+    const order = new Map<string, number>();
+    nodes().forEach((node, index) => order.set(node.id, index));
+    return order;
+  });
+
+  // Real proxy-chain (URL) latency wins over the TCP reachability fallback.
+  const effectiveLatency = (node: NodeView): { result: NodeLatency; source: "url" | "tcp" } | null => {
+    const urlResult = urlLatencies()[node.id];
+    if (urlResult) return { result: urlResult, source: "url" };
+    const tcpResult = latencies()[node.id];
+    if (tcpResult) return { result: tcpResult, source: "tcp" };
+    return null;
+  };
+
+  const latencyValue = (node: NodeView) => {
+    const entry = effectiveLatency(node);
+    if (!entry || entry.result.error) return Number.MAX_SAFE_INTEGER;
+    return entry.result.latencyMs;
+  };
+
+  const sortedNodes = createMemo(() => {
+    const list = filteredNodes();
+    const mode = sortMode();
+    if (mode === "default") return list;
+    const order = nodeOrder();
+    const rank = (node: NodeView) => order.get(node.id) ?? Number.MAX_SAFE_INTEGER;
+    const sorted = [...list];
+    switch (mode) {
+      case "name":
+        sorted.sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true }) || rank(a) - rank(b));
+        break;
+      case "latency":
+        sorted.sort((a, b) => latencyValue(a) - latencyValue(b) || rank(a) - rank(b));
+        break;
+      case "favorite":
+        sorted.sort((a, b) => Number(b.favorite) - Number(a.favorite) || rank(a) - rank(b));
+        break;
+    }
+    return sorted;
   });
 
   const activeNodeID = createMemo(() => nodes().find((node) => node.active)?.id ?? "");
@@ -135,44 +241,205 @@ export default function ServersPage(props: ServersProps) {
     }
   };
 
-  const applyLatencyResults = (results: NodeLatency[] | null) => {
-    if (!results) return;
-    setLatencies((current) => {
+  const copyLink = async (node: NodeView) => {
+    setError("");
+    try {
+      const links = await NodeService.ExportLinks([node.id]);
+      const link = links?.[0]?.link ?? "";
+      if (!link) {
+        setError("该节点没有可导出的分享链接。");
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        setError("当前环境不支持剪贴板，无法复制分享链接。");
+        return;
+      }
+      await navigator.clipboard.writeText(link);
+      setCopiedID(node.id);
+      showPageNotice(`已复制「${node.name}」的分享链接。`);
+      if (copyTimer !== undefined) window.clearTimeout(copyTimer);
+      copyTimer = window.setTimeout(() => {
+        setCopiedID("");
+        copyTimer = undefined;
+      }, 1600);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const toggleFavorite = async (node: NodeView) => {
+    const favorite = !node.favorite;
+    // Optimistic update: flip the star immediately, then reconcile with the
+    // server result and roll back only when the call fails.
+    setNodes((current) => current.map((item) => item.id === node.id ? { ...item, favorite } : item));
+    setError("");
+    try {
+      const updated = await NodeService.SetFavorite(node.id, favorite);
+      setNodes((current) => current.map((item) => item.id === node.id ? updated : item));
+    } catch (err) {
+      setNodes((current) => current.map((item) => item.id === node.id ? { ...item, favorite: node.favorite } : item));
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Real URL tests start a temporary Xray-core process, so they are serialized:
+  // at most one single-node or batch test may be running at any time.
+  const urlTestBusy = () => testingID() !== "" || testingAll();
+
+  const urlTestFailure = (nodeId: string, message: string): NodeLatency => ({
+    nodeId,
+    latencyMs: 0,
+    error: message,
+    checkedAt: new Date().toISOString(),
+  });
+
+  const applyURLLatencyResults = (requestedIDs: string[], results: NodeLatency[] | null) => {
+    if (!alive || !results) return;
+    const byID = new Map<string, NodeLatency>();
+    for (const result of results) {
+      if (result?.nodeId) byID.set(result.nodeId, result);
+    }
+    setUrlLatencies((current) => {
       const next = { ...current };
-      for (const result of results) next[result.nodeId] = result;
+      for (const [id, result] of byID) next[id] = result;
+      // Never leave a requested node without a visible outcome: a missing
+      // result is reported as a per-node failure instead of silently ignored.
+      for (const id of requestedIDs) {
+        if (!byID.has(id)) next[id] = urlTestFailure(id, "测速未返回结果");
+      }
       return next;
     });
   };
 
   const testNode = async (node: NodeView) => {
+    if (!alive || urlTestBusy()) return;
     setTestingID(node.id);
     setError("");
     try {
-      applyLatencyResults(await NodeService.TestLatency([node.id]));
+      const results = await NodeService.TestURL([node.id]);
+      if (!alive) return;
+      applyURLLatencyResults([node.id], results);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!alive) return;
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      setUrlLatencies((current) => ({ ...current, [node.id]: urlTestFailure(node.id, message) }));
     } finally {
-      setTestingID("");
+      if (alive) setTestingID("");
     }
   };
 
   const testAll = async () => {
+    if (!alive || urlTestBusy()) return;
+    const ids = filteredNodes().map((node) => node.id);
+    if (ids.length === 0) return;
     setTestingAll(true);
     setError("");
     try {
-      applyLatencyResults(await NodeService.TestLatency(filteredNodes().map((node) => node.id)));
+      const results = await NodeService.TestURL(ids);
+      if (!alive) return;
+      applyURLLatencyResults(ids, results);
     } catch (err) {
+      if (!alive) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setTestingAll(false);
+      if (alive) setTestingAll(false);
+    }
+  };
+
+  const showPageNotice = (message: string) => {
+    if (pageNoticeTimer !== undefined) window.clearTimeout(pageNoticeTimer);
+    setPageNotice(message);
+    pageNoticeTimer = window.setTimeout(() => {
+      setPageNotice("");
+      pageNoticeTimer = undefined;
+    }, 8000);
+  };
+
+  const openImport = () => {
+    setImportError("");
+    setImportResult(null);
+    setImportOpen(true);
+  };
+
+  const closeImport = () => {
+    if (importBusy()) return;
+    setImportOpen(false);
+    setImportText("");
+    setImportError("");
+    setImportResult(null);
+  };
+
+  const pasteFromClipboard = async () => {
+    setImportError("");
+    if (!navigator.clipboard?.readText) {
+      setImportError("当前环境不支持读取剪贴板，请手动粘贴分享链接。");
+      return;
+    }
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        setImportError("剪贴板为空，请先复制节点分享链接。");
+        return;
+      }
+      setImportText((current) => current.trim() ? `${current.trim()}\n${text.trim()}` : text.trim());
+    } catch {
+      setImportError("无法读取剪贴板，请手动粘贴分享链接。");
+    }
+  };
+
+  const importNodes = async () => {
+    const text = importText().trim();
+    if (!text) {
+      setImportError("请先粘贴节点分享链接。");
+      return;
+    }
+    setImportBusy(true);
+    setImportError("");
+    setImportResult(null);
+    try {
+      const result = await NodeService.ImportLinks(text);
+      setImportResult(result);
+      const errors = result.errors ?? [];
+      if (result.imported > 0) {
+        await load();
+        showPageNotice(result.skipped > 0
+          ? `已导入 ${result.imported} 条节点，跳过 ${result.skipped} 条重复或无效链接。`
+          : `已导入 ${result.imported} 条节点。`);
+      }
+      if (errors.length > 0) {
+        setImportError(`导入完成，但有 ${errors.length} 条链接未能处理，详见下方列表。`);
+        return;
+      }
+      if (result.imported === 0) {
+        setImportError(result.skipped > 0 ? "这些链接都已存在，没有新增节点。" : "没有识别到可导入的节点链接。");
+        return;
+      }
+      setImportOpen(false);
+      setImportText("");
+      setImportResult(null);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImportBusy(false);
     }
   };
 
   const latencyLabel = (node: NodeView) => {
-    const result = latencies()[node.id];
-    if (!result) return <span class="latency unknown">未测试</span>;
-    if (result.error) return <span class="latency bad" title={result.error}>失败</span>;
-    return <span classList={{ "latency": true, good: result.latencyMs < 100, mid: result.latencyMs >= 100 && result.latencyMs < 300, bad: result.latencyMs >= 300 }}>{result.latencyMs} ms</span>;
+    const entry = effectiveLatency(node);
+    if (!entry) return <span class="latency unknown">未测试</span>;
+    const sourceLabel = entry.source === "url" ? "真实链路延迟" : "TCP 连通性";
+    if (entry.result.error) {
+      return <span class="latency bad" title={`${sourceLabel}：${entry.result.error}`}>失败</span>;
+    }
+    return (
+      <span
+        classList={{ "latency": true, good: entry.result.latencyMs < 100, mid: entry.result.latencyMs >= 100 && entry.result.latencyMs < 300, bad: entry.result.latencyMs >= 300 }}
+        title={`${sourceLabel}：${entry.result.latencyMs} ms`}
+      >
+        {entry.result.latencyMs} ms
+      </span>
+    );
   };
 
   const openEditor = async (node: NodeView) => {
@@ -283,8 +550,13 @@ export default function ServersPage(props: ServersProps) {
               <span>编辑节点配置、快速切换当前节点和测试连通性</span>
             </div>
           </div>
-          <button class="btn secondary" onClick={testAll} disabled={testingAll() || filteredNodes().length === 0}>
-            <Icon name="refresh" size={14} /> {testingAll() ? "测试中..." : "测试当前列表"}
+          <button
+            class="btn secondary"
+            onClick={testAll}
+            disabled={urlTestBusy() || filteredNodes().length === 0}
+            title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
+          >
+            <Icon name="refresh" size={14} /> {testingAll() ? "测速中..." : "测试当前列表"}
           </button>
         </div>
 
@@ -311,10 +583,25 @@ export default function ServersPage(props: ServersProps) {
             <option value="">全部订阅</option>
             <For each={subscriptions()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
           </select>
+          <select class="node-sort" value={sortMode()} onChange={(event) => { const value = event.currentTarget.value; if (isSortMode(value)) setSortMode(value); }} aria-label="节点排序方式">
+            <For each={sortOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+          </select>
+          <button class="btn secondary" onClick={openImport} disabled={loading()}>
+            <Icon name="plus" size={14} /> 导入节点
+          </button>
           <button class="btn ghost icon-only" onClick={load} disabled={loading()} aria-label="刷新节点">
             <Icon name="refresh" size={14} />
           </button>
         </div>
+
+        <Show when={pageNotice()}>
+          <div class="alert success node-import-notice">
+            <span class="alert-message"><Icon name="check" size={15} /> {pageNotice()}</span>
+            <button class="icon-button" onClick={() => setPageNotice("")} aria-label="关闭导入提示">
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        </Show>
 
         <Show when={error()}>
           <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {error()}</span></div>
@@ -327,7 +614,10 @@ export default function ServersPage(props: ServersProps) {
               <strong>{nodes().length === 0 ? "还没有节点" : "没有匹配的节点"}</strong>
               <span>{nodes().length === 0 ? "添加订阅后，解析出的节点会显示在这里。" : "尝试调整搜索词或筛选条件。"}</span>
               <Show when={nodes().length === 0}>
-                <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>去添加订阅</button>
+                <div class="node-empty-actions">
+                  <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>去添加订阅</button>
+                  <button class="btn secondary" onClick={openImport}>导入节点</button>
+                </div>
               </Show>
             </div>
           }>
@@ -341,7 +631,7 @@ export default function ServersPage(props: ServersProps) {
                 <span>状态</span>
                 <span>操作</span>
               </div>
-              <For each={filteredNodes()}>
+              <For each={sortedNodes()}>
                 {(node) => (
                   <div classList={{ "node-row": true, active: node.active, disabled: !node.enabled }}>
                     <button
@@ -353,8 +643,13 @@ export default function ServersPage(props: ServersProps) {
                       <span />
                     </button>
                     <div class="node-name">
-                      <strong>{node.name}</strong>
-                      <small>{node.subscriptionName}</small>
+                      <div class="node-name-main">
+                        <strong title={node.name}>{node.name}</strong>
+                        <Show when={node.manual}>
+                          <span class="tag manual" title="通过分享链接手动导入的节点">手动</span>
+                        </Show>
+                      </div>
+                      <small>{node.subscriptionName || (node.manual ? "手动添加" : "")}</small>
                     </div>
                     <span class="tag neutral">{node.protocol}</span>
                     <span class="node-address">{node.address}:{node.port}</span>
@@ -368,8 +663,33 @@ export default function ServersPage(props: ServersProps) {
                       {node.enabled ? "启用" : "禁用"}
                     </button>
                     <div class="node-actions">
-                      <button class="btn secondary compact" onClick={() => testNode(node)} disabled={testingID() === node.id}>
-                        <Icon name="speed" size={13} /> {testingID() === node.id ? "测试中" : "测速"}
+                      <button
+                        classList={{ "icon-button": true, "favorite-button": true, on: node.favorite }}
+                        onClick={() => toggleFavorite(node)}
+                        aria-pressed={node.favorite}
+                        aria-label={node.favorite ? `取消收藏 ${node.name}` : `收藏 ${node.name}`}
+                        title={node.favorite ? "取消收藏" : "收藏"}
+                      >
+                        <FavoriteStarIcon filled={node.favorite} />
+                      </button>
+                      <button
+                        classList={{ "icon-button": true, "copy-link": true, copied: copiedID() === node.id }}
+                        onClick={() => copyLink(node)}
+                        disabled={busyID() === node.id}
+                        aria-label={copiedID() === node.id ? "已复制分享链接" : `复制 ${node.name} 的分享链接`}
+                        title={copiedID() === node.id ? "已复制" : "复制分享链接"}
+                      >
+                        <Show when={copiedID() === node.id} fallback={<CopyLinkIcon />}>
+                          <Icon name="check" size={14} />
+                        </Show>
+                      </button>
+                      <button
+                        class="btn secondary compact"
+                        onClick={() => testNode(node)}
+                        disabled={urlTestBusy()}
+                        title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
+                      >
+                        <Icon name="speed" size={13} /> {testingID() === node.id ? "测速中" : "测速"}
                       </button>
                       <button class="icon-button" onClick={() => openEditor(node)} disabled={busyID() === node.id} aria-label={`编辑 ${node.name}`}>
                         <Icon name="edit" size={14} />
@@ -386,9 +706,77 @@ export default function ServersPage(props: ServersProps) {
         </Show>
 
         <p class="node-hint">
-          延迟测试为直接 TCP 连通性测试，不等同于代理链路延迟。切换节点时会自动重启正在运行的代理。
+          「测速」为真实代理链路的 HTTP 延迟测试（会临时启动 Xray，可能耗时数秒）；没有真实链路结果时，延迟列回退显示 TCP 连通性结果。切换节点时会自动重启正在运行的代理。
         </p>
       </section>
+
+      <Show when={importOpen()}>
+        <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeImport(); }}>
+          <div class="modal node-import-modal">
+            <div class="modal-heading">
+              <div>
+                <h3>导入节点</h3>
+                <span>粘贴 vmess / vless / trojan / ss 分享链接，或整段 base64 订阅内容</span>
+              </div>
+              <button class="icon-button" onClick={closeImport} disabled={importBusy()} aria-label="关闭">
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div class="node-import-body">
+              <div class="node-import-toolbar">
+                <button class="btn secondary compact" type="button" onClick={pasteFromClipboard} disabled={importBusy()}>
+                  <PasteIcon /> 从剪贴板粘贴
+                </button>
+                <button class="btn ghost compact" type="button" onClick={() => setImportText("")} disabled={importBusy() || !importText().trim()}>
+                  清空
+                </button>
+              </div>
+              <textarea
+                class="node-import-textarea"
+                value={importText()}
+                onInput={(event) => setImportText(event.currentTarget.value)}
+                spellcheck={false}
+                placeholder={"vmess://...\nvless://...\ntrojan://...\nss://..."}
+                aria-label="节点分享链接"
+              />
+              <p class="node-import-hint">
+                每行一条分享链接；也支持直接粘贴整段 base64 编码的订阅内容。已在列表中的链接会自动跳过。
+              </p>
+
+              <Show when={importError()}>
+                <div class="alert error"><span class="alert-message"><Icon name="alert" size={14} /> {importError()}</span></div>
+              </Show>
+
+              <Show when={importResult()}>
+                {(result) => (
+                  <div class="node-import-result">
+                    <div class="node-import-result-head">
+                      <span class="tag success">成功 {result().imported} 条</span>
+                      <span class="tag neutral">跳过 {result().skipped} 条</span>
+                      <Show when={(result().errors?.length ?? 0) > 0}>
+                        <span class="tag danger">错误 {result().errors?.length ?? 0} 条</span>
+                      </Show>
+                    </div>
+                    <Show when={(result().errors?.length ?? 0) > 0}>
+                      <ul class="node-import-errors">
+                        <For each={result().errors ?? []}>{(item) => <li>{item}</li>}</For>
+                      </ul>
+                    </Show>
+                  </div>
+                )}
+              </Show>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn ghost" type="button" onClick={closeImport} disabled={importBusy()}>关闭</button>
+              <button class="btn primary" type="button" onClick={importNodes} disabled={importBusy() || !importText().trim()}>
+                <Icon name="plus" size={14} /> {importBusy() ? "导入中..." : "导入"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       <Show when={editorConfig()}>
         {(config) => (
@@ -447,6 +835,7 @@ export default function ServersPage(props: ServersProps) {
                           </Show>
                           <Show when={config().protocol === "vless"}>
                             <label><span>Flow</span><input value={config().flow} onInput={(event) => updateEditor("flow", event.currentTarget.value)} placeholder="xtls-rprx-vision" /></label>
+                            <label><span>VLESS 加密</span><input value={config().encryption} onInput={(event) => updateEditor("encryption", event.currentTarget.value)} placeholder="none 或 mlkem768x25519plus..." /></label>
                           </Show>
                           <Show when={config().protocol === "vmess"}>
                             <label><span>加密方式</span><input value={config().security} onInput={(event) => updateEditor("security", event.currentTarget.value)} placeholder="auto" /></label>
@@ -482,6 +871,7 @@ export default function ServersPage(props: ServersProps) {
                               <label><span>REALITY Public Key</span><input value={config().publicKey} onInput={(event) => updateEditor("publicKey", event.currentTarget.value)} /></label>
                               <label><span>Short ID</span><input value={config().shortId} onInput={(event) => updateEditor("shortId", event.currentTarget.value)} /></label>
                               <label><span>SpiderX</span><input value={config().spiderX} onInput={(event) => updateEditor("spiderX", event.currentTarget.value)} placeholder="/" /></label>
+                              <label><span>REALITY Verify (pqv)</span><input value={config().mldsa65Verify} onInput={(event) => updateEditor("mldsa65Verify", event.currentTarget.value)} placeholder="ML-DSA-65 verify key" /></label>
                             </div>
                           </Show>
                           <label class="switch-row node-editor-switch">

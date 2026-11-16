@@ -51,6 +51,7 @@ func TestManagerStartAndStop(t *testing.T) {
 	}
 	settings := store.DefaultSettings()
 	settings.CoreType = "xray"
+	settings.SystemProxyMode = "off"
 	settings.XrayLocalPort = port
 	settings.XrayAPIEnabled = true
 	settings.XrayAPIPort = apiPort

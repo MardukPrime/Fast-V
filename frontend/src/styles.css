@@ -1,19 +1,27 @@
 :root {
-  font-family: "Segoe UI Variable", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.55;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   --bg: #090c11;
   --glass: rgba(255, 255, 255, 0.055);
   --glass-strong: rgba(255, 255, 255, 0.085);
   --glass-border: rgba(255, 255, 255, 0.11);
   --glass-border-strong: rgba(255, 255, 255, 0.18);
   --specular: rgba(255, 255, 255, 0.2);
-  --text: #f1f4f8;
-  --text-secondary: #a7b1bf;
-  --muted: #737f8f;
-  --faint: #4f5a68;
+  --text: #f2f5f9;
+  --text-secondary: #b3bcc9;
+  --muted: #94a1b2;
+  --faint: #78859a;
   --accent: #b6d8ef;
   --accent-strong: #86b6d5;
   --accent-deep: #5b8baa;
@@ -26,16 +34,17 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #eef2f7;
   --glass: rgba(255, 255, 255, 0.58);
   --glass-strong: rgba(255, 255, 255, 0.78);
   --glass-border: rgba(255, 255, 255, 0.72);
   --glass-border-strong: rgba(255, 255, 255, 0.92);
   --specular: rgba(255, 255, 255, 0.92);
-  --text: #111820;
-  --text-secondary: #4d5a69;
-  --muted: #758292;
-  --faint: #9aa5b2;
+  --text: #101720;
+  --text-secondary: #3f4c5b;
+  --muted: #5a6775;
+  --faint: #6d7986;
   --accent: #467b9e;
   --accent-strong: #356783;
   --accent-deep: #2c566e;
@@ -434,6 +443,10 @@ button:disabled {
     var(--shadow-soft);
 }
 
+/* Every glass panel owns its inner padding: text must never sit on the
+   border. Component classes further down override this when they need a
+   tighter rhythm (stat cards, network blocks, ...). */
+.glass-panel,
 .panel {
   padding: 20px;
 }
@@ -2531,20 +2544,20 @@ input::placeholder {
 .node-table-head,
 .node-row {
   display: grid;
-  grid-template-columns: 34px minmax(190px, 1.4fr) 92px minmax(160px, 1fr) 86px 84px 150px;
+  grid-template-columns: 36px minmax(190px, 1.4fr) 96px minmax(155px, 1fr) 84px 84px 150px;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 10px;
+  padding: 0 14px;
 }
 
 .node-table-head {
-  min-height: 34px;
+  min-height: 40px;
   border-bottom: 1px solid var(--glass-border);
   color: var(--faint);
   background: rgba(255, 255, 255, 0.025);
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -2729,9 +2742,9 @@ input::placeholder {
 @media (max-width: 1160px) {
   .node-table-head,
   .node-row {
-    grid-template-columns: 30px minmax(160px, 1.3fr) 82px minmax(130px, 1fr) 74px 78px 130px;
-    gap: 6px;
-    padding-inline: 9px;
+    grid-template-columns: 32px minmax(160px, 1.3fr) 88px minmax(130px, 1fr) 76px 80px 136px;
+    gap: 8px;
+    padding-inline: 10px;
   }
 }
 
@@ -3792,7 +3805,7 @@ input::placeholder {
 
 html {
   -webkit-font-smoothing: antialiased;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -5968,5 +5981,514 @@ select {
 
   .connection-copy h2 {
     font-size: 21px;
+  }
+}
+
+/* ----------------------------------------------------------------
+   Typography & node spacing pass
+   Kept last on purpose: the layers above accumulated sub-pixel font
+   sizes (8px / 9px / 10.5px) that blur at 125% and 150% Windows
+   scaling. Sizes here are whole pixels with explicit line-heights, so
+   text stays crisp and never touches a border.
+   ---------------------------------------------------------------- */
+
+/* Card headings: title and caption need air between them */
+.panel-heading h3 {
+  line-height: 1.35;
+}
+
+.panel-heading h3 + span {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* An icon tile is a grid box, not a line of caption text */
+.panel-heading .heading-icon {
+  display: grid;
+  place-items: center;
+  margin-top: 0;
+  font-size: inherit;
+}
+
+/* Dashboard · 当前节点 / 最近订阅 */
+.node-overview,
+.recent-panel {
+  padding: 20px 22px;
+}
+
+.node-identity {
+  gap: 13px;
+  margin-top: 18px;
+  padding: 14px 16px;
+}
+
+.node-identity-copy strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.node-identity-copy span {
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.node-detail-grid {
+  gap: 15px 18px;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.node-detail-grid span {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.node-detail-grid strong {
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Servers · node list */
+.node-row {
+  min-height: 66px;
+}
+
+.node-name strong {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.node-name small {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.node-address {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+}
+
+.tag,
+.latency,
+.state-pill {
+  font-size: 11px;
+}
+
+.latency,
+.state-pill,
+.recent-count,
+.recent-usage > span {
+  font-variant-numeric: tabular-nums;
+}
+
+.node-hint {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.node-toolbar {
+  padding: 10px;
+}
+
+.node-search input,
+.node-toolbar > select {
+  min-height: 34px;
+}
+
+/* Node editor modal */
+.node-editor-tab {
+  font-size: 11px;
+}
+
+.node-editor-section-title {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+.node-editor-grid label > span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.node-editor-grid input,
+.node-editor-grid select {
+  font-size: 12px;
+}
+
+.node-editor-preview-head strong {
+  font-size: 12px;
+}
+
+.node-editor-preview-head span {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.node-config-preview,
+.node-json-editor textarea {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* Remaining sub-11px leftovers on the node screens */
+.recent-count,
+.recent-usage > span,
+.recent-usage-empty {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.btn.compact {
+  font-size: 11px;
+}
+
+/* Chinese headings: the old negative tracking made 汉字 collide */
+.topbar h1,
+.workspace-copy h2,
+.connection-copy h2,
+.network-hero h2,
+.placeholder-page h2 {
+  letter-spacing: 0;
+}
+
+.panel-heading h3 {
+  letter-spacing: 0;
+}
+
+/* ----------------------------------------------------------------
+   Node import & favorites
+   Manual share-link import dialog, per-row link copy, favorite stars
+   and the front-end sort selector. Kept last so the rules above stay
+   untouched; column widths are widened at the end of the section to
+   make room for the two new row actions.
+   ---------------------------------------------------------------- */
+
+/* Toolbar: the extra import button and sort select may wrap instead
+   of overflowing the panel on narrow windows. */
+.node-toolbar {
+  flex-wrap: wrap;
+}
+
+.node-toolbar > select.node-sort {
+  min-width: 128px;
+}
+
+/* Import summary shown above the node table after a successful import */
+.node-import-notice {
+  margin-top: 10px;
+}
+
+.node-import-notice .icon-button {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+}
+
+/* Import dialog */
+.node-import-modal {
+  width: min(680px, 100%);
+}
+
+.node-import-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.node-import-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.node-import-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  outline: none;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.node-import-textarea:focus {
+  border-color: rgba(182, 216, 239, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 3px rgba(182, 216, 239, 0.08);
+}
+
+.node-import-textarea::placeholder {
+  color: var(--faint);
+}
+
+:root[data-theme="light"] .node-import-textarea {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.node-import-hint {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.node-import-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"] .node-import-result {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.node-import-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-import-errors {
+  max-height: 132px;
+  margin: 0;
+  padding-left: 18px;
+  overflow-y: auto;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.node-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Node row: manual tag, favorite star and copy feedback */
+.node-name-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.node-name-main strong {
+  min-width: 0;
+}
+
+.tag.manual {
+  flex: 0 0 auto;
+  border: 1px solid rgba(185, 220, 242, 0.18);
+  color: var(--accent);
+  background: rgba(185, 220, 242, 0.1);
+}
+
+:root[data-theme="light"] .tag.manual {
+  border-color: rgba(70, 123, 158, 0.18);
+  color: var(--accent-strong);
+  background: rgba(70, 123, 158, 0.09);
+}
+
+.icon-button.favorite-button {
+  color: var(--faint);
+}
+
+.icon-button.favorite-button:hover {
+  border-color: rgba(216, 180, 123, 0.26);
+  color: var(--warning);
+  background: rgba(216, 180, 123, 0.08);
+}
+
+.icon-button.favorite-button.on {
+  color: var(--warning);
+}
+
+.icon-button.copy-link.copied,
+.icon-button.copy-link.copied:hover {
+  border-color: rgba(132, 207, 167, 0.26);
+  color: var(--success);
+  background: rgba(132, 207, 167, 0.08);
+}
+
+/* The actions column grew by the star and copy buttons */
+.node-table-head,
+.node-row {
+  grid-template-columns: 36px minmax(190px, 1.4fr) 96px minmax(155px, 1fr) 84px 84px 210px;
+}
+
+@media (max-width: 1160px) {
+  .node-table-head,
+  .node-row {
+    grid-template-columns: 32px minmax(160px, 1.3fr) 88px minmax(130px, 1fr) 76px 80px 200px;
+  }
+}
+
+@media (max-width: 980px) {
+  .node-table-head,
+  .node-row {
+    min-width: 860px;
+  }
+}
+
+@media (max-width: 620px) {
+  .node-import-modal {
+    max-height: 92vh;
+  }
+
+  .node-import-body {
+    padding: 14px;
+  }
+}
+
+/* ----------------------------------------------------------------
+   Settings · smart routing, traffic stats, system integration, backup
+   New classes for the settings sections added in the M2/M3/M4 work.
+   Appended last on purpose: the rules above are left untouched.
+   ---------------------------------------------------------------- */
+
+/* Muted inline explanation under a setting control */
+.settings-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.settings-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--faint);
+}
+
+/* Warning box inside a settings section body */
+.settings-inline-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(228, 193, 134, 0.24);
+  border-radius: 10px;
+  color: var(--warning);
+  background: rgba(228, 193, 134, 0.07);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.settings-inline-warning svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Alerts rendered inside a section body keep a small top gap */
+.settings-inline-alert {
+  margin-top: 10px;
+}
+
+/* Backup & restore */
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.backup-file-input {
+  display: none;
+}
+
+.backup-result {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+:root[data-theme="light"] .backup-result {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.backup-result-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.backup-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.backup-result-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.backup-result-grid span {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.backup-result-grid strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-result-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+@media (max-width: 560px) {
+  .backup-result-grid {
+    grid-template-columns: 1fr;
   }
 }

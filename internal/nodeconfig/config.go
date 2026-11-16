@@ -88,6 +88,8 @@ func extractVLESS(raw string) (model.NodeConfig, error) {
 		Port:          port,
 		UUID:          u.User.Username(),
 		Flow:          q.Get("flow"),
+		Encryption:    q.Get("encryption"),
+		Mldsa65Verify: q.Get("pqv"),
 		Network:       normalizeNetwork(q.Get("type")),
 		TLS:           firstNonEmpty(q.Get("security"), "none"),
 		ServerName:    q.Get("sni"),
@@ -113,6 +115,11 @@ func extractTrojan(raw string) (model.NodeConfig, error) {
 		return model.NodeConfig{}, err
 	}
 	q := u.Query()
+	tls := strings.ToLower(strings.TrimSpace(q.Get("security")))
+	if !q.Has("security") {
+		// Trojan is TLS-only by convention, so a missing security parameter means TLS.
+		tls = "tls"
+	}
 	return model.NodeConfig{
 		Name:          u.Fragment,
 		Protocol:      "trojan",
@@ -120,7 +127,7 @@ func extractTrojan(raw string) (model.NodeConfig, error) {
 		Port:          port,
 		Password:      u.User.Username(),
 		Network:       normalizeNetwork(q.Get("type")),
-		TLS:           firstNonEmpty(q.Get("security"), "tls"),
+		TLS:           tls,
 		ServerName:    q.Get("sni"),
 		Fingerprint:   q.Get("fp"),
 		ALPN:          splitALPN(q.Get("alpn")),
@@ -218,11 +225,15 @@ func buildURLRaw(cfg model.NodeConfig, scheme string) (string, error) {
 	}
 	q := url.Values{}
 	q.Set("type", networkLinkValue(cfg.Network))
-	if cfg.TLS != "" && cfg.TLS != "none" {
+	// Trojan defaults to TLS, so an explicit "none" must survive the round trip.
+	if cfg.TLS != "" && (cfg.TLS != "none" || scheme == "trojan") {
 		q.Set("security", cfg.TLS)
 	}
 	if scheme == "vless" {
-		q.Set("encryption", "none")
+		q.Set("encryption", firstNonEmpty(cfg.Encryption, "none"))
+		if cfg.Mldsa65Verify != "" {
+			q.Set("pqv", cfg.Mldsa65Verify)
+		}
 	}
 	if cfg.ServerName != "" {
 		q.Set("sni", cfg.ServerName)
@@ -297,7 +308,7 @@ func BuildOutbound(cfg model.NodeConfig) (map[string]any, error) {
 		if cfg.UUID == "" {
 			return nil, errors.New("VLESS UUID 不能为空")
 		}
-		settings = map[string]any{"address": cfg.Address, "port": cfg.Port, "id": cfg.UUID, "encryption": "none"}
+		settings = map[string]any{"address": cfg.Address, "port": cfg.Port, "id": cfg.UUID, "encryption": firstNonEmpty(cfg.Encryption, "none")}
 		if cfg.Flow != "" {
 			settings["flow"] = cfg.Flow
 		}
@@ -369,6 +380,9 @@ func buildStreamSettings(cfg model.NodeConfig) map[string]any {
 		}
 		if cfg.SpiderX != "" {
 			realitySettings["spiderX"] = cfg.SpiderX
+		}
+		if cfg.Mldsa65Verify != "" {
+			realitySettings["mldsa65Verify"] = cfg.Mldsa65Verify
 		}
 		if len(realitySettings) > 0 {
 			stream["realitySettings"] = realitySettings

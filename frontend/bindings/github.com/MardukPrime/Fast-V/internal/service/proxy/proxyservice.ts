@@ -38,10 +38,32 @@ export function Stop(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(2731269635);
 }
 
+/**
+ * SwitchNode persists the active node and restarts a running proxy so the new
+ * node takes effect. Concurrent UI requests and scheduled switches are
+ * serialized by operationMu.
+ */
 export function SwitchNode(id: string): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(3191579083, id);
 }
 
 export function Test(): $CancellablePromise<model$0.ProxyTestResult> {
     return $Call.ByID(457674591);
+}
+
+/**
+ * TestURL measures the real proxy-chain latency of the requested nodes. An empty
+ * ids list tests every enabled node; unknown or disabled nodes are reported
+ * individually in Error. It reuses the NodeService batch engine and feeds the
+ * failover selector with fresh latency data.
+ */
+export function TestURL(ids: string[] | null): $CancellablePromise<model$0.NodeLatency[] | null> {
+    return $Call.ByID(241782744, ids);
+}
+
+/**
+ * Traffic returns the latest live traffic snapshot for the running proxy.
+ */
+export function Traffic(): $CancellablePromise<model$0.TrafficStats> {
+    return $Call.ByID(2110223128);
 }

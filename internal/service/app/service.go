@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"runtime"
 	"time"
 
@@ -22,6 +23,14 @@ func (s *AppService) ServiceName() string {
 	return "AppService"
 }
 
+// ServiceStartup only probes the current autostart state. Startup must never
+// rewrite HKCU\...\Run: the registry value is changed exclusively by an explicit
+// SetAutostart call from the user.
+func (s *AppService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
+	_, _ = platform.AutostartEnabled()
+	return nil
+}
+
 func (s *AppService) Info() model.AppInfo {
 	return model.AppInfo{
 		Name:         buildinfo.ProductName,
@@ -36,6 +45,20 @@ func (s *AppService) Info() model.AppInfo {
 
 func (s *AppService) IsElevated() bool {
 	return platform.IsElevated()
+}
+
+// AutostartEnabled reports whether FastV is registered to start with Windows.
+func (s *AppService) AutostartEnabled() (bool, error) {
+	return platform.AutostartEnabled()
+}
+
+// SetAutostart enables or disables launching FastV when the user logs in and
+// returns the state that is in effect afterwards.
+func (s *AppService) SetAutostart(enabled bool) (bool, error) {
+	if err := platform.SetAutostart(enabled); err != nil {
+		return false, err
+	}
+	return platform.AutostartEnabled()
 }
 
 func (s *AppService) RestartAsAdmin() error {

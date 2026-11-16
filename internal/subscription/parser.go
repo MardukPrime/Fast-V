@@ -18,36 +18,70 @@ type ParsedNode struct {
 	Raw      string
 }
 
-func ParseContent(content string) ([]ParsedNode, error) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return nil, errors.New("subscription content is empty")
+// ParseLink parses one share link (vmess/vless/trojan/ss) into a node record.
+func ParseLink(line string) (ParsedNode, error) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ParsedNode{}, errors.New("share link is empty")
 	}
 
-	normalized := decodeSubscriptionBase64(content)
+	var node ParsedNode
+	var err error
+	switch {
+	case strings.HasPrefix(line, "vmess://"):
+		node, err = parseVMessLink(line)
+	case strings.HasPrefix(line, "vless://"), strings.HasPrefix(line, "trojan://"):
+		node, err = parseURILink(line)
+	case strings.HasPrefix(line, "ss://"):
+		node, err = parseShadowsocksLink(line)
+	default:
+		return ParsedNode{}, errors.New("unsupported share link protocol")
+	}
+	if err != nil {
+		return ParsedNode{}, err
+	}
+	if node.Address == "" || node.Port <= 0 {
+		return ParsedNode{}, errors.New("share link has no valid address or port")
+	}
+	return node, nil
+}
+
+// ParseLinks parses clipboard-style share link text: one link per line, comment
+// lines, or a whole base64 subscription body. Duplicate nodes are removed.
+func ParseLinks(text string) ([]ParsedNode, error) {
+	nodes, issues := ParseLinksWithIssues(text)
+	if len(nodes) > 0 {
+		return nodes, nil
+	}
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("no usable share link found: %s", strings.Join(issues, "; "))
+	}
+	return nil, errors.New("share link text is empty")
+}
+
+// ParseLinksWithIssues is ParseLinks with per-line diagnostics for unusable
+// entries, so an import dialog can show why a pasted link was rejected.
+func ParseLinksWithIssues(text string) ([]ParsedNode, []string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, nil
+	}
+
+	normalized := decodeSubscriptionBase64(text)
 	lines := strings.Split(strings.ReplaceAll(normalized, "\r\n", "\n"), "\n")
 	seen := make(map[string]struct{})
 	nodes := make([]ParsedNode, 0, len(lines))
+	issues := make([]string, 0)
 
-	for _, line := range lines {
+	for index, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
 			continue
 		}
 
-		var node ParsedNode
-		var err error
-		switch {
-		case strings.HasPrefix(line, "vmess://"):
-			node, err = parseVMessLink(line)
-		case strings.HasPrefix(line, "vless://"), strings.HasPrefix(line, "trojan://"):
-			node, err = parseURILink(line)
-		case strings.HasPrefix(line, "ss://"):
-			node, err = parseShadowsocksLink(line)
-		default:
-			continue
-		}
-		if err != nil || node.Address == "" || node.Port <= 0 {
+		node, err := ParseLink(line)
+		if err != nil {
+			issues = append(issues, fmt.Sprintf("第 %d 行 %q: %v", index+1, shortenLink(line, 48), err))
 			continue
 		}
 
@@ -58,11 +92,28 @@ func ParseContent(content string) ([]ParsedNode, error) {
 		seen[key] = struct{}{}
 		nodes = append(nodes, node)
 	}
+	return nodes, issues
+}
 
+func ParseContent(content string) ([]ParsedNode, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, errors.New("subscription content is empty")
+	}
+
+	nodes, _ := ParseLinksWithIssues(content)
 	if len(nodes) == 0 {
 		return nil, errors.New("no supported nodes found in subscription")
 	}
 	return nodes, nil
+}
+
+func shortenLink(value string, limit int) string {
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit]) + "..."
 }
 
 func decodeSubscriptionBase64(content string) string {
