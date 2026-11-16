@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const storeVersion = 3
+const storeVersion = 4
 
 // Aliases keep the storage package decoupled from frontend service packages.
 type Settings = model.Settings
@@ -65,6 +65,13 @@ func DefaultSettings() Settings {
 		XrayAPIPort:           10085,
 		SystemProxyMode:       "system",
 		TunMode:               false,
+		AllowLan:              false,
+		InboundAuthEnabled:    false,
+		InboundUsername:       "",
+		InboundPassword:       "",
+		CloseToTray:           false,
+		MinimizeToTray:        false,
+		AutoCheckUpdate:       true,
 		StatsEnabled:          true,
 
 		AutoSelectEnabled:         false,
@@ -151,6 +158,9 @@ func mergeStoreData(loaded storeData) storeData {
 	// the field can be switched off again in settings.
 	if loaded.Version < 3 {
 		loaded.Settings.StatsEnabled = true
+	}
+	if loaded.Version < 4 {
+		loaded.Settings.AutoCheckUpdate = true
 	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion

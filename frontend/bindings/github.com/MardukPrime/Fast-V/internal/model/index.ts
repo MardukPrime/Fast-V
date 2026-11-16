@@ -20,10 +20,12 @@ export type {
     NodeView,
     ProxyState,
     ProxyTestResult,
+    RoutingPreset,
     RoutingRule,
     Settings,
     SubscriptionInput,
     SubscriptionView,
     TrafficStats,
-    UpdateAllResult
+    UpdateAllResult,
+    UpdateInfo
 } from "./models.js";

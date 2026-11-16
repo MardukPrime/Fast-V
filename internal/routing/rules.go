@@ -20,6 +20,7 @@ var validTypes = map[string]struct{}{
 	"geoip":          {},
 	"port":           {},
 	"network":        {},
+	"process":        {},
 }
 
 var validActions = map[string]struct{}{
@@ -81,6 +82,13 @@ func Normalize(rule model.RoutingRule) (model.RoutingRule, error) {
 				return model.RoutingRule{}, errors.New("网络类型只能是 tcp、udp 或 tcp,udp")
 			}
 		}
+	case "process":
+		// Process names are separated like every other multi-value rule. A value
+		// made only of separators normalizes to an empty list, which Xray would
+		// reject at runtime as a rule without effective fields.
+		if len(splitValues(rule.Value)) == 0 {
+			return model.RoutingRule{}, errors.New("规则内容不能为空")
+		}
 	}
 	return rule, nil
 }
@@ -92,6 +100,57 @@ func DefaultRules() []model.RoutingRule {
 		{ID: model.NewID(), Name: "广告域名拦截", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true},
 		{ID: model.NewID(), Name: "中国大陆 IP 直连", Type: "geoip", Value: "cn", Action: "direct", Enabled: true},
 		{ID: model.NewID(), Name: "中国大陆域名直连", Type: "geosite", Value: "cn", Action: "direct", Enabled: true},
+	}
+}
+
+// Presets returns ready-made routing rule sets. Applying a preset replaces the
+// current rule list, so each preset contains a complete, self-consistent set of
+// rules and never depends on the rules already stored by the user.
+func Presets() []model.RoutingPreset {
+	return []model.RoutingPreset{
+		{
+			ID:          "private-network",
+			Name:        "私有网络直连",
+			Description: "局域网与私有地址绕过代理，避免内网服务和设备访问异常。",
+			Rules: []model.RoutingRule{
+				{Name: "私有网络直连", Type: "geoip", Value: "private", Action: "direct", Enabled: true},
+			},
+		},
+		{
+			ID:          "block-ads",
+			Name:        "广告拦截",
+			Description: "拦截常见广告与追踪域名，其余流量按当前代理模式处理。",
+			Rules: []model.RoutingRule{
+				{Name: "广告域名拦截", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true},
+			},
+		},
+		{
+			ID:          "cn-domain-direct",
+			Name:        "中国大陆域名直连",
+			Description: "命中中国大陆域名的请求直连，其余流量走代理。",
+			Rules: []model.RoutingRule{
+				{Name: "中国大陆域名直连", Type: "geosite", Value: "cn", Action: "direct", Enabled: true},
+			},
+		},
+		{
+			ID:          "cn-ip-direct",
+			Name:        "中国大陆 IP 直连",
+			Description: "命中中国大陆 IP 的请求直连，其余流量走代理。",
+			Rules: []model.RoutingRule{
+				{Name: "中国大陆 IP 直连", Type: "geoip", Value: "cn", Action: "direct", Enabled: true},
+			},
+		},
+		{
+			ID:          "bypass-cn",
+			Name:        "绕过中国大陆",
+			Description: "私有网络、广告拦截与中国大陆域名/IP 直连的组合规则，适合日常使用。",
+			Rules: []model.RoutingRule{
+				{Name: "私有网络直连", Type: "geoip", Value: "private", Action: "direct", Enabled: true},
+				{Name: "广告域名拦截", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true},
+				{Name: "中国大陆域名直连", Type: "geosite", Value: "cn", Action: "direct", Enabled: true},
+				{Name: "中国大陆 IP 直连", Type: "geoip", Value: "cn", Action: "direct", Enabled: true},
+			},
+		},
 	}
 }
 
@@ -127,6 +186,8 @@ func BuildXrayRules(rules []model.RoutingRule, proxyMode string) []any {
 			xrayRule["port"] = strings.Join(values, ",")
 		case "network":
 			xrayRule["network"] = strings.Join(values, ",")
+		case "process":
+			xrayRule["process"] = values
 		default:
 			continue
 		}

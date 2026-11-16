@@ -45,13 +45,10 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 	}
 	inbounds = append(inbounds, map[string]any{
 		"tag":      "local-in",
-		"listen":   "127.0.0.1",
+		"listen":   localInboundListen(settings),
 		"port":     settings.XrayLocalPort,
 		"protocol": "socks",
-		"settings": map[string]any{
-			"auth": "noauth",
-			"udp":  true,
-		},
+		"settings": buildSocksInboundSettings(settings),
 		"sniffing": map[string]any{
 			"enabled":      settings.XraySniffing,
 			"destOverride": []string{"http", "tls", "quic"},
@@ -117,6 +114,33 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 	}
 
 	return json.MarshalIndent(config, "", "  ")
+}
+
+// localInboundListen returns the listen address of the local SOCKS inbound.
+// AllowLan exposes the inbound to the LAN; the TUN inbound is not affected.
+func localInboundListen(settings model.Settings) string {
+	if settings.AllowLan {
+		return "0.0.0.0"
+	}
+	return "127.0.0.1"
+}
+
+// buildSocksInboundSettings configures the local SOCKS inbound. When inbound
+// authentication is enabled the authentication method switches to password and
+// the configured account is added; otherwise the inbound stays on noauth.
+func buildSocksInboundSettings(settings model.Settings) map[string]any {
+	inbound := map[string]any{
+		"auth": "noauth",
+		"udp":  true,
+	}
+	if settings.InboundAuthEnabled {
+		inbound["auth"] = "password"
+		inbound["accounts"] = []any{map[string]any{
+			"user": settings.InboundUsername,
+			"pass": settings.InboundPassword,
+		}}
+	}
+	return inbound
 }
 
 func buildOutbound(node model.Node, settings model.Settings) (map[string]any, error) {

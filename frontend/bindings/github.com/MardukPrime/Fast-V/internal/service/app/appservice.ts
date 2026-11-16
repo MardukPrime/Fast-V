@@ -21,6 +21,15 @@ export function AutostartEnabled(): $CancellablePromise<boolean> {
     return $Call.ByID(1046604721);
 }
 
+/**
+ * CheckUpdate checks for a newer FastV release, broadcasts the result as
+ * "app:update" (model.UpdateInfo) and returns it. Network and protocol failures
+ * are returned both as the error and in UpdateInfo.Error.
+ */
+export function CheckUpdate(): $CancellablePromise<model$0.UpdateInfo> {
+    return $Call.ByID(6832128);
+}
+
 export function Info(): $CancellablePromise<model$0.AppInfo> {
     return $Call.ByID(545960859);
 }

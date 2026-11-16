@@ -71,7 +71,7 @@ func (s *DashboardService) Summary() model.DashboardSummary {
 	}
 
 	return model.DashboardSummary{
-		App:                 appservice.New().Info(),
+		App:                 appservice.New(s.store).Info(),
 		SubscriptionCount:   len(snapshot.Subscriptions),
 		NodeCount:           len(snapshot.Nodes),
 		ActiveSubscriptions: active,

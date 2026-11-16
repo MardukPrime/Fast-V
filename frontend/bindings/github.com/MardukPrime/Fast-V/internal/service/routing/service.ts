@@ -14,12 +14,36 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as model$0 from "../../model/models.js";
 
+/**
+ * ApplyPreset replaces all current rules with the rules of the given preset.
+ * Every applied rule receives a fresh ID so the list stays editable as a normal
+ * user rule list.
+ */
+export function ApplyPreset(id: string): $CancellablePromise<model$0.RoutingRule[] | null> {
+    return $Call.ByID(2154628076, id);
+}
+
 export function Delete(id: string): $CancellablePromise<void> {
     return $Call.ByID(3334610810, id);
 }
 
+/**
+ * Import validates an imported rule set and replaces all current rules with it.
+ * Validation is all-or-nothing: if any rule is invalid nothing is persisted.
+ */
+export function Import(rules: model$0.RoutingRule[] | null): $CancellablePromise<model$0.RoutingRule[] | null> {
+    return $Call.ByID(2933810564, rules);
+}
+
 export function List(): $CancellablePromise<model$0.RoutingRule[] | null> {
     return $Call.ByID(2040313169);
+}
+
+/**
+ * Presets returns the ready-made rule sets offered by the routing editor.
+ */
+export function Presets(): $CancellablePromise<model$0.RoutingPreset[] | null> {
+    return $Call.ByID(3752449575);
 }
 
 export function Reorder(ids: string[] | null): $CancellablePromise<void> {

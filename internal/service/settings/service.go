@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -35,6 +37,8 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	input.CoreType = strings.TrimSpace(input.CoreType)
 	input.XrayLogLevel = strings.TrimSpace(input.XrayLogLevel)
 	input.TestURL = strings.TrimSpace(input.TestURL)
+	input.InboundUsername = strings.TrimSpace(input.InboundUsername)
+	input.InboundPassword = strings.TrimSpace(input.InboundPassword)
 	if input.LayoutMode != "sidebar" && input.LayoutMode != "dock" {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}
@@ -117,6 +121,24 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	}
 	if input.AutoSelectToleranceMS < 0 || input.AutoSelectToleranceMS > 5000 {
 		return model.Settings{}, errors.New("自动选路切换容差必须在 0-5000 毫秒之间")
+	}
+	// Inbound authentication only needs credentials when it is enabled; AllowLan
+	// has no additional constraints.
+	if input.InboundAuthEnabled {
+		if input.InboundUsername == "" {
+			return model.Settings{}, errors.New("入站认证用户名不能为空")
+		}
+		for _, r := range input.InboundUsername {
+			if unicode.IsSpace(r) {
+				return model.Settings{}, errors.New("入站认证用户名不能包含空白字符")
+			}
+		}
+		if input.InboundPassword == "" {
+			return model.Settings{}, errors.New("入站认证密码不能为空")
+		}
+		if utf8.RuneCountInString(input.InboundPassword) < 6 {
+			return model.Settings{}, errors.New("入站认证密码长度不能少于 6 位")
+		}
 	}
 
 	if err := s.store.SaveSettings(input); err != nil {

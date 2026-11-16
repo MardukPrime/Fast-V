@@ -149,3 +149,86 @@ func TestSmartRoutingValues(t *testing.T) {
 		t.Fatalf("expected a Chinese tolerance error, got %v", err)
 	}
 }
+
+func TestInboundAuthValidation(t *testing.T) {
+	service := newService(t)
+
+	valid := validSettings()
+	valid.AllowLan = true
+	valid.InboundAuthEnabled = true
+	valid.InboundUsername = "  fastv  "
+	valid.InboundPassword = "  secret123  "
+	saved, err := service.Save(valid)
+	if err != nil {
+		t.Fatalf("expected valid inbound credentials to be accepted: %v", err)
+	}
+	if saved.InboundUsername != "fastv" || saved.InboundPassword != "secret123" {
+		t.Fatalf("inbound credentials were not trimmed: %+v", saved)
+	}
+	if !saved.AllowLan || !saved.InboundAuthEnabled {
+		t.Fatalf("inbound flags were not persisted: %+v", saved)
+	}
+	stored := service.Get()
+	if stored.InboundUsername != "fastv" || stored.InboundPassword != "secret123" || !stored.InboundAuthEnabled {
+		t.Fatalf("settings were not persisted: %+v", stored)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*model.Settings)
+		want   string
+	}{
+		{"empty username", func(settings *model.Settings) { settings.InboundUsername = "" }, "用户名不能为空"},
+		{"blank username", func(settings *model.Settings) { settings.InboundUsername = "   " }, "用户名不能为空"},
+		{"username with space", func(settings *model.Settings) { settings.InboundUsername = "fast v" }, "不能包含空白字符"},
+		{"username with tab", func(settings *model.Settings) { settings.InboundUsername = "fast\tv" }, "不能包含空白字符"},
+		{"empty password", func(settings *model.Settings) { settings.InboundPassword = "" }, "密码不能为空"},
+		{"blank password", func(settings *model.Settings) { settings.InboundPassword = "   " }, "密码不能为空"},
+		{"short password", func(settings *model.Settings) { settings.InboundPassword = "12345" }, "密码长度不能少于 6 位"},
+		{"short Chinese password", func(settings *model.Settings) { settings.InboundPassword = "密码密码" }, "密码长度不能少于 6 位"},
+	}
+	for _, tc := range cases {
+		input := validSettings()
+		input.InboundAuthEnabled = true
+		input.InboundUsername = "fastv"
+		input.InboundPassword = "secret123"
+		tc.mutate(&input)
+		_, err := service.Save(input)
+		if err == nil {
+			t.Fatalf("%s: expected validation error", tc.name)
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: expected error containing %q, got %v", tc.name, tc.want, err)
+		}
+	}
+
+	// A rejected save must leave the previously stored settings untouched.
+	if got := service.Get(); got.InboundUsername != "fastv" || got.InboundPassword != "secret123" {
+		t.Fatalf("rejected settings changed the stored values: %+v", got)
+	}
+
+	// Six characters (including non-ASCII ones) are acceptable.
+	accepted := validSettings()
+	accepted.InboundAuthEnabled = true
+	accepted.InboundUsername = "密码用户"
+	accepted.InboundPassword = "密码密码密码"
+	if _, err := service.Save(accepted); err != nil {
+		t.Fatalf("expected a six-character password to be accepted: %v", err)
+	}
+
+	// When inbound authentication is disabled the credentials are not validated.
+	disabled := validSettings()
+	disabled.InboundAuthEnabled = false
+	disabled.InboundUsername = ""
+	disabled.InboundPassword = "123"
+	if _, err := service.Save(disabled); err != nil {
+		t.Fatalf("disabled inbound auth must not validate credentials: %v", err)
+	}
+
+	// AllowLan does not add any constraint of its own.
+	lan := validSettings()
+	lan.AllowLan = true
+	if _, err := service.Save(lan); err != nil {
+		t.Fatalf("AllowLan must not require credentials: %v", err)
+	}
+}

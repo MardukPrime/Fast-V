@@ -274,12 +274,13 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - Xray 配置生成
 - Xray 内核更新与 GeoData 更新
 - 本地代理启动和停止
-- 本地 SOCKS/HTTP 入站、Windows TUN、Windows 系统代理
-- 路由规则
+- 本地 SOCKS/HTTP 入站（支持局域网共享与 SOCKS 入站认证，可选 Windows TUN、Windows 系统代理）
+- 路由规则（域名 / IP / 端口 / 网络 / Windows 进程分流，内置规则预设与 JSON 导入导出）
 - 实时流量统计（Xray StatsService，含上/下行速率与累计）
 - 网络诊断
 - 运行日志
 - 配置备份与恢复、开机自启
+- 系统托盘、关闭 / 最小化到托盘、应用更新检查
 - 深色 / 浅色 / 跟随系统主题（默认浅色）
 
 当前仅支持 Xray-core。
@@ -288,10 +289,13 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 
 - sing-box 内核
 - Hysteria2 / TUIC
-- 按进程分流与规则集管理
+- 负载均衡与连接详情
+- 规则集订阅与远程规则管理
+- 分享链接二维码
+- 订阅格式兼容（Clash YAML）
+- 节点分组与标签
 - 流量与测速历史
-- 托盘图标与最小化到托盘
-- 应用自更新
+- 应用自更新安装
 - macOS / Linux 适配
 - 多语言界面
 - SQLite 存储选项

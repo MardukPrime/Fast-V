@@ -251,6 +251,16 @@ export interface ProxyTestResult {
 }
 
 /**
+ * RoutingPreset is a ready-made set of routing rules.
+ */
+export interface RoutingPreset {
+    "id": string;
+    "name": string;
+    "description": string;
+    "rules": RoutingRule[] | null;
+}
+
+/**
  * RoutingRule is a user-defined Xray routing rule.
  */
 export interface RoutingRule {
@@ -295,6 +305,13 @@ export interface Settings {
     "xrayFinalMaskJson": string;
     "systemProxyMode": string;
     "tunMode": boolean;
+    "allowLan": boolean;
+    "inboundAuthEnabled": boolean;
+    "inboundUsername": string;
+    "inboundPassword": string;
+    "closeToTray": boolean;
+    "minimizeToTray": boolean;
+    "autoCheckUpdate": boolean;
     "statsEnabled": boolean;
     "autoSelectEnabled": boolean;
     "autoSelectIntervalMinutes": number;
@@ -355,4 +372,17 @@ export interface UpdateAllResult {
     "failed": number;
     "subscriptions": SubscriptionView[] | null;
     "errors": string[] | null;
+}
+
+/**
+ * UpdateInfo describes the result of an application update check.
+ */
+export interface UpdateInfo {
+    "currentVersion": string;
+    "latestVersion": string;
+    "available": boolean;
+    "notes": string;
+    "url": string;
+    "checkedAt": string;
+    "error": string;
 }

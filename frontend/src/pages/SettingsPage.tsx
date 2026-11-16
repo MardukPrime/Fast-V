@@ -1,12 +1,12 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 
-import { Events } from "@wailsio/runtime";
+import { Browser, Events } from "@wailsio/runtime";
 
 import { AppService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
 import { Service as BackupService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/backup";
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { BackupResult, CoreInfo, GeoDataInfo, Settings } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BackupResult, CoreInfo, GeoDataInfo, Settings, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type SettingsProps = {
@@ -45,6 +45,13 @@ const defaults: Settings = {
   xraySockoptJson: "",
   xrayFinalMaskJson: "",
   tunMode: false,
+  allowLan: false,
+  inboundAuthEnabled: false,
+  inboundUsername: "",
+  inboundPassword: "",
+  closeToTray: false,
+  minimizeToTray: false,
+  autoCheckUpdate: true,
   statsEnabled: true,
   autoSelectEnabled: false,
   autoSelectIntervalMinutes: 10,
@@ -165,6 +172,14 @@ function formatBackupTimestamp(date: Date) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
 }
 
+function formatCheckedAt(value: string) {
+  if (!value) return "未知";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 const autoSelectIntervalRange = { min: 1, max: 1440 };
 const autoSelectToleranceRange = { min: 0, max: 5000 };
 
@@ -192,6 +207,9 @@ export default function SettingsPage(props: SettingsProps) {
   const [backupMessage, setBackupMessage] = createSignal("");
   const [backupError, setBackupError] = createSignal("");
   const [importResult, setImportResult] = createSignal<BackupResult | null>(null);
+  const [updateBusy, setUpdateBusy] = createSignal(false);
+  const [updateInfo, setUpdateInfo] = createSignal<UpdateInfo | null>(null);
+  const [updateError, setUpdateError] = createSignal("");
   let backupFileInput: HTMLInputElement | undefined;
 
   const load = async () => {
@@ -237,6 +255,15 @@ export default function SettingsPage(props: SettingsProps) {
     onCleanup(off);
   });
 
+  onMount(() => {
+    const off = Events.On("app:update", (event) => {
+      const info = event.data as UpdateInfo;
+      setUpdateInfo(info);
+      setUpdateError(info.error || "");
+    });
+    onCleanup(off);
+  });
+
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings({ ...settings(), [key]: value });
   };
@@ -254,10 +281,28 @@ export default function SettingsPage(props: SettingsProps) {
     return "";
   };
 
+  const validateInboundAuth = () => {
+    const current = settings();
+    if (!current.inboundAuthEnabled) return "";
+    const username = current.inboundUsername;
+    if (!username) return "开启入站认证时必须填写用户名。";
+    if (/\s/.test(username)) return "入站认证用户名不能包含空白字符。";
+    const password = current.inboundPassword;
+    if (!password) return "开启入站认证时必须填写密码。";
+    if ([...password].length < 6) return "入站认证密码长度不能少于 6 位。";
+    return "";
+  };
+
   const save = async (event: Event) => {
     event.preventDefault();
-    const validationError = validateAutoSelect();
+    const autoSelectError = validateAutoSelect();
+    const inboundError = validateInboundAuth();
+    const validationError = autoSelectError || inboundError;
     if (validationError) {
+      if (inboundError) {
+        setClientExpanded(true);
+        writeSectionState("fastv.settings.clientOpen", true);
+      }
       setMessage("");
       setError(validationError);
       return;
@@ -420,6 +465,34 @@ export default function SettingsPage(props: SettingsProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCoreBusy("");
+    }
+  };
+
+  const checkUpdate = async () => {
+    if (updateBusy()) return;
+    setUpdateBusy(true);
+    setMessage("");
+    setUpdateError("");
+    try {
+      const info = await AppService.CheckUpdate();
+      setUpdateInfo(info);
+      setUpdateError(info.error || "");
+      if (!info.error) {
+        setMessage(info.available ? `发现新版本 v${info.latestVersion}。` : "当前已是最新版本。");
+      }
+    } catch (err) {
+      setUpdateError(`检查更新失败：${errorMessage(err)}`);
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
+
+  const openReleasePage = async (url: string) => {
+    if (!url) return;
+    try {
+      await Browser.OpenURL(url);
+    } catch {
+      window.open(url, "_blank");
     }
   };
 
@@ -589,6 +662,69 @@ export default function SettingsPage(props: SettingsProps) {
               <div class="tun-warning">
                 <Icon name="alert" size={14} />
                 <span>TUN 模式需要管理员权限。保存设置后 FastV 会自动请求 UAC 提权并重启；也可以直接启动代理触发提权。请确保 wintun.dll 位于 xray.exe 同目录。当前状态：{elevated() ? "已获得管理员权限" : "普通权限，启动 TUN 时将自动申请提权"}。</span>
+              </div>
+            </Show>
+
+            <label class="switch-row">
+              <span>
+                <strong>允许局域网连接</strong>
+                <small>{settings().allowLan ? `本地 SOCKS 入站监听 0.0.0.0:${settings().xrayLocalPort}，同网段设备可以把代理指向本机 IP。` : "本地 SOCKS 入站仅监听 127.0.0.1，只有本机可以使用本地代理。"}</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().allowLan }}>
+                <input
+                  type="checkbox"
+                  checked={settings().allowLan}
+                  onChange={(event) => update("allowLan", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+            <Show when={settings().allowLan}>
+              <div class="settings-inline-warning">
+                <Icon name="alert" size={13} />
+                <span>监听 0.0.0.0，同网段设备可用本机代理；请确认防火墙设置，并建议同时开启入站认证，避免同网段设备无需密码即可使用代理。</span>
+              </div>
+            </Show>
+
+            <label class="switch-row">
+              <span>
+                <strong>入站认证</strong>
+                <small>为本地 SOCKS 入站启用用户名/密码认证；关闭时使用 noauth，本机应用无需填写密码。开启后访问本机代理的应用需要配置对应账号。</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().inboundAuthEnabled }}>
+                <input
+                  type="checkbox"
+                  checked={settings().inboundAuthEnabled}
+                  onChange={(event) => update("inboundAuthEnabled", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
+            <Show when={settings().inboundAuthEnabled}>
+              <div class="settings-grid">
+                <label>
+                  <span>入站用户名</span>
+                  <input
+                    value={settings().inboundUsername}
+                    onInput={(event) => update("inboundUsername", event.currentTarget.value)}
+                    placeholder="例如 fastv"
+                  />
+                  <small>不能为空，且不能包含空白字符。</small>
+                </label>
+                <label>
+                  <span>入站密码</span>
+                  <input
+                    type="password"
+                    value={settings().inboundPassword}
+                    onInput={(event) => update("inboundPassword", event.currentTarget.value)}
+                    placeholder="至少 6 位"
+                  />
+                  <small>至少 6 位；保存并重启代理后生效。</small>
+                </label>
+              </div>
+              <div class="settings-inline-warning">
+                <Icon name="alert" size={13} />
+                <span>入站认证只作用于本地 SOCKS 入站，TUN 入站不受影响；修改账号密码后需要重启代理才会生效。</span>
               </div>
             </Show>
           </div>
@@ -1126,7 +1262,7 @@ export default function SettingsPage(props: SettingsProps) {
               <span class="heading-icon"><Icon name="maximize" size={17} /></span>
               <div>
                 <h3>系统集成</h3>
-                <span>开机自启等 Windows 系统级行为</span>
+                <span>开机自启、托盘行为与应用更新</span>
               </div>
             </div>
             <span class="settings-section-meta">
@@ -1167,6 +1303,116 @@ export default function SettingsPage(props: SettingsProps) {
               <Icon name="external" size={13} />
               <span>开机自启按当前 FastV.exe 路径注册；移动或重命名程序后需要重新开启一次。</span>
             </p>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>窗口行为</strong>
+                <small>控制标题栏关闭和最小化按钮的行为，保存后立即生效。</small>
+              </div>
+              <label class="switch-row">
+                <span>
+                  <strong>关闭窗口时最小化到托盘</strong>
+                  <small>开启后点击窗口关闭按钮不会退出 FastV，而是隐藏到系统托盘；可在托盘菜单重新打开窗口或退出应用。</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().closeToTray }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().closeToTray}
+                    onChange={(event) => update("closeToTray", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+              <label class="switch-row">
+                <span>
+                  <strong>最小化时隐藏到托盘</strong>
+                  <small>开启后最小化窗口会隐藏到系统托盘。Windows 没有可拦截的最小化事件，FastV 会在原生最小化后立即隐藏窗口，可能短暂看到最小化动画（best effort）。</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().minimizeToTray }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().minimizeToTray}
+                    onChange={(event) => update("minimizeToTray", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>两个开关都依赖系统托盘；托盘不可用（例如资源管理器异常）时，关闭窗口仍会退出应用。</span>
+              </p>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>应用更新</strong>
+                <small>通过 GitHub Release 检查 FastV 自身的新版本，需要网络连接；检查失败只提示，不影响代理使用。</small>
+              </div>
+              <label class="switch-row">
+                <span>
+                  <strong>启动时自动检查更新</strong>
+                  <small>应用启动后在后台请求 GitHub 最新 Release，结果会广播到本页展示。</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().autoCheckUpdate }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().autoCheckUpdate}
+                    onChange={(event) => update("autoCheckUpdate", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+
+              <div class="core-actions">
+                <button class="btn secondary" type="button" onClick={checkUpdate} disabled={updateBusy()}>
+                  <Icon name="refresh" size={14} /> {updateBusy() ? "检查中..." : "立即检查更新"}
+                </button>
+                <Show when={updateInfo()?.url}>
+                  {(url) => (
+                    <button class="btn ghost" type="button" onClick={() => { void openReleasePage(url()); }}>
+                      <Icon name="external" size={14} /> 打开发布页面
+                    </button>
+                  )}
+                </Show>
+              </div>
+
+              <Show when={updateError()}>
+                <div class="alert error settings-inline-alert">
+                  <span class="alert-message"><Icon name="alert" size={15} /> {updateError()}</span>
+                </div>
+              </Show>
+
+              <Show when={updateInfo()}>
+                {(info) => (
+                  <div class="backup-result">
+                    <div class="backup-result-grid">
+                      <div><span>当前版本</span><strong>{info().currentVersion || "未知"}</strong></div>
+                      <div><span>最新版本</span><strong>{info().latestVersion || "未获取"}</strong></div>
+                      <div><span>状态</span><strong>{info().error ? "检查失败" : info().available ? "有可用更新" : "已是最新"}</strong></div>
+                    </div>
+                    <Show when={info().notes}>
+                      <p class="backup-result-hint" style="white-space: pre-wrap;">更新说明：{info().notes}</p>
+                    </Show>
+                    <Show when={info().url}>
+                      <div class="core-path-row">
+                        <span>发布页面</span>
+                        <code>{info().url}</code>
+                      </div>
+                    </Show>
+                    <p class="backup-result-hint">
+                      上次检查：{formatCheckedAt(info().checkedAt)}
+                      {info().available ? " · 建议前往发布页面下载新版本。" : info().error ? "" : " · 无需更新。"}
+                    </p>
+                  </div>
+                )}
+              </Show>
+              <Show when={!updateInfo()}>
+                <p class="settings-note">
+                  <Icon name="refresh" size={13} />
+                  <span>尚未获取更新检查结果；点击「立即检查更新」。</span>
+                </p>
+              </Show>
+            </div>
           </div>
         </details>
 

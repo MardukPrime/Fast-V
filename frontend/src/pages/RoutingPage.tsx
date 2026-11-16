@@ -2,7 +2,7 @@ import { createSignal, For, onMount, Show } from "solid-js";
 
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { Service as RoutingService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/routing";
-import type { ProxyState, RoutingRule } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { ProxyState, RoutingPreset, RoutingRule } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type RoutingPageProps = {
@@ -19,6 +19,7 @@ const ruleTypes = [
   { value: "geoip", label: "GeoIP", hint: "例如 private、cn" },
   { value: "port", label: "端口", hint: "例如 80,443,1000-2000" },
   { value: "network", label: "网络协议", hint: "tcp、udp 或 tcp,udp" },
+  { value: "process", label: "进程名", hint: "Windows 进程名，例如 chrome.exe,Telegram.exe（逗号或换行分隔）" },
 ];
 
 const actions = [
@@ -39,6 +40,63 @@ function emptyRule(): RoutingRule {
   return { id: "", name: "", type: "domain_suffix", value: "", action: "direct", enabled: true };
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function twoDigits(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function exportFileStamp(date: Date): string {
+  return `${date.getFullYear()}${twoDigits(date.getMonth() + 1)}${twoDigits(date.getDate())}-${twoDigits(date.getHours())}${twoDigits(date.getMinutes())}`;
+}
+
+const knownTypes = new Set(ruleTypes.map((item) => item.value));
+const knownActions = new Set(actions.map((item) => item.value));
+
+// validateImportedRules parses an exported JSON rule array and rejects payloads
+// that the backend would refuse, so the UI can show a precise Chinese error
+// before replacing anything. The backend still validates the imported rules.
+function validateImportedRules(text: string): RoutingRule[] {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("文件内容不是有效的 JSON。");
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error("JSON 顶层必须是路由规则数组。");
+  }
+  if (raw.length === 0) {
+    throw new Error("规则数组为空，没有可导入的规则。");
+  }
+  return raw.map((item, index) => {
+    const position = index + 1;
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw new Error(`第 ${position} 条规则不是对象。`);
+    }
+    const record = item as Record<string, unknown>;
+    const type = typeof record.type === "string" ? record.type.trim().toLowerCase() : "";
+    const value = typeof record.value === "string" ? record.value.trim() : "";
+    if (!type) throw new Error(`第 ${position} 条规则缺少 type 字段。`);
+    if (!value) throw new Error(`第 ${position} 条规则缺少 value 字段。`);
+    if (!knownTypes.has(type)) throw new Error(`第 ${position} 条规则的类型「${type}」不受支持。`);
+    const action = typeof record.action === "string" ? record.action.trim().toLowerCase() : "";
+    if (action !== "" && !knownActions.has(action)) {
+      throw new Error(`第 ${position} 条规则的动作「${action}」不受支持。`);
+    }
+    return {
+      id: typeof record.id === "string" ? record.id : "",
+      name: typeof record.name === "string" ? record.name.trim() : "",
+      type,
+      value,
+      action,
+      enabled: record.enabled !== false,
+    };
+  });
+}
+
 export default function RoutingPage(props: RoutingPageProps) {
   const [rules, setRules] = createSignal<RoutingRule[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -46,6 +104,13 @@ export default function RoutingPage(props: RoutingPageProps) {
   const [message, setMessage] = createSignal("");
   const [editing, setEditing] = createSignal<RoutingRule | null>(null);
   const [busy, setBusy] = createSignal(false);
+  const [presetOpen, setPresetOpen] = createSignal(false);
+  const [presets, setPresets] = createSignal<RoutingPreset[]>([]);
+  const [presetLoading, setPresetLoading] = createSignal(false);
+  const [presetError, setPresetError] = createSignal("");
+  const [applyingPreset, setApplyingPreset] = createSignal("");
+  const [ioBusy, setIoBusy] = createSignal<"export" | "import" | "">("");
+  let importInput: HTMLInputElement | undefined;
 
   const load = async () => {
     setLoading(true);
@@ -60,13 +125,16 @@ export default function RoutingPage(props: RoutingPageProps) {
 
   onMount(load);
 
-  const restartIfRunning = async () => {
+  const restartIfRunning = async (
+    appliedMessage = "路由规则已保存并应用。",
+    pendingMessage = "路由规则已保存，将在代理启动时生效。",
+  ) => {
     if (props.proxyState.status === "running" || props.proxyState.status === "starting") {
       setMessage("正在重启代理以应用路由规则...");
       await ProxyService.Restart();
-      setMessage("路由规则已保存并应用。");
+      setMessage(appliedMessage);
     } else {
-      setMessage("路由规则已保存，将在代理启动时生效。");
+      setMessage(pendingMessage);
     }
   };
 
@@ -169,6 +237,115 @@ export default function RoutingPage(props: RoutingPageProps) {
     }
   };
 
+  const openPresets = async () => {
+    setPresetOpen(true);
+    setPresetError("");
+    setPresetLoading(true);
+    try {
+      setPresets((await RoutingService.Presets()) ?? []);
+    } catch (err) {
+      setPresetError(`读取规则预设失败：${errorMessage(err)}`);
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+  const closePresets = () => {
+    if (busy()) return;
+    setPresetOpen(false);
+  };
+
+  const applyPreset = async (preset: RoutingPreset) => {
+    if (busy() || applyingPreset()) return;
+    if (!window.confirm(`应用预设「${preset.name}」？当前全部路由规则将被覆盖。`)) return;
+    setBusy(true);
+    setApplyingPreset(preset.id);
+    setError("");
+    setMessage("");
+    setPresetError("");
+    try {
+      setRules((await RoutingService.ApplyPreset(preset.id)) ?? []);
+      setPresetOpen(false);
+      await load();
+      await restartIfRunning(
+        `预设「${preset.name}」已应用，代理已重启生效。`,
+        `预设「${preset.name}」已应用，将在代理启动时生效。`,
+      );
+    } catch (err) {
+      const reason = `应用预设失败：${errorMessage(err)}`;
+      setPresetError(reason);
+      if (!presetOpen()) setError(reason);
+    } finally {
+      setBusy(false);
+      setApplyingPreset("");
+    }
+  };
+
+  const exportRules = async () => {
+    if (busy() || ioBusy()) return;
+    setIoBusy("export");
+    setError("");
+    setMessage("");
+    try {
+      const list = (await RoutingService.List()) ?? [];
+      if (list.length === 0) {
+        setError("当前没有可导出的路由规则。");
+        return;
+      }
+      const payload = list.map((rule) => ({
+        id: rule.id,
+        name: rule.name,
+        type: rule.type,
+        value: rule.value,
+        action: rule.action,
+        enabled: rule.enabled,
+      }));
+      const filename = `fastv-routing-${exportFileStamp(new Date())}.json`;
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage(`已导出 ${payload.length} 条路由规则到 ${filename}。`);
+    } catch (err) {
+      setError(`导出路由规则失败：${errorMessage(err)}`);
+    } finally {
+      setIoBusy("");
+    }
+  };
+
+  const triggerImport = () => {
+    if (busy() || ioBusy()) return;
+    setError("");
+    setMessage("");
+    importInput?.click();
+  };
+
+  const importRuleFile = async (file: File | null) => {
+    if (!file) return;
+    setIoBusy("import");
+    setError("");
+    setMessage("");
+    try {
+      const imported = validateImportedRules(await file.text());
+      if (!window.confirm(`导入 ${imported.length} 条路由规则？当前全部路由规则将被覆盖。`)) return;
+      const applied = (await RoutingService.Import(imported)) ?? [];
+      setRules(applied);
+      await restartIfRunning(
+        `已导入 ${applied.length} 条路由规则，代理已重启生效。`,
+        `已导入 ${applied.length} 条路由规则，将在代理启动时生效。`,
+      );
+    } catch (err) {
+      setError(`导入路由规则失败：${errorMessage(err)}`);
+    } finally {
+      setIoBusy("");
+    }
+  };
+
   const modeLabel = () => {
     switch (props.proxyMode) {
       case "global": return "全局代理";
@@ -195,6 +372,7 @@ export default function RoutingPage(props: RoutingPageProps) {
             </div>
           </div>
           <div class="routing-heading-actions">
+            <button class="btn ghost" type="button" onClick={openPresets} disabled={busy()}>规则预设</button>
             <button class="btn ghost" type="button" onClick={resetRules} disabled={busy()}>恢复默认</button>
             <button class="btn primary" type="button" onClick={openNew} disabled={busy()}><Icon name="plus" size={14} /> 添加规则</button>
           </div>
@@ -203,6 +381,29 @@ export default function RoutingPage(props: RoutingPageProps) {
         <div class="routing-note">
           <Icon name="route" size={13} />
           <span>当前代理模式：{modeLabel()}。代理运行中修改规则会自动重启内核，配置立即生效。</span>
+        </div>
+
+        <div class="routing-io-bar">
+          <span class="routing-io-hint"><Icon name="alert" size={12} /> 规则集可导出为 JSON 备份，或从 JSON 文件导入；导入会覆盖当前全部规则。</span>
+          <div class="routing-io-group">
+            <button class="btn ghost compact" type="button" onClick={exportRules} disabled={busy() || ioBusy() !== "" || rules().length === 0}>
+              <Icon name="external" size={13} /> {ioBusy() === "export" ? "导出中..." : "导出 JSON"}
+            </button>
+            <button class="btn ghost compact" type="button" onClick={triggerImport} disabled={busy() || ioBusy() !== ""}>
+              <Icon name="plus" size={13} /> {ioBusy() === "import" ? "导入中..." : "导入 JSON"}
+            </button>
+            <input
+              ref={(element) => { importInput = element; }}
+              class="routing-file-input"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                event.currentTarget.value = "";
+                void importRuleFile(file);
+              }}
+            />
+          </div>
         </div>
 
         <Show when={error()}>
@@ -258,6 +459,62 @@ export default function RoutingPage(props: RoutingPageProps) {
           </Show>
         </Show>
       </section>
+
+      <Show when={presetOpen()}>
+        <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !busy()) setPresetOpen(false); }}>
+          <div class="modal routing-preset-modal">
+            <div class="modal-heading">
+              <div><h3>规则预设</h3><span>选择一套现成的规则替换当前规则，应用后仍可继续编辑</span></div>
+              <button class="icon-button" type="button" onClick={closePresets} disabled={busy()} aria-label="关闭"><Icon name="close" size={18} /></button>
+            </div>
+            <div class="routing-preset-body">
+              <Show when={presetError()}>
+                <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {presetError()}</span></div>
+              </Show>
+              <Show when={!presetLoading()} fallback={<div class="empty-state">正在读取规则预设...</div>}>
+                <Show when={presets().length > 0} fallback={
+                  <div class="empty-state">
+                    <div class="empty-icon"><Icon name="route" size={22} /></div>
+                    <strong>暂无可用规则预设</strong>
+                    <span>可以关闭弹窗后手动添加规则，或稍后重试。</span>
+                  </div>
+                }>
+                  <For each={presets()}>
+                    {(preset) => (
+                      <article class="routing-preset-card">
+                        <div class="routing-preset-info">
+                          <div class="routing-preset-title">
+                            <strong>{preset.name}</strong>
+                            <span class="tag neutral">{preset.rules?.length ?? 0} 条规则</span>
+                          </div>
+                          <p>{preset.description}</p>
+                          <Show when={(preset.rules?.length ?? 0) > 0}>
+                            <div class="routing-preset-preview">
+                              <For each={(preset.rules ?? []).slice(0, 3)}>
+                                {(rule) => <span class="routing-preset-chip" title={rule.value}>{typeLabel(rule.type)} · {rule.value}</span>}
+                              </For>
+                              <Show when={(preset.rules?.length ?? 0) > 3}>
+                                <span class="routing-preset-more">等 {preset.rules?.length} 条</span>
+                              </Show>
+                            </div>
+                          </Show>
+                        </div>
+                        <button class="btn primary compact" type="button" onClick={() => applyPreset(preset)} disabled={busy()}>
+                          {applyingPreset() === preset.id ? "应用中..." : "应用"}
+                        </button>
+                      </article>
+                    )}
+                  </For>
+                </Show>
+              </Show>
+            </div>
+            <div class="modal-footer">
+              <span class="routing-preset-footnote">应用预设会覆盖当前全部规则；代理运行中会自动重启以生效。</span>
+              <button class="btn ghost" type="button" onClick={closePresets} disabled={busy()}>关闭</button>
+            </div>
+          </div>
+        </div>
+      </Show>
 
       <Show when={editing()}>
         {(rule) => (

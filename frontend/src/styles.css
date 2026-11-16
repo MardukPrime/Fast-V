@@ -6492,3 +6492,168 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* ----------------------------------------------------------------
+   Routing · process rules, rule presets and rule import/export
+   New classes for the M5 routing work. Appended last on purpose:
+   the rules above are left untouched.
+   ---------------------------------------------------------------- */
+
+/* Import/export toolbar below the routing mode note */
+.routing-io-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.routing-io-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.routing-io-hint svg {
+  flex: 0 0 auto;
+  color: var(--faint);
+}
+
+.routing-io-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Hidden native file input driven by the import button */
+.routing-file-input {
+  display: none;
+}
+
+/* Rule preset picker modal */
+.routing-preset-modal {
+  width: min(660px, 100%);
+}
+
+.routing-preset-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 20px;
+  overflow: auto;
+}
+
+.routing-preset-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.routing-preset-card:hover {
+  border-color: var(--glass-border-strong);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+:root[data-theme="light"] .routing-preset-card {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+:root[data-theme="light"] .routing-preset-card:hover {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.routing-preset-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.routing-preset-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.routing-preset-title strong {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.routing-preset-info p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.routing-preset-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.routing-preset-chip {
+  max-width: 100%;
+  padding: 3px 7px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.03);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme="light"] .routing-preset-chip {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.routing-preset-more {
+  color: var(--faint);
+  font-size: 9.5px;
+}
+
+.routing-preset-card > .btn {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.routing-preset-footnote {
+  margin-right: auto;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+@media (max-width: 720px) {
+  .routing-preset-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .routing-preset-card > .btn {
+    align-self: flex-end;
+  }
+
+  .routing-preset-footnote {
+    display: none;
+  }
+}

@@ -34,7 +34,7 @@ func Run(assets embed.FS) error {
 		}
 	}
 
-	appSvc := appservice.New()
+	appSvc := appservice.New(st)
 	coreSvc := core.NewCoreService(st)
 	proxySvc := proxyservice.New(st, coreSvc)
 	diagnosticsSvc := diagnosticsservice.New(proxySvc)
@@ -74,7 +74,7 @@ func Run(assets embed.FS) error {
 		},
 	})
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            buildinfo.ProductName,
 		Width:            1280,
 		Height:           800,
@@ -84,6 +84,11 @@ func Run(assets embed.FS) error {
 		BackgroundColour: application.NewRGB(238, 242, 247),
 		URL:              "/",
 	})
+
+	// The tray and the close/minimize-to-tray behavior are wired after the
+	// window exists and before the event loop starts; Wails creates the tray
+	// icon itself once the application is running.
+	newTray(app, st, window, proxySvc, appSvc)
 
 	return app.Run()
 }

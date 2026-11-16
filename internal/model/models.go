@@ -49,6 +49,13 @@ type Settings struct {
 	XrayFinalMaskJSON         string `json:"xrayFinalMaskJson"`
 	SystemProxyMode           string `json:"systemProxyMode"`
 	TunMode                   bool   `json:"tunMode"`
+	AllowLan                  bool   `json:"allowLan"`
+	InboundAuthEnabled        bool   `json:"inboundAuthEnabled"`
+	InboundUsername           string `json:"inboundUsername"`
+	InboundPassword           string `json:"inboundPassword"`
+	CloseToTray               bool   `json:"closeToTray"`
+	MinimizeToTray            bool   `json:"minimizeToTray"`
+	AutoCheckUpdate           bool   `json:"autoCheckUpdate"`
 	StatsEnabled              bool   `json:"statsEnabled"`
 	AutoSelectEnabled         bool   `json:"autoSelectEnabled"`
 	AutoSelectIntervalMinutes int    `json:"autoSelectIntervalMinutes"`
@@ -150,6 +157,25 @@ type BackupResult struct {
 	RestoredSubscriptions int `json:"restoredSubscriptions"`
 	RestoredNodes         int `json:"restoredNodes"`
 	RestoredRules         int `json:"restoredRules"`
+}
+
+// UpdateInfo describes the result of an application update check.
+type UpdateInfo struct {
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	Available      bool   `json:"available"`
+	Notes          string `json:"notes"`
+	URL            string `json:"url"`
+	CheckedAt      string `json:"checkedAt"`
+	Error          string `json:"error"`
+}
+
+// RoutingPreset is a ready-made set of routing rules.
+type RoutingPreset struct {
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Rules       []RoutingRule `json:"rules"`
 }
 
 // DashboardSummary is the data shown on the overview page.

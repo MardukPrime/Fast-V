@@ -456,6 +456,138 @@ func TestStatsConfigPassesXrayValidation(t *testing.T) {
 	}
 }
 
+func TestBuildConfigLocalInboundListen(t *testing.T) {
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#LAN"}
+	cases := []struct {
+		name     string
+		allowLan bool
+		tunMode  bool
+	}{
+		{"loopback only", false, false},
+		{"allow lan", true, false},
+		{"tun mode keeps local inbound", true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := testSettings()
+			settings.AllowLan = tc.allowLan
+			settings.TunMode = tc.tunMode
+			raw, err := BuildConfig(node, settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config map[string]any
+			if err := json.Unmarshal(raw, &config); err != nil {
+				t.Fatal(err)
+			}
+			if tc.tunMode {
+				tunInbound := config["inbounds"].([]any)[0].(map[string]any)
+				if tunInbound["protocol"] != "tun" {
+					t.Fatalf("unexpected TUN inbound: %+v", tunInbound)
+				}
+				if _, ok := tunInbound["listen"]; ok {
+					t.Fatalf("TUN inbound must not gain a listen address: %+v", tunInbound)
+				}
+			}
+			localInbound := findSocksInbound(t, config)
+			want := "127.0.0.1"
+			if tc.allowLan {
+				want = "0.0.0.0"
+			}
+			if localInbound["listen"] != want {
+				t.Fatalf("expected listen %q, got %+v", want, localInbound)
+			}
+		})
+	}
+}
+
+func TestBuildConfigLocalInboundAuth(t *testing.T) {
+	node := model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Auth"}
+
+	disabled := testSettings()
+	raw, err := BuildConfig(node, disabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	inboundSettings := findSocksInbound(t, config)["settings"].(map[string]any)
+	if inboundSettings["auth"] != "noauth" {
+		t.Fatalf("expected noauth when inbound auth is disabled: %+v", inboundSettings)
+	}
+	if _, ok := inboundSettings["accounts"]; ok {
+		t.Fatalf("noauth inbound must not contain accounts: %+v", inboundSettings)
+	}
+
+	enabled := testSettings()
+	enabled.InboundAuthEnabled = true
+	enabled.InboundUsername = "fastv"
+	enabled.InboundPassword = "fastv-pass"
+	raw, err = BuildConfig(node, enabled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	inboundSettings = findSocksInbound(t, config)["settings"].(map[string]any)
+	if inboundSettings["auth"] != "password" {
+		t.Fatalf("expected password auth when inbound auth is enabled: %+v", inboundSettings)
+	}
+	accounts, ok := inboundSettings["accounts"].([]any)
+	if !ok || len(accounts) != 1 {
+		t.Fatalf("expected a single inbound account: %+v", inboundSettings)
+	}
+	account := accounts[0].(map[string]any)
+	if account["user"] != "fastv" || account["pass"] != "fastv-pass" {
+		t.Fatalf("unexpected inbound account: %+v", account)
+	}
+}
+
+func TestInboundAuthConfigPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	settings := testSettings()
+	settings.AllowLan = true
+	settings.InboundAuthEnabled = true
+	settings.InboundUsername = "fastv"
+	settings.InboundPassword = "fastv-pass"
+	node := model.Node{Protocol: "vless", Raw: "vless://00000000-0000-0000-0000-000000000005@example.com:443?security=tls#InboundAuth"}
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "inbound-auth-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("xray inbound auth config validation failed: %v\n%s", err, output)
+	}
+}
+
+func findSocksInbound(t *testing.T, config map[string]any) map[string]any {
+	t.Helper()
+	inbounds, ok := config["inbounds"].([]any)
+	if !ok {
+		t.Fatalf("inbounds are missing: %+v", config)
+	}
+	for _, entry := range inbounds {
+		inbound, ok := entry.(map[string]any)
+		if ok && inbound["protocol"] == "socks" {
+			return inbound
+		}
+	}
+	t.Fatalf("local SOCKS inbound is missing: %+v", inbounds)
+	return nil
+}
+
 func mustContainValue(t *testing.T, values any, want string) {
 	t.Helper()
 	list, ok := values.([]any)
