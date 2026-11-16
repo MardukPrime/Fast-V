@@ -24,6 +24,14 @@ export interface BackupResult {
 }
 
 /**
+ * BatchResult summarizes a bulk node operation.
+ */
+export interface BatchResult {
+    "affected": number;
+    "errors": string[] | null;
+}
+
+/**
  * CoreInfo describes the locally installed Xray-core and the latest known release.
  */
 export interface CoreInfo {
@@ -317,6 +325,8 @@ export interface Settings {
     "autoSelectIntervalMinutes": number;
     "autoSelectToleranceMs": number;
     "failoverEnabled": boolean;
+    "loadBalanceEnabled": boolean;
+    "loadBalanceMode": string;
     "testUrl": string;
     "xrayApiEnabled": boolean;
     "xrayApiPort": number;

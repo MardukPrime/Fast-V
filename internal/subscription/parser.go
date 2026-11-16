@@ -95,17 +95,60 @@ func ParseLinksWithIssues(text string) ([]ParsedNode, []string) {
 	return nodes, issues
 }
 
+// ParseContent parses a subscription body into nodes. Both line-based share
+// links (plain text or a whole base64 payload) and Clash-style YAML documents
+// are supported.
 func ParseContent(content string) ([]ParsedNode, error) {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return nil, errors.New("subscription content is empty")
+	nodes, _, err := ParseContentWithIssues(content)
+	if err != nil {
+		return nil, err
 	}
-
-	nodes, _ := ParseLinksWithIssues(content)
 	if len(nodes) == 0 {
 		return nil, errors.New("no supported nodes found in subscription")
 	}
 	return nodes, nil
+}
+
+// ParseContentWithIssues is ParseContent with per-entry diagnostics: it returns
+// the reasons why individual lines or Clash proxies could not be imported, so an
+// import/refresh dialog can show what was skipped.
+func ParseContentWithIssues(content string) ([]ParsedNode, []string, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return nil, nil, errors.New("subscription content is empty")
+	}
+
+	// Share links are tried first to keep the existing subscription behavior.
+	nodes, linkIssues := ParseLinksWithIssues(content)
+	if len(nodes) > 0 {
+		return nodes, linkIssues, nil
+	}
+
+	if looksLikeClashYAML(content) {
+		return ParseClash(content)
+	}
+	// Some providers wrap the whole Clash document in base64.
+	if decoded, ok := decodeBase64Text(content); ok && looksLikeClashYAML(decoded) {
+		return ParseClash(decoded)
+	}
+
+	if len(linkIssues) > 0 {
+		return nil, linkIssues, fmt.Errorf("no supported nodes found in subscription: %s", summarizeParseIssues(linkIssues, 3))
+	}
+	return nil, nil, errors.New("no supported nodes found in subscription")
+}
+
+// decodeBase64Text decodes a whole base64 body, ignoring whitespace/newlines.
+func decodeBase64Text(content string) (string, bool) {
+	compact := strings.Join(strings.Fields(content), "")
+	if compact == "" {
+		return "", false
+	}
+	decoded, ok := decodeBase64(compact)
+	if !ok {
+		return "", false
+	}
+	return string(decoded), true
 }
 
 func shortenLink(value string, limit int) string {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
@@ -11,7 +12,39 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/routing"
 )
 
-const tunInterfaceName = "FastV-TUN"
+const (
+	tunInterfaceName = "FastV-TUN"
+
+	// proxyOutboundTag is the tag of the single-node proxy outbound. In load
+	// balancing mode the same tag names the balancer, so routing rules and the
+	// rest of the generated configuration keep a single "proxy" target.
+	proxyOutboundTag = "proxy"
+	// loadBalanceOutboundPrefix tags every per-node outbound created for the
+	// balancer. The balancer selector and the observatory subject selector use
+	// the prefix, so the tag of each node is loadBalanceOutboundPrefix + index.
+	loadBalanceOutboundPrefix = "balancer-node-"
+	// loadBalanceProbeInterval is the observatory probe period. Xray expects a
+	// duration string here (for example "300s"), not a number of seconds.
+	loadBalanceProbeInterval = "300s"
+	// loadBalanceDefaultProbeURL is used when settings.TestURL is empty.
+	loadBalanceDefaultProbeURL = "https://www.gstatic.com/generate_204"
+	// loadBalanceDefaultStrategy is used when settings.LoadBalanceMode is empty
+	// or not a supported strategy.
+	loadBalanceDefaultStrategy = "leastPing"
+)
+
+// LoadBalanceStrategy canonicalizes the configured balancer strategy. Empty or
+// unknown values fall back to leastPing so a hand-edited data file can never
+// produce an invalid core configuration.
+func LoadBalanceStrategy(mode string) string {
+	trimmed := strings.TrimSpace(mode)
+	switch trimmed {
+	case "leastPing", "leastLoad", "roundRobin":
+		return trimmed
+	default:
+		return loadBalanceDefaultStrategy
+	}
+}
 
 // BuildConfig creates a complete Xray JSON configuration for the selected node and settings.
 func BuildConfig(node model.Node, settings model.Settings, customRules ...model.RoutingRule) ([]byte, error) {
@@ -24,9 +57,56 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 		return nil, err
 	}
 
+	apiEnabled := statsAPIEnabled(settings)
+	outbounds := []any{outbound, buildDirectOutbound(), buildBlockOutbound()}
+	routingConfig := buildRouting(settings.ProxyMode, customRules, apiEnabled, settings.XrayDomainStrategy)
+	return json.MarshalIndent(buildConfigDocument(settings, outbounds, routingConfig), "", "  ")
+}
+
+// BuildLoadBalanceConfig creates a complete Xray JSON configuration that routes
+// every proxied connection through a balancer instead of a single node.
+//
+// One outbound is generated per node (tag loadBalanceOutboundPrefix + index,
+// keeping the mux/sockopt/OutboundJSON overrides of the normal outbound path),
+// the balancer itself is tagged "proxy" so the stored routing rules keep their
+// proxy target, and an observatory probes the node outbounds for the leastPing
+// and leastLoad strategies. Xray only resolves rule outboundTag values against
+// real outbounds, therefore every routing rule that targets "proxy" is rewritten
+// to the matching balancerTag.
+func BuildLoadBalanceConfig(nodes []model.Node, settings model.Settings, customRules ...model.RoutingRule) ([]byte, error) {
+	if settings.CoreType != "xray" {
+		return nil, errors.New("only Xray-core is currently supported")
+	}
+	if len(nodes) < 2 {
+		return nil, fmt.Errorf("负载均衡需要至少 2 个节点（当前 %d 个）", len(nodes))
+	}
+
+	outbounds := make([]any, 0, len(nodes)+2)
+	for index, node := range nodes {
+		outbound, err := buildOutbound(node, settings)
+		if err != nil {
+			return nil, fmt.Errorf("节点 %d 的 outbound 无效: %w", index+1, err)
+		}
+		outbound["tag"] = loadBalanceOutboundPrefix + strconv.Itoa(index)
+		outbounds = append(outbounds, outbound)
+	}
+	outbounds = append(outbounds, buildDirectOutbound(), buildBlockOutbound())
+
+	apiEnabled := statsAPIEnabled(settings)
+	strategy := LoadBalanceStrategy(settings.LoadBalanceMode)
+	routingConfig := buildLoadBalanceRouting(settings.ProxyMode, customRules, apiEnabled, settings.XrayDomainStrategy, strategy)
+	document := buildConfigDocument(settings, outbounds, routingConfig)
+	document["observatory"] = buildObservatory(settings)
+	return json.MarshalIndent(document, "", "  ")
+}
+
+// buildConfigDocument assembles the shared parts of the Xray configuration. The
+// outbounds and the routing block differ between the single-node and the load
+// balancing configuration and are passed in.
+func buildConfigDocument(settings model.Settings, outbounds []any, routingConfig map[string]any) map[string]any {
 	// The stats API is required both for the optional management API and for the
 	// live traffic dashboard; either feature enables the same Xray API config.
-	apiStatsEnabled := settings.XrayAPIEnabled || settings.StatsEnabled
+	apiEnabled := statsAPIEnabled(settings)
 
 	inbounds := make([]any, 0, 3)
 	if settings.TunMode {
@@ -54,7 +134,7 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 			"destOverride": []string{"http", "tls", "quic"},
 		},
 	})
-	if apiStatsEnabled {
+	if apiEnabled {
 		inbounds = append(inbounds, map[string]any{
 			"tag":      "api-in",
 			"listen":   "127.0.0.1",
@@ -70,19 +150,15 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 		"log": map[string]any{
 			"loglevel": settings.XrayLogLevel,
 		},
-		"inbounds": inbounds,
-		"outbounds": []any{
-			outbound,
-			map[string]any{"tag": "direct", "protocol": "freedom"},
-			map[string]any{"tag": "block", "protocol": "blackhole"},
-		},
-		"routing": buildRouting(settings.ProxyMode, customRules, apiStatsEnabled, settings.XrayDomainStrategy),
+		"inbounds":  inbounds,
+		"outbounds": outbounds,
+		"routing":   routingConfig,
 		"dns": map[string]any{
 			"servers":       splitList(settings.XrayDNSServers),
 			"queryStrategy": settings.XrayDNSStrategy,
 		},
 	}
-	if apiStatsEnabled {
+	if apiEnabled {
 		config["api"] = map[string]any{
 			"tag": "api",
 			"services": []string{
@@ -113,7 +189,38 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 		}
 	}
 
-	return json.MarshalIndent(config, "", "  ")
+	return config
+}
+
+// statsAPIEnabled reports whether the Xray API/stats configuration is needed.
+func statsAPIEnabled(settings model.Settings) bool {
+	return settings.XrayAPIEnabled || settings.StatsEnabled
+}
+
+// buildDirectOutbound and buildBlockOutbound return the fixed outbounds shared by
+// both configuration shapes.
+func buildDirectOutbound() map[string]any {
+	return map[string]any{"tag": "direct", "protocol": "freedom"}
+}
+
+func buildBlockOutbound() map[string]any {
+	return map[string]any{"tag": "block", "protocol": "blackhole"}
+}
+
+// buildObservatory builds the Xray observatory that feeds the leastPing and
+// leastLoad balancer strategies. roundRobin does not need it but tolerates it,
+// and the probe results keep the configuration ready for future strategies.
+func buildObservatory(settings model.Settings) map[string]any {
+	probeURL := strings.TrimSpace(settings.TestURL)
+	if probeURL == "" {
+		probeURL = loadBalanceDefaultProbeURL
+	}
+	return map[string]any{
+		"subjectSelector":   []string{loadBalanceOutboundPrefix},
+		"probeURL":          probeURL,
+		"probeInterval":     loadBalanceProbeInterval,
+		"enableConcurrency": true,
+	}
 }
 
 // localInboundListen returns the listen address of the local SOCKS inbound.
@@ -162,7 +269,7 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 			return nil, err
 		}
 	}
-	outbound["tag"] = "proxy"
+	outbound["tag"] = proxyOutboundTag
 	if settings.XrayMuxEnabled {
 		outbound["mux"] = map[string]any{
 			"enabled":     true,
@@ -188,6 +295,34 @@ func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled 
 		"domainStrategy": domainStrategy,
 		"rules":          rules,
 	}
+}
+
+// buildLoadBalanceRouting builds the routing block for load balancing. Every rule
+// that targets the single-node proxy tag is redirected to the balancer tag of the
+// same name: Xray resolves rule outboundTag values only against real outbounds,
+// so leaving the rules untouched would produce "non existing outTag: proxy".
+func buildLoadBalanceRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled bool, domainStrategy string, strategy string) map[string]any {
+	routingConfig := buildRouting(proxyMode, customRules, apiEnabled, domainStrategy)
+	rules, _ := routingConfig["rules"].([]any)
+	for _, entry := range rules {
+		rule, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if rule["outboundTag"] != proxyOutboundTag {
+			continue
+		}
+		delete(rule, "outboundTag")
+		rule["balancerTag"] = proxyOutboundTag
+	}
+	routingConfig["balancers"] = []any{
+		map[string]any{
+			"tag":      proxyOutboundTag,
+			"selector": []string{loadBalanceOutboundPrefix},
+			"strategy": map[string]any{"type": strategy},
+		},
+	}
+	return routingConfig
 }
 
 func applyStreamOverrides(outbound map[string]any, settings model.Settings) error {

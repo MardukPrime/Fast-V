@@ -172,3 +172,72 @@ func testVMessLink(t *testing.T, name, address string, port int) string {
 	}
 	return "vmess://" + base64.StdEncoding.EncodeToString(payload)
 }
+
+func TestParseContentSupportsClashYAML(t *testing.T) {
+	nodes, err := ParseContent(testClashSubscriptionYAML)
+	if err != nil {
+		t.Fatalf("parse clash subscription failed: %v", err)
+	}
+	if len(nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d: %+v", len(nodes), nodes)
+	}
+	if nodes[0].Protocol != "vmess" || nodes[0].Address != "vmess.example.com" {
+		t.Fatalf("unexpected vmess node: %+v", nodes[0])
+	}
+	if nodes[1].Protocol != "vless" || nodes[1].Port != 8443 {
+		t.Fatalf("unexpected vless node: %+v", nodes[1])
+	}
+	if nodes[2].Protocol != "trojan" || nodes[2].Name != "Trojan WS" {
+		t.Fatalf("unexpected trojan node: %+v", nodes[2])
+	}
+	if nodes[3].Protocol != "shadowsocks" || nodes[3].Address != "ss.example.com" {
+		t.Fatalf("unexpected shadowsocks node: %+v", nodes[3])
+	}
+}
+
+func TestParseContentWithIssuesReportsClashSkips(t *testing.T) {
+	nodes, issues, err := ParseContentWithIssues(testClashSubscriptionYAML)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if len(nodes) != 4 {
+		t.Fatalf("expected 4 nodes, got %d", len(nodes))
+	}
+	if len(issues) != 1 || !strings.Contains(issues[0], "hysteria2") {
+		t.Fatalf("expected the hysteria2 proxy to be reported, got %+v", issues)
+	}
+}
+
+func TestParseContentReportsClashErrors(t *testing.T) {
+	cases := []string{
+		"proxies:\n  - name: [broken",    // invalid YAML
+		"proxies: []",                    // empty proxy list
+		"proxy-groups:\n  - name: Proxy", // no proxies section
+	}
+	for _, content := range cases {
+		if _, err := ParseContent(content); err == nil {
+			t.Fatalf("expected an error for Clash-like content %q", content)
+		}
+	}
+}
+
+func TestParseContentWithIssuesKeepsLinkBehavior(t *testing.T) {
+	nodes, issues, err := ParseContentWithIssues(testVMessLink(t, "VMess Node", "vmess.example.com", 443))
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].Protocol != "vmess" || len(issues) != 0 {
+		t.Fatalf("unexpected link parse result: nodes=%+v issues=%+v", nodes, issues)
+	}
+}
+
+func TestParseContentSupportsBase64WrappedClashYAML(t *testing.T) {
+	content := base64.StdEncoding.EncodeToString([]byte(testClashSubscriptionYAML))
+	nodes, err := ParseContent(content)
+	if err != nil {
+		t.Fatalf("parse base64 clash subscription failed: %v", err)
+	}
+	if len(nodes) != 4 || nodes[0].Protocol != "vmess" || nodes[3].Protocol != "shadowsocks" {
+		t.Fatalf("unexpected nodes: %+v", nodes)
+	}
+}

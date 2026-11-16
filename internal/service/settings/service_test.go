@@ -150,6 +150,53 @@ func TestSmartRoutingValues(t *testing.T) {
 	}
 }
 
+func TestLoadBalanceModeValidation(t *testing.T) {
+	service := newService(t)
+
+	for _, mode := range []string{"leastPing", "leastLoad", "roundRobin"} {
+		input := validSettings()
+		input.LoadBalanceEnabled = true
+		input.LoadBalanceMode = "  " + mode + "  "
+		saved, err := service.Save(input)
+		if err != nil {
+			t.Fatalf("%s: expected the load balancing strategy to be accepted: %v", mode, err)
+		}
+		if saved.LoadBalanceMode != mode || !saved.LoadBalanceEnabled {
+			t.Fatalf("%s: unexpected saved load balancing settings: %+v", mode, saved)
+		}
+	}
+
+	// An empty strategy keeps the default leastPing strategy.
+	empty := validSettings()
+	empty.LoadBalanceEnabled = true
+	empty.LoadBalanceMode = ""
+	saved, err := service.Save(empty)
+	if err != nil {
+		t.Fatalf("an empty strategy must fall back to leastPing: %v", err)
+	}
+	if saved.LoadBalanceMode != "leastPing" {
+		t.Fatalf("unexpected default load balancing strategy: %q", saved.LoadBalanceMode)
+	}
+
+	// Unsupported strategies are rejected with a Chinese error.
+	for _, mode := range []string{"leastping", "random", "least_ping", "LeastLoad"} {
+		input := validSettings()
+		input.LoadBalanceMode = mode
+		if _, err := service.Save(input); err == nil || !strings.Contains(err.Error(), "负载均衡策略") {
+			t.Fatalf("%q: expected a Chinese load balancing strategy error, got %v", mode, err)
+		}
+	}
+
+	// LoadBalanceEnabled has no validation of its own: disabled load balancing
+	// accepts the stored default strategy unchanged.
+	disabled := validSettings()
+	disabled.LoadBalanceEnabled = false
+	disabled.LoadBalanceMode = "leastPing"
+	if _, err := service.Save(disabled); err != nil {
+		t.Fatalf("disabled load balancing must be accepted: %v", err)
+	}
+}
+
 func TestInboundAuthValidation(t *testing.T) {
 	service := newService(t)
 

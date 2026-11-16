@@ -1,9 +1,10 @@
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
-import type { NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BatchResult, NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import QRModal, { QRCodeIcon } from "../components/QRModal";
 
 type ServersProps = {
   onNavigate: (page: string) => void;
@@ -12,6 +13,8 @@ type ServersProps = {
 type EditorTab = "form" | "json";
 
 type SortMode = "default" | "name" | "latency" | "favorite";
+
+type BatchAction = "enable" | "disable" | "copy" | "delete";
 
 const sortOptions: { value: SortMode; label: string }[] = [
   { value: "default", label: "默认顺序" },
@@ -84,6 +87,26 @@ export default function ServersPage(props: ServersProps) {
   const [sortMode, setSortMode] = createSignal<SortMode>("default");
   const [copiedID, setCopiedID] = createSignal("");
 
+  // Batch node selection and sharing QR dialog state.
+  const [selectedIDs, setSelectedIDs] = createSignal<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = createSignal<BatchAction | "">("");
+  const [qrOpen, setQROpen] = createSignal(false);
+  const [qrTitle, setQRTitle] = createSignal("");
+  const [qrSubtitle, setQRSubtitle] = createSignal("");
+  const [qrLink, setQRLink] = createSignal("");
+  const [qrImage, setQRImage] = createSignal("");
+  const [qrHint, setQRHint] = createSignal("");
+  const [qrLoading, setQRLoading] = createSignal(false);
+  const [qrError, setQRError] = createSignal("");
+  const [qrTarget, setQRTarget] = createSignal<NodeView | null>(null);
+
+  let copyTimer: number | undefined;
+  let pageNoticeTimer: number | undefined;
+  // Only the latest QR request is allowed to update the dialog (the user may
+  // close it or open another node while the previous request is in flight).
+  let qrRequest = 0;
+  let selectAllRef: HTMLInputElement | undefined;
+
   const [importOpen, setImportOpen] = createSignal(false);
   const [importText, setImportText] = createSignal("");
   const [importBusy, setImportBusy] = createSignal(false);
@@ -91,8 +114,6 @@ export default function ServersPage(props: ServersProps) {
   const [importResult, setImportResult] = createSignal<NodeImportResult | null>(null);
   const [pageNotice, setPageNotice] = createSignal("");
 
-  let copyTimer: number | undefined;
-  let pageNoticeTimer: number | undefined;
   // URL latency tests run a temporary Xray-core process and may take seconds.
   // Never touch signals after the page has been disposed.
   let alive = true;
@@ -190,6 +211,55 @@ export default function ServersPage(props: ServersProps) {
   const activeNodeID = createMemo(() => nodes().find((node) => node.active)?.id ?? "");
   const activeCount = () => nodes().filter((node) => node.active).length;
   const enabledCount = () => nodes().filter((node) => node.enabled).length;
+
+  // ---- Batch selection ----------------------------------------------------
+  const selectableIDs = createMemo(() => sortedNodes().map((node) => node.id));
+  const selectedCount = () => selectedIDs().size;
+  const allSelected = createMemo(() => selectableIDs().length > 0 && selectableIDs().every((id) => selectedIDs().has(id)));
+  const someSelected = createMemo(() => selectedCount() > 0 && !allSelected());
+  const batchBusyActive = () => batchBusy() !== "";
+
+  // Keep the selection in sync with the visible list: a selected node that is
+  // filtered out or removed never participates in a batch action.
+  createEffect(() => {
+    const visible = new Set(filteredNodes().map((node) => node.id));
+    setSelectedIDs((current) => {
+      if (current.size === 0) return current;
+      const next = new Set<string>();
+      for (const id of current) if (visible.has(id)) next.add(id);
+      return next.size === current.size ? current : next;
+    });
+  });
+
+  // The header checkbox shows the "partially selected" state too.
+  createEffect(() => {
+    if (selectAllRef) selectAllRef.indeterminate = someSelected();
+  });
+
+  const toggleSelected = (id: string) => {
+    setSelectedIDs((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectableIDs().length === 0) return;
+    setSelectedIDs((current) => (allSelected() ? new Set<string>() : new Set(selectableIDs())));
+  };
+
+  const invertSelection = () => {
+    if (selectableIDs().length === 0) return;
+    setSelectedIDs((current) => {
+      const next = new Set<string>();
+      for (const id of selectableIDs()) if (!current.has(id)) next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIDs(new Set<string>());
 
   const updateNodeFlags = (id: string) => {
     setNodes((current) => current.map((item) => ({ ...item, active: item.id === id })));
@@ -354,6 +424,135 @@ export default function ServersPage(props: ServersProps) {
       setPageNotice("");
       pageNoticeTimer = undefined;
     }, 8000);
+  };
+
+  // ---- Batch actions ------------------------------------------------------
+  const reportBatchResult = (action: string, result: BatchResult, requested: number) => {
+    const errors = result.errors ?? [];
+    if (result.affected > 0) {
+      showPageNotice(requested > result.affected
+        ? `${action} ${result.affected} / ${requested} 个节点，其余节点失败。`
+        : `${action} ${result.affected} 个节点。`);
+    } else if (errors.length === 0) {
+      setError(`${action}失败：后端没有更新任何节点。`);
+    }
+    if (errors.length > 0) {
+      const head = errors.slice(0, 2).join("；");
+      setError(errors.length > 2 ? `${head}；等共 ${errors.length} 个错误。` : head);
+    }
+  };
+
+  const runBatchSetEnabled = async (enabled: boolean) => {
+    if (batchBusyActive()) return;
+    const ids = [...selectedIDs()];
+    if (ids.length === 0) return;
+    setBatchBusy(enabled ? "enable" : "disable");
+    setError("");
+    try {
+      const result = await NodeService.SetEnabledBatch(ids, enabled);
+      await load();
+      clearSelection();
+      reportBatchResult(enabled ? "已启用" : "已禁用", result, ids.length);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchBusy("");
+    }
+  };
+
+  const runBatchCopyLinks = async () => {
+    if (batchBusyActive()) return;
+    const ids = [...selectedIDs()];
+    if (ids.length === 0) return;
+    setBatchBusy("copy");
+    setError("");
+    try {
+      const links = await NodeService.ExportLinks(ids);
+      const texts = (links ?? []).map((item) => item.link.trim()).filter(Boolean);
+      if (texts.length === 0) {
+        setError("所选节点没有可导出的分享链接。");
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        setError("当前环境不支持剪贴板，无法复制分享链接。");
+        return;
+      }
+      await navigator.clipboard.writeText(texts.join("\n"));
+      showPageNotice(texts.length < ids.length
+        ? `已复制 ${texts.length} 个节点的分享链接，${ids.length - texts.length} 个节点没有可导出的链接。`
+        : `已复制 ${texts.length} 个节点的分享链接。`);
+      clearSelection();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchBusy("");
+    }
+  };
+
+  const runBatchDelete = async () => {
+    if (batchBusyActive()) return;
+    const ids = [...selectedIDs()];
+    if (ids.length === 0) return;
+    if (!window.confirm(`确定删除选中的 ${ids.length} 个节点吗？删除后无法恢复，该操作有风险。`)) return;
+    setBatchBusy("delete");
+    setError("");
+    try {
+      const result = await NodeService.DeleteBatch(ids);
+      await load();
+      clearSelection();
+      reportBatchResult("已删除", result, ids.length);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchBusy("");
+    }
+  };
+
+  // ---- Share QR codes -----------------------------------------------------
+  const closeQRCode = () => {
+    qrRequest += 1;
+    setQROpen(false);
+    setQRLoading(false);
+  };
+
+  const openNodeQRCode = async (node: NodeView) => {
+    setQRTarget(node);
+    setQRTitle(node.name);
+    setQRSubtitle(`${protocolLabel(node.protocol)} · ${node.address}:${node.port}`);
+    setQRLink("");
+    setQRImage("");
+    setQRHint("");
+    setQRError("");
+    setQRLoading(true);
+    setQROpen(true);
+    const token = ++qrRequest;
+    try {
+      const [image, links] = await Promise.all([
+        NodeService.QRCode(node.id),
+        NodeService.ExportLinks([node.id]).catch(() => null),
+      ]);
+      if (!alive || token !== qrRequest) return;
+      if (!image) {
+        setQRError("后端没有返回二维码图片，请稍后重试。");
+        return;
+      }
+      const link = links?.[0]?.link ?? "";
+      setQRImage(image);
+      setQRLink(link);
+      setQRHint(link
+        ? "使用支持扫码导入的客户端（如 v2rayN、Xray）扫描二维码即可添加该节点。"
+        : "该节点暂时无法导出文本分享链接，可以扫描二维码在客户端中导入。");
+    } catch (err) {
+      if (!alive || token !== qrRequest) return;
+      setQRError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (alive && token === qrRequest) setQRLoading(false);
+    }
+  };
+
+  const retryQRCode = () => {
+    const node = qrTarget();
+    if (node) void openNodeQRCode(node);
   };
 
   const openImport = () => {
@@ -594,6 +793,41 @@ export default function ServersPage(props: ServersProps) {
           </button>
         </div>
 
+        <Show when={filteredNodes().length > 0}>
+          <div classList={{ "node-batch-bar": true, active: selectedCount() > 0 }} aria-label="批量操作">
+            <Show
+              when={selectedCount() > 0}
+              fallback={<span class="node-batch-hint">勾选左侧复选框即可批量启用、禁用、复制或删除节点。</span>}
+            >
+              <span class="node-batch-count">已选 <strong>{selectedCount()}</strong> 项</span>
+            </Show>
+            <div class="node-batch-actions">
+              <button class="btn ghost compact" type="button" onClick={toggleSelectAll} disabled={batchBusyActive() || selectableIDs().length === 0}>
+                {allSelected() ? "取消全选" : "全选"}
+              </button>
+              <button class="btn ghost compact" type="button" onClick={invertSelection} disabled={batchBusyActive() || selectableIDs().length === 0}>
+                反选
+              </button>
+              <button class="btn ghost compact" type="button" onClick={clearSelection} disabled={batchBusyActive() || selectedCount() === 0}>
+                清空选择
+              </button>
+              <span class="node-batch-divider" aria-hidden="true" />
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(true)} disabled={batchBusyActive() || selectedCount() === 0}>
+                <Icon name="check" size={13} /> {batchBusy() === "enable" ? "启用中..." : "批量启用"}
+              </button>
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(false)} disabled={batchBusyActive() || selectedCount() === 0}>
+                <Icon name="stop" size={13} /> {batchBusy() === "disable" ? "禁用中..." : "批量禁用"}
+              </button>
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchCopyLinks()} disabled={batchBusyActive() || selectedCount() === 0}>
+                <CopyLinkIcon /> {batchBusy() === "copy" ? "复制中..." : "批量复制链接"}
+              </button>
+              <button class="btn danger compact" type="button" onClick={() => void runBatchDelete()} disabled={batchBusyActive() || selectedCount() === 0}>
+                <Icon name="trash" size={13} /> {batchBusy() === "delete" ? "删除中..." : "批量删除"}
+              </button>
+            </div>
+          </div>
+        </Show>
+
         <Show when={pageNotice()}>
           <div class="alert success node-import-notice">
             <span class="alert-message"><Icon name="check" size={15} /> {pageNotice()}</span>
@@ -623,7 +857,17 @@ export default function ServersPage(props: ServersProps) {
           }>
             <div class="node-table">
               <div class="node-table-head">
-                <span />
+                <label class="node-select-all" title="全选当前列表">
+                  <input
+                    ref={(element) => { selectAllRef = element; }}
+                    class="node-select"
+                    type="checkbox"
+                    checked={allSelected()}
+                    disabled={batchBusyActive() || selectableIDs().length === 0}
+                    onChange={toggleSelectAll}
+                    aria-label="全选当前列表"
+                  />
+                </label>
                 <span>节点</span>
                 <span>协议</span>
                 <span>地址</span>
@@ -633,15 +877,27 @@ export default function ServersPage(props: ServersProps) {
               </div>
               <For each={sortedNodes()}>
                 {(node) => (
-                  <div classList={{ "node-row": true, active: node.active, disabled: !node.enabled }}>
-                    <button
-                      classList={{ "node-radio": true, selected: node.active }}
-                      aria-label={node.active ? "当前节点" : `将 ${node.name} 设为当前节点`}
-                      onClick={() => switchActiveNode(node.id)}
-                      disabled={busyID() === node.id}
-                    >
-                      <span />
-                    </button>
+                  <div classList={{ "node-row": true, active: node.active, disabled: !node.enabled, selected: selectedIDs().has(node.id) }}>
+                    <div class="node-select-cell">
+                      <label class="node-select-label" title={selectedIDs().has(node.id) ? "取消选择该节点" : "选择该节点"}>
+                        <input
+                          class="node-select"
+                          type="checkbox"
+                          checked={selectedIDs().has(node.id)}
+                          disabled={batchBusyActive()}
+                          onChange={() => toggleSelected(node.id)}
+                          aria-label={`选择 ${node.name}`}
+                        />
+                      </label>
+                      <button
+                        classList={{ "node-radio": true, selected: node.active }}
+                        aria-label={node.active ? "当前节点" : `将 ${node.name} 设为当前节点`}
+                        onClick={() => switchActiveNode(node.id)}
+                        disabled={busyID() === node.id}
+                      >
+                        <span />
+                      </button>
+                    </div>
                     <div class="node-name">
                       <div class="node-name-main">
                         <strong title={node.name}>{node.name}</strong>
@@ -671,6 +927,15 @@ export default function ServersPage(props: ServersProps) {
                         title={node.favorite ? "取消收藏" : "收藏"}
                       >
                         <FavoriteStarIcon filled={node.favorite} />
+                      </button>
+                      <button
+                        class="icon-button qr-button"
+                        onClick={() => void openNodeQRCode(node)}
+                        disabled={batchBusyActive()}
+                        aria-label={`查看 ${node.name} 的分享二维码`}
+                        title="分享二维码"
+                      >
+                        <QRCodeIcon />
                       </button>
                       <button
                         classList={{ "icon-button": true, "copy-link": true, copied: copiedID() === node.id }}
@@ -920,6 +1185,19 @@ export default function ServersPage(props: ServersProps) {
           </div>
         )}
       </Show>
+
+      <QRModal
+        open={qrOpen()}
+        title={qrTitle() ? `节点二维码 · ${qrTitle()}` : "节点二维码"}
+        subtitle={qrSubtitle() || "扫码后即可在客户端中导入该节点"}
+        link={qrLink()}
+        image={qrImage()}
+        loading={qrLoading()}
+        error={qrError()}
+        hint={qrHint()}
+        onClose={closeQRCode}
+        onRetry={retryQRCode}
+      />
     </div>
   );
 }

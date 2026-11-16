@@ -130,7 +130,9 @@ func (m *Manager) State() model.ProxyState {
 }
 
 func (m *Manager) enrichNodeState(state model.ProxyState) model.ProxyState {
-	if state.NodeID != "" && state.NodeName != "" {
+	// Load balancing mode sets a descriptive proxy-wide node name; never replace
+	// it with the active node record.
+	if state.NodeName != "" {
 		return state
 	}
 	node, ok := m.store.ActiveNode()
@@ -222,11 +224,6 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Unlock()
 		return state, nil
 	}
-	node, ok := m.store.ActiveNode()
-	if !ok {
-		m.mu.Unlock()
-		return m.fail("no active node selected")
-	}
 	settings := m.store.Settings()
 	if settings.CoreType != "xray" {
 		m.mu.Unlock()
@@ -237,6 +234,24 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		m.mu.Unlock()
 		return m.fail("Xray-core is not installed")
 	}
+
+	// Load balancing routes every enabled node through the balancer. It needs at
+	// least two enabled nodes; TUN mode is excluded because the existing TUN route
+	// setup only pins one node server IP to the physical interface. Both cases fall
+	// back to the single active node and are reported once in the log.
+	enabledNodes := enabledProxyNodes(m.store.ListNodes())
+	useLoadBalance := settings.LoadBalanceEnabled && !settings.TunMode && len(enabledNodes) >= 2
+	var warnings []string
+	if settings.LoadBalanceEnabled {
+		switch {
+		case settings.TunMode:
+			warnings = append(warnings, "TUN 模式下暂不支持负载均衡，已回退单节点")
+		case len(enabledNodes) < 2:
+			warnings = append(warnings, "负载均衡需要至少 2 个启用节点")
+		}
+	}
+	var node model.Node
+
 	// The stats/management API shares the settings API port. An invalid or
 	// conflicting port would make Xray fail to bind the inbound, so keep the
 	// proxy usable: an explicitly requested API fails fast, otherwise the
@@ -259,10 +274,34 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		}
 	}
 
-	config, err := BuildConfig(node, settings, m.store.ListRoutingRules()...)
-	if err != nil {
+	customRules := m.store.ListRoutingRules()
+	var (
+		config   []byte
+		buildErr error
+	)
+	if useLoadBalance {
+		config, buildErr = BuildLoadBalanceConfig(enabledNodes, settings, customRules...)
+		if buildErr != nil {
+			// A single broken node must not take the whole proxy down: keep the
+			// active node working in single-node mode and surface the reason.
+			warnings = append(warnings, "负载均衡配置生成失败，已回退单节点: "+buildErr.Error())
+			useLoadBalance = false
+		}
+	}
+	if !useLoadBalance {
+		if node.ID == "" {
+			active, ok := m.store.ActiveNode()
+			if !ok {
+				m.mu.Unlock()
+				return m.fail("no active node selected")
+			}
+			node = active
+		}
+		config, buildErr = BuildConfig(node, settings, customRules...)
+	}
+	if buildErr != nil {
 		m.mu.Unlock()
-		return m.fail(err.Error())
+		return m.fail(buildErr.Error())
 	}
 	runtimeDir := filepath.Join(m.store.DataDir(), "runtime")
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
@@ -276,34 +315,49 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	}
 
 	subscriptionName := ""
-	if sub, err := m.store.FindSubscription(node.SubscriptionID); err == nil {
-		subscriptionName = sub.Name
-	}
-	resolvedIP := resolveNodeHost(ctx, node.Address)
-	if settings.TunMode && resolvedIP == "" {
-		m.mu.Unlock()
-		return m.fail("TUN 模式要求节点服务器地址能够解析为 IP")
+	resolvedIP := ""
+	if !useLoadBalance {
+		if sub, err := m.store.FindSubscription(node.SubscriptionID); err == nil {
+			subscriptionName = sub.Name
+		}
+		resolvedIP = resolveNodeHost(ctx, node.Address)
+		if settings.TunMode && resolvedIP == "" {
+			m.mu.Unlock()
+			return m.fail("TUN 模式要求节点服务器地址能够解析为 IP")
+		}
 	}
 	inbound := "SOCKS5 / HTTP"
 	if settings.TunMode {
 		inbound = "TUN + SOCKS5 / HTTP"
 	}
 	state := model.ProxyState{
-		Status:           "starting",
-		NodeID:           node.ID,
-		NodeName:         node.Name,
-		NodeProtocol:     node.Protocol,
-		NodeAddress:      node.Address,
-		NodePort:         node.Port,
-		NodeSubscription: subscriptionName,
-		ResolvedIP:       resolvedIP,
-		ProxyMode:        settings.ProxyMode,
-		Inbound:          inbound,
-		LocalAddr:        net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.XrayLocalPort)),
+		Status:    "starting",
+		ProxyMode: settings.ProxyMode,
+		Inbound:   inbound,
+		LocalAddr: net.JoinHostPort("127.0.0.1", strconv.Itoa(settings.XrayLocalPort)),
+	}
+	if useLoadBalance {
+		// Load balancing has no single active node; the balancer picks one of the
+		// enabled nodes for every connection.
+		state.NodeName = loadBalanceNodeName(len(enabledNodes))
+	} else {
+		state.NodeID = node.ID
+		state.NodeName = node.Name
+		state.NodeProtocol = node.Protocol
+		state.NodeAddress = node.Address
+		state.NodePort = node.Port
+		state.NodeSubscription = subscriptionName
+		state.ResolvedIP = resolvedIP
 	}
 	m.state = state
 	m.mu.Unlock()
 	m.emit(state)
+	for _, warning := range warnings {
+		m.appendLog("warning", "loadbalance", warning)
+	}
+	if useLoadBalance {
+		m.appendLog("info", "loadbalance", fmt.Sprintf("负载均衡已启用：%d 个节点，策略 %s", len(enabledNodes), LoadBalanceStrategy(settings.LoadBalanceMode)))
+	}
 	if statsSkippedForPort {
 		m.appendLog("warning", "stats", fmt.Sprintf("Xray API 端口 %d 与本地代理端口相同，已跳过实时流量统计", settings.XrayAPIPort))
 	}
@@ -596,4 +650,20 @@ func resolveNodeHost(ctx context.Context, address string) string {
 		return ""
 	}
 	return ips[0]
+}
+
+// enabledProxyNodes returns the nodes the balancer is allowed to route through.
+func enabledProxyNodes(nodes []model.Node) []model.Node {
+	enabled := make([]model.Node, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Enabled {
+			enabled = append(enabled, node)
+		}
+	}
+	return enabled
+}
+
+// loadBalanceNodeName is the ProxyState node label shown while the balancer runs.
+func loadBalanceNodeName(nodeCount int) string {
+	return fmt.Sprintf("负载均衡（%d 个节点）", nodeCount)
 }

@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skip2/go-qrcode"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
@@ -201,6 +203,28 @@ func (s *Service) UpdateAll() (model.UpdateAllResult, error) {
 
 func (s *Service) Delete(id string) error {
 	return s.store.DeleteSubscription(id)
+}
+
+// qrCodeImageSize is the edge length in pixels of the generated QR code image.
+const qrCodeImageSize = 320
+
+// QRCode renders the subscription URL as a 320px PNG data URL. The URL contains
+// the user's private token, so generating the code is an explicit sharing
+// action initiated by the user.
+func (s *Service) QRCode(id string) (string, error) {
+	sub, err := s.store.FindSubscription(id)
+	if err != nil {
+		return "", fmt.Errorf("订阅不存在: %s", id)
+	}
+	link := strings.TrimSpace(sub.URL)
+	if link == "" {
+		return "", errors.New("订阅链接为空，无法生成二维码")
+	}
+	pngData, err := qrcode.Encode(link, qrcode.Medium, qrCodeImageSize)
+	if err != nil {
+		return "", fmt.Errorf("订阅 %q 的链接过长，无法生成二维码: %w", sub.Name, err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData), nil
 }
 
 func (s *Service) Nodes(id string) ([]model.NodeView, error) {

@@ -30,6 +30,15 @@ export function Nodes(id: string): $CancellablePromise<model$0.NodeView[] | null
     return $Call.ByID(1784438585, id);
 }
 
+/**
+ * QRCode renders the subscription URL as a 320px PNG data URL. The URL contains
+ * the user's private token, so generating the code is an explicit sharing
+ * action initiated by the user.
+ */
+export function QRCode(id: string): $CancellablePromise<string> {
+    return $Call.ByID(2752607638, id);
+}
+
 export function Update(id: string): $CancellablePromise<model$0.SubscriptionView> {
     return $Call.ByID(4020208309, id);
 }

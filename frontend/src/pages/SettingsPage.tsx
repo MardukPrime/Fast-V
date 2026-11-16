@@ -57,6 +57,8 @@ const defaults: Settings = {
   autoSelectIntervalMinutes: 10,
   autoSelectToleranceMs: 80,
   failoverEnabled: false,
+  loadBalanceEnabled: false,
+  loadBalanceMode: "leastPing",
   testUrl: "https://www.gstatic.com/generate_204",
   xrayApiEnabled: false,
   xrayApiPort: 10085,
@@ -125,6 +127,15 @@ const logLevels = [
   { value: "error", label: "error" },
   { value: "none", label: "none" },
 ];
+
+// Keep in sync with the backend validation in internal/service/settings.
+const loadBalanceModes = [
+  { value: "leastPing", label: "延迟优先", hint: "按 URL 延迟测速选择最快节点" },
+  { value: "leastLoad", label: "负载优先", hint: "优先选择当前负载较低的节点" },
+  { value: "roundRobin", label: "轮询", hint: "按顺序轮流使用全部启用节点" },
+];
+
+const loadBalanceModeValues = ["leastPing", "leastLoad", "roundRobin"];
 
 function coreStatusLabel(status: string) {
   switch (status) {
@@ -293,15 +304,31 @@ export default function SettingsPage(props: SettingsProps) {
     return "";
   };
 
+  // The backend only accepts the three Xray balancer strategies; block anything
+  // else before it reaches SettingsService.Save. An empty value keeps the
+  // leastPing default, mirroring the backend behaviour.
+  const validateLoadBalance = () => {
+    const mode = settings().loadBalanceMode.trim();
+    if (mode !== "" && !loadBalanceModeValues.includes(mode)) {
+      return "负载均衡策略必须是延迟优先（leastPing）、负载优先（leastLoad）或轮询（roundRobin）。";
+    }
+    return "";
+  };
+
   const save = async (event: Event) => {
     event.preventDefault();
     const autoSelectError = validateAutoSelect();
     const inboundError = validateInboundAuth();
-    const validationError = autoSelectError || inboundError;
+    const loadBalanceError = validateLoadBalance();
+    const validationError = autoSelectError || inboundError || loadBalanceError;
     if (validationError) {
       if (inboundError) {
         setClientExpanded(true);
         writeSectionState("fastv.settings.clientOpen", true);
+      }
+      if (autoSelectError || loadBalanceError) {
+        setAutoSelectExpanded(true);
+        writeSectionState("fastv.settings.autoSelectOpen", true);
       }
       setMessage("");
       setError(validationError);
@@ -1119,10 +1146,13 @@ export default function SettingsPage(props: SettingsProps) {
               <span class="heading-icon"><Icon name="route" size={17} /></span>
               <div>
                 <h3>智能选路</h3>
-                <span>按 URL 延迟自动选择节点，并在节点异常时自动切换</span>
+                <span>自动选路、故障切换与多节点负载均衡</span>
               </div>
             </div>
             <span class="settings-section-meta">
+              <Show when={settings().loadBalanceEnabled}>
+                <span class="tag success">负载均衡已开启</span>
+              </Show>
               <span classList={{ "tag": true, success: settings().autoSelectEnabled, neutral: !settings().autoSelectEnabled }}>
                 {settings().autoSelectEnabled ? "自动选路已开启" : "自动选路已关闭"}
               </span>
@@ -1144,6 +1174,13 @@ export default function SettingsPage(props: SettingsProps) {
                 <span class="switch-track"><span class="switch-thumb" /></span>
               </span>
             </label>
+
+            <Show when={settings().loadBalanceEnabled}>
+              <div class="settings-inline-warning">
+                <Icon name="alert" size={13} />
+                <span>负载均衡已开启：代理启动时自动选路与故障切换会暂停；需要继续使用自动选路时，请先关闭负载均衡。</span>
+              </div>
+            </Show>
 
             <div class="settings-grid">
               <label>
@@ -1191,6 +1228,59 @@ export default function SettingsPage(props: SettingsProps) {
               <Icon name="alert" size={13} />
               <span>自动选路需要 URL 测速；TUN 模式开启时会暂停自动选路。保存设置后重启代理生效。</span>
             </p>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>负载均衡</strong>
+                <small>把全部启用节点交给 Xray 的 balancer，每条连接按策略选择节点，而不是只使用一个活动节点。</small>
+              </div>
+
+              <label class="switch-row">
+                <span>
+                  <strong>启用负载均衡</strong>
+                  <small>对全部启用节点做多出站负载均衡；需要至少 2 个启用节点，不足 2 个时自动回退单节点。开启时自动选路与故障切换暂停，TUN 模式暂回退单节点。</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().loadBalanceEnabled }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().loadBalanceEnabled}
+                    onChange={(event) => update("loadBalanceEnabled", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+
+              <div class="settings-grid compact">
+                <label>
+                  <span>负载均衡策略</span>
+                  <select value={settings().loadBalanceMode} onChange={(event) => update("loadBalanceMode", event.currentTarget.value)}>
+                    {loadBalanceModes.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                  </select>
+                  <small>仅支持 leastPing、leastLoad、roundRobin 三种策略；保存时后端会做同样的校验，前端会先拦截非法值。</small>
+                </label>
+              </div>
+
+              <Show when={settings().loadBalanceEnabled}>
+                <Show when={settings().autoSelectEnabled || settings().failoverEnabled}>
+                  <div class="settings-inline-warning">
+                    <Icon name="alert" size={13} />
+                    <span>负载均衡与自动选路/故障切换互斥：保存并启用后，代理启动时会暂停自动选路和故障切换，节点选择完全交给负载均衡；关闭负载均衡即可恢复。</span>
+                  </div>
+                </Show>
+
+                <Show when={settings().tunMode}>
+                  <div class="settings-inline-warning">
+                    <Icon name="alert" size={13} />
+                    <span>当前已开启 TUN 模式：TUN 暂不支持多出站负载均衡，启动代理时会自动回退为单节点，并写入内核日志。</span>
+                  </div>
+                </Show>
+
+                <p class="settings-note">
+                  <Icon name="route" size={13} />
+                  <span>负载均衡同样要求至少 2 个启用节点；需要保存设置并重启代理后生效，实际使用的策略和回退原因会写入内核日志。</span>
+                </p>
+              </Show>
+            </div>
           </div>
         </details>
 

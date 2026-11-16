@@ -58,6 +58,17 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if input.ProxyMode != "rule" && input.ProxyMode != "global" && input.ProxyMode != "direct" {
 		return model.Settings{}, errors.New("invalid proxy mode")
 	}
+	// Load balancing only supports the strategies implemented by Xray's balancer.
+	// An empty value keeps the default leastPing strategy; LoadBalanceEnabled has
+	// no validation of its own.
+	input.LoadBalanceMode = strings.TrimSpace(input.LoadBalanceMode)
+	switch input.LoadBalanceMode {
+	case "":
+		input.LoadBalanceMode = "leastPing"
+	case "leastPing", "leastLoad", "roundRobin":
+	default:
+		return model.Settings{}, errors.New("负载均衡策略必须是 leastPing、leastLoad 或 roundRobin")
+	}
 	if input.CoreType != "xray" && input.CoreType != "singbox" {
 		return model.Settings{}, errors.New("invalid core type")
 	}

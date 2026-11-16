@@ -1,8 +1,10 @@
 package node
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"image/png"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -633,5 +635,186 @@ func assertNodeOrder(t *testing.T, list []model.NodeView, wantNames []string) {
 			}
 			t.Fatalf("unexpected node order: got %v, want %v", got, wantNames)
 		}
+	}
+}
+
+func TestQRCodeForNode(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+
+	dataURL, err := service.QRCode(imported.Nodes[1].ID)
+	if err != nil {
+		t.Fatalf("qr code failed: %v", err)
+	}
+	assertPNGDataURL(t, dataURL, 320)
+
+	if _, err := service.QRCode("missing-node"); err == nil || !strings.Contains(err.Error(), "节点") {
+		t.Fatalf("expected a Chinese not-found error, got %v", err)
+	}
+
+	// A node whose link does not fit into a QR code must fail with a clear
+	// Chinese error instead of returning an empty image.
+	longNode := model.Node{
+		ID: "long-link-1", Name: "Long Link", Protocol: "vless",
+		Address: "long.example.com", Port: 443, Enabled: true,
+		Raw: "vless://" + strings.Repeat("A", 4096),
+	}
+	if err := st.AddManualNodes([]model.Node{longNode}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.QRCode(longNode.ID); err == nil || !strings.Contains(err.Error(), "二维码") {
+		t.Fatalf("expected a too-long QR error, got %v", err)
+	}
+}
+
+func assertPNGDataURL(t *testing.T, dataURL string, wantSize int) {
+	t.Helper()
+	const prefix = "data:image/png;base64,"
+	if !strings.HasPrefix(dataURL, prefix) {
+		t.Fatalf("unexpected data URL prefix: %q", shortenForTest(dataURL))
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(dataURL, prefix))
+	if err != nil {
+		t.Fatalf("data URL is not valid base64: %v", err)
+	}
+	img, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("data URL is not a PNG image: %v", err)
+	}
+	if img.Bounds().Dx() != wantSize || img.Bounds().Dy() != wantSize {
+		t.Fatalf("expected a %dx%d PNG, got %v", wantSize, wantSize, img.Bounds())
+	}
+}
+
+func shortenForTest(value string) string {
+	if len(value) > 32 {
+		return value[:32] + "..."
+	}
+	return value
+}
+
+func TestSetEnabledBatch(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+	ids := make([]string, 0, len(imported.Nodes))
+	for _, view := range imported.Nodes {
+		ids = append(ids, view.ID)
+	}
+	// The first imported node is active by default.
+	if _, ok := st.ActiveNode(); !ok {
+		t.Fatal("expected an active node before disabling")
+	}
+
+	result, err := service.SetEnabledBatch(ids, false)
+	if err != nil {
+		t.Fatalf("batch disable failed: %v", err)
+	}
+	if result.Affected != 4 || len(result.Errors) != 0 {
+		t.Fatalf("unexpected batch result: %+v", result)
+	}
+	for _, node := range st.ListNodes() {
+		if node.Enabled {
+			t.Fatalf("node %q was not disabled: %+v", node.Name, node)
+		}
+	}
+	// Disabling the active node clears the active selection.
+	if _, ok := st.ActiveNode(); ok {
+		t.Fatal("active node was not cleared after disabling it")
+	}
+
+	// Partial failures are collected and do not abort the batch.
+	result, err = service.SetEnabledBatch([]string{ids[0], "missing-node", ids[2]}, true)
+	if err != nil {
+		t.Fatalf("batch enable failed: %v", err)
+	}
+	if result.Affected != 2 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "missing-node") {
+		t.Fatalf("unexpected partial batch result: %+v", result)
+	}
+	if node, err := st.FindNode(ids[0]); err != nil || !node.Enabled {
+		t.Fatalf("first node state is wrong: %+v (err=%v)", node, err)
+	}
+
+	// Duplicated ids are counted only once.
+	result, err = service.SetEnabledBatch([]string{ids[1], ids[1]}, false)
+	if err != nil || result.Affected != 1 {
+		t.Fatalf("duplicate ids were not deduplicated: %+v (err=%v)", result, err)
+	}
+
+	if _, err := service.SetEnabledBatch(nil, true); err == nil {
+		t.Fatal("expected an error for an empty batch")
+	}
+	if _, err := service.SetEnabledBatch([]string{"  "}, true); err == nil {
+		t.Fatal("expected an error when every id is empty")
+	}
+}
+
+func TestDeleteBatch(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	imported, err := service.ImportLinks(strings.Join(testShareLinks(t), "\n"))
+	if err != nil || imported.Imported != 4 {
+		t.Fatalf("import failed: %v (%+v)", err, imported)
+	}
+	ids := make([]string, 0, len(imported.Nodes))
+	for _, view := range imported.Nodes {
+		ids = append(ids, view.ID)
+	}
+	if _, err := service.SetActive(ids[1]); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := service.DeleteBatch([]string{ids[1], "missing-node", ids[3]})
+	if err != nil {
+		t.Fatalf("batch delete failed: %v", err)
+	}
+	if result.Affected != 2 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0], "missing-node") {
+		t.Fatalf("unexpected batch result: %+v", result)
+	}
+	// Deleting the active node clears the active selection.
+	if _, ok := st.ActiveNode(); ok {
+		t.Fatal("active node was not cleared after deleting it")
+	}
+	if _, err := st.FindNode(ids[1]); err == nil {
+		t.Fatal("deleted node still exists")
+	}
+	if _, err := st.FindNode(ids[3]); err == nil {
+		t.Fatal("deleted node still exists")
+	}
+	if got := len(service.List(model.NodeFilter{})); got != 2 {
+		t.Fatalf("expected 2 remaining nodes, got %d", got)
+	}
+
+	if _, err := service.DeleteBatch(nil); err == nil {
+		t.Fatal("expected an error for an empty batch")
+	}
+}
+
+func TestDeleteBatchUpdatesSubscriptionNodeCount(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st, nil)
+	nodes := subdomain.BuildNodes("sub-batch", []subdomain.ParsedNode{
+		{Name: "One", Protocol: "vless", Address: "one.example.com", Port: 443, Raw: "vless://one"},
+		{Name: "Two", Protocol: "vless", Address: "two.example.com", Port: 443, Raw: "vless://two"},
+	})
+	if err := st.AddSubscription(model.Subscription{ID: "sub-batch", Name: "Batch Sub"}, nodes); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.DeleteBatch([]string{nodes[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := st.FindSubscription("sub-batch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub.NodeCount != 1 {
+		t.Fatalf("subscription node count was not updated: %+v", sub)
 	}
 }

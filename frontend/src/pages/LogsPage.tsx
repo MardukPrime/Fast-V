@@ -27,6 +27,15 @@ function formatTime(timestamp: string) {
   return date.toLocaleTimeString("zh-CN", { hour12: false });
 }
 
+function formatLogLine(entry: LogEntry) {
+  return `[${formatTime(entry.timestamp)}] [${levelLabel(entry.level)}] [${entry.source}] ${entry.message}`;
+}
+
+function formatExportStamp(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
 export default function LogsPage(props: LogsPageProps) {
   const [logs, setLogs] = createSignal<LogEntry[]>([]);
   const [search, setSearch] = createSignal("");
@@ -37,6 +46,23 @@ export default function LogsPage(props: LogsPageProps) {
   const [error, setError] = createSignal("");
   const [notice, setNotice] = createSignal("");
   let logView: HTMLDivElement | undefined;
+  let noticeTimer: number | undefined;
+
+  // Success feedback for copy/export actions is transient: show it for a moment
+  // and only clear it when another notice has not replaced it in the meantime.
+  const flashNotice = (text: string) => {
+    setError("");
+    setNotice(text);
+    if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+    noticeTimer = window.setTimeout(() => {
+      setNotice((current) => (current === text ? "" : current));
+      noticeTimer = undefined;
+    }, 2400);
+  };
+
+  onCleanup(() => {
+    if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+  });
 
   const filtered = createMemo(() => {
     const keyword = search().trim().toLowerCase();
@@ -91,13 +117,51 @@ export default function LogsPage(props: LogsPageProps) {
 
   const copyLogs = async () => {
     if (filtered().length === 0) return;
-    const text = filtered().map((entry) => `[${formatTime(entry.timestamp)}] [${levelLabel(entry.level)}] [${entry.source}] ${entry.message}`).join("\n");
+    const text = filtered().map(formatLogLine).join("\n");
     try {
       await navigator.clipboard.writeText(text);
       setNotice("当前筛选日志已复制。");
     } catch {
       setError("复制日志失败，请检查剪贴板权限。");
     }
+  };
+
+  const copyAllLogs = async () => {
+    if (logs().length === 0) {
+      setNotice("");
+      setError("还没有日志可复制，请先启动代理以产生内核日志。");
+      return;
+    }
+    setError("");
+    try {
+      await navigator.clipboard.writeText(logs().map(formatLogLine).join("\n"));
+      flashNotice(`已复制全部 ${logs().length} 条日志。`);
+    } catch {
+      setError("复制全部日志失败，请检查剪贴板权限。");
+    }
+  };
+
+  // Exports the current filtered view as a plain-text log file, never the raw
+  // buffer: the search keyword and level filter decide what lands in the file.
+  const exportLogs = () => {
+    const entries = filtered();
+    if (entries.length === 0) {
+      setNotice("");
+      setError(logs().length === 0 ? "还没有日志可导出，请先启动代理以产生内核日志。" : "当前筛选没有匹配的日志，请调整搜索关键词或等级筛选后再导出。");
+      return;
+    }
+    setError("");
+    const text = `${entries.map(formatLogLine).join("\n")}\n`;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fastv-logs-${formatExportStamp(new Date())}.log`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    flashNotice(`已导出 ${entries.length} 条日志为 ${link.download}。`);
   };
 
   const proxyLabel = () => {
@@ -126,7 +190,9 @@ export default function LogsPage(props: LogsPageProps) {
           <button classList={{ "btn": true, "secondary": true, active: autoScroll() }} type="button" onClick={() => setAutoScroll(!autoScroll())}><Icon name="chevron" size={13} class="rotate-down" /> 自动滚动</button>
           <button classList={{ "btn": true, "secondary": true, active: paused() }} type="button" onClick={() => setPaused(!paused())}>{paused() ? "继续" : "暂停"}</button>
           <button class="icon-button" type="button" onClick={load} disabled={loading()} aria-label="刷新日志"><Icon name="refresh" size={14} /></button>
-          <button class="icon-button" type="button" onClick={copyLogs} disabled={filtered().length === 0} aria-label="复制日志"><Icon name="edit" size={14} /></button>
+          <button class="icon-button" type="button" onClick={copyLogs} disabled={filtered().length === 0} aria-label="复制当前筛选日志" title="复制当前筛选日志"><Icon name="edit" size={14} /></button>
+          <button class="btn secondary" type="button" onClick={copyAllLogs} aria-label="复制全部日志" title="复制全部日志（不受筛选影响）"><Icon name="edit" size={14} /> 复制全部</button>
+          <button class="btn secondary" type="button" onClick={exportLogs} aria-label="导出当前筛选日志" title="导出当前筛选结果为 .log 文件"><Icon name="external" size={14} /> 导出日志</button>
           <button class="btn ghost" type="button" onClick={clearLogs} disabled={logs().length === 0}>清空</button>
         </div>
       </section>

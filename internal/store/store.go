@@ -78,6 +78,8 @@ func DefaultSettings() Settings {
 		AutoSelectIntervalMinutes: 10,
 		AutoSelectToleranceMS:     80,
 		FailoverEnabled:           false,
+		LoadBalanceEnabled:        false,
+		LoadBalanceMode:           "leastPing",
 	}
 }
 
@@ -216,6 +218,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.AutoSelectToleranceMS < 0 {
 		value.AutoSelectToleranceMS = fallback.AutoSelectToleranceMS
+	}
+	if value.LoadBalanceMode == "" {
+		value.LoadBalanceMode = fallback.LoadBalanceMode
 	}
 	if value.UpdateIntervalMinutes == 0 {
 		value.UpdateIntervalMinutes = fallback.UpdateIntervalMinutes

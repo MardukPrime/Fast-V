@@ -128,6 +128,63 @@ const tableTextStats = `outbound>>>proxy>>>traffic>>>uplink 111
 outbound>>>proxy>>>traffic>>>downlink 222
 `
 
+// measuredBalancerStatsJSON is the shape produced in load balancing mode: one
+// counter pair per node outbound. direct/block/api/dns outbounds must be ignored.
+const measuredBalancerStatsJSON = `{
+    "stat": [
+        {"name": "outbound>>>balancer-node-0>>>traffic>>>uplink", "value": 1200},
+        {"name": "outbound>>>balancer-node-0>>>traffic>>>downlink", "value": 3400},
+        {"name": "outbound>>>balancer-node-1>>>traffic>>>uplink", "value": 800},
+        {"name": "outbound>>>balancer-node-1>>>traffic>>>downlink", "value": 1600},
+        {"name": "outbound>>>direct>>>traffic>>>uplink", "value": 9999},
+        {"name": "outbound>>>direct>>>traffic>>>downlink", "value": 8888},
+        {"name": "outbound>>>block>>>traffic>>>uplink", "value": 777},
+        {"name": "outbound>>>block>>>traffic>>>downlink", "value": 666},
+        {"name": "outbound>>>api>>>traffic>>>uplink", "value": 555},
+        {"name": "outbound>>>api>>>traffic>>>downlink", "value": 444},
+        {"name": "outbound>>>dns>>>traffic>>>uplink", "value": 333},
+        {"name": "outbound>>>dns>>>traffic>>>downlink", "value": 222},
+        {"name": "inbound>>>local-in>>>traffic>>>uplink", "value": 222},
+        {"name": "inbound>>>local-in>>>traffic>>>downlink", "value": 111}
+    ]
+}
+`
+
+// protobufTextBalancerStats is the protobuf text form of the same load balancing
+// counters.
+const protobufTextBalancerStats = `stat: <
+  name: "outbound>>>balancer-node-0>>>traffic>>>uplink"
+  value: 100
+>
+stat: <
+  name: "outbound>>>balancer-node-1>>>traffic>>>uplink"
+  value: 200
+>
+stat: <
+  name: "outbound>>>balancer-node-0>>>traffic>>>downlink"
+  value: 300
+>
+stat: <
+  name: "outbound>>>balancer-node-1>>>traffic>>>downlink"
+  value: 400
+>
+stat: <
+  name: "outbound>>>direct>>>traffic>>>uplink"
+  value: 999
+>
+`
+
+// onlyIgnoredOutboundStatsJSON contains only outbound counters that must never be
+// counted as proxy traffic (single-node mode has no proxy counter here).
+const onlyIgnoredOutboundStatsJSON = `{
+    "stat": [
+        {"name": "outbound>>>direct>>>traffic>>>uplink", "value": 123},
+        {"name": "outbound>>>block>>>traffic>>>downlink", "value": 456},
+        {"name": "outbound>>>api>>>traffic>>>uplink", "value": 789}
+    ]
+}
+`
+
 func TestParseStatsOutputJSON(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -186,9 +243,50 @@ func TestParseStatsOutputErrors(t *testing.T) {
 		`{"stat":[]}`,
 		`{"unexpected":true}`,
 		"stat: <>\n",
+		onlyIgnoredOutboundStatsJSON,
 	} {
 		if _, _, err := parseStatsOutput([]byte(output)); err == nil {
 			t.Fatalf("expected an error for %q", output)
+		}
+	}
+}
+
+func TestParsedStatsOutputSumsLoadBalanceOutbounds(t *testing.T) {
+	uplink, downlink, err := parseStatsOutput([]byte(measuredBalancerStatsJSON))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if uplink != 2000 || downlink != 5000 {
+		t.Fatalf("balancer outbound counters must be summed: got uplink=%d downlink=%d", uplink, downlink)
+	}
+}
+
+func TestParsedTextStatsSumsLoadBalanceOutbounds(t *testing.T) {
+	uplink, downlink, err := parseStatsOutput([]byte(protobufTextBalancerStats))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if uplink != 300 || downlink != 700 {
+		t.Fatalf("balancer text counters must be summed: got uplink=%d downlink=%d", uplink, downlink)
+	}
+}
+
+func TestCountedOutboundTag(t *testing.T) {
+	cases := map[string]bool{
+		"proxy":            true,
+		"balancer-node-0":  true,
+		"balancer-node-12": true,
+		"direct":           false,
+		"block":            false,
+		"api":              false,
+		"dns":              false,
+		" balancer-node-3": true,
+		"balancer-node":    false,
+		"":                 false,
+	}
+	for tag, want := range cases {
+		if got := countedOutboundTag(tag); got != want {
+			t.Fatalf("countedOutboundTag(%q) = %v, want %v", tag, got, want)
 		}
 	}
 }
@@ -574,6 +672,145 @@ waitLoop:
 	}
 	if snapshot.UpdatedAt == "" {
 		t.Fatalf("snapshot must carry a timestamp: %+v", snapshot)
+	}
+}
+
+// TestBalancerStatsQueryAgainstRealXray exercises load balancing mode against a
+// real core: the echo traffic is routed through a balancer to one of two
+// "balancer-node-<index>" freedom outbounds, and the sampler must sum those
+// counters (while the direct/block/api counters stay ignored).
+func TestBalancerStatsQueryAgainstRealXray(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	ports := freeDistinctTCPPorts(t, 2)
+	socksPort, apiPort := ports[0], ports[1]
+
+	echoListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = echoListener.Close() })
+	go func() {
+		for {
+			conn, acceptErr := echoListener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				_, _ = io.Copy(conn, conn)
+			}(conn)
+		}
+	}()
+
+	config := map[string]any{
+		"log": map[string]any{"loglevel": "warning"},
+		"inbounds": []any{
+			map[string]any{
+				"tag": "local-in", "listen": "127.0.0.1", "port": socksPort, "protocol": "socks",
+				"settings": map[string]any{"auth": "noauth", "udp": true},
+			},
+			map[string]any{
+				"tag": "api-in", "listen": "127.0.0.1", "port": apiPort, "protocol": "dokodemo-door",
+				"settings": map[string]any{"address": "127.0.0.1"},
+			},
+		},
+		"outbounds": []any{
+			map[string]any{"tag": "balancer-node-0", "protocol": "freedom"},
+			map[string]any{"tag": "balancer-node-1", "protocol": "freedom"},
+			map[string]any{"tag": "direct", "protocol": "freedom"},
+			map[string]any{"tag": "block", "protocol": "blackhole"},
+		},
+		"routing": map[string]any{
+			"domainStrategy": "AsIs",
+			"balancers": []any{map[string]any{
+				"tag": "proxy", "selector": []string{"balancer-node-"},
+				"strategy": map[string]any{"type": "roundRobin"},
+			}},
+			"rules": []any{
+				map[string]any{"type": "field", "inboundTag": []string{"api-in"}, "outboundTag": "api"},
+				map[string]any{"type": "field", "network": "tcp,udp", "balancerTag": "proxy"},
+			},
+		},
+		"api":   map[string]any{"tag": "api", "services": []string{"HandlerService", "LoggerService", "StatsService", "RoutingService"}},
+		"stats": map[string]any{},
+		"policy": map[string]any{
+			"system": map[string]any{
+				"statsInboundUplink": true, "statsInboundDownlink": true,
+				"statsOutboundUplink": true, "statsOutboundDownlink": true,
+			},
+		},
+	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(t.TempDir(), "balancer-stats-config.json")
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "run", "-config", configPath)
+	hideWindow(cmd)
+	cmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(binary))
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start xray: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+		if t.Failed() {
+			t.Logf("xray stderr: %s", stderr.String())
+		}
+	})
+	if err := waitForPort(context.Background(), net.JoinHostPort("127.0.0.1", strconv.Itoa(apiPort)), 10*time.Second); err != nil {
+		t.Fatalf("xray API did not become ready: %v (stderr=%s)", err, stderr.String())
+	}
+	if err := waitForPort(context.Background(), net.JoinHostPort("127.0.0.1", strconv.Itoa(socksPort)), 10*time.Second); err != nil {
+		t.Fatalf("xray SOCKS inbound did not become ready: %v", err)
+	}
+
+	// Two round trips make roundRobin use both node outbounds.
+	for i := 0; i < 2; i++ {
+		conn := dialSOCKS5(t, net.JoinHostPort("127.0.0.1", strconv.Itoa(socksPort)), echoListener.Addr().String())
+		payload := bytes.Repeat([]byte("fastv-balancer-traffic-"), 32)
+		if _, err := conn.Write(payload); err != nil {
+			t.Fatalf("round %d: failed to write through SOCKS: %v", i, err)
+		}
+		echoed := make([]byte, len(payload))
+		if _, err := io.ReadFull(conn, echoed); err != nil {
+			t.Fatalf("round %d: failed to read through SOCKS: %v", i, err)
+		}
+		if !bytes.Equal(echoed, payload) {
+			t.Fatalf("round %d: echoed payload does not match", i)
+		}
+		_ = conn.Close()
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	sampler := newTrafficSampler(nil)
+	sampler.corePath = binary
+	sampler.apiPort = apiPort
+	queryCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	output, err := sampler.execQuery(queryCtx)
+	cancel()
+	if err != nil {
+		t.Fatalf("statsquery against the load balancing core failed: %v (stderr=%s)", err, stderr.String())
+	}
+	if !bytes.Contains(output, []byte("balancer-node-")) {
+		t.Fatalf("statsquery output has no balancer-node counters: %s", output)
+	}
+	uplink, downlink, err := parseStatsOutput(output)
+	if err != nil {
+		t.Fatalf("failed to parse balancer statsquery output: %v\noutput: %s", err, output)
+	}
+	if uplink <= 0 || downlink <= 0 {
+		t.Fatalf("expected non-zero balancer traffic, got uplink=%d downlink=%d\noutput: %s", uplink, downlink, output)
 	}
 }
 

@@ -159,6 +159,12 @@ func (s *ProxyService) switchNodeLocked(ctx context.Context, id string) (model.P
 	if _, err := s.store.SetActiveNode(id); err != nil {
 		return s.manager.State(), err
 	}
+	// Load balancing routes through every enabled node, so switching the active
+	// node only updates the persisted record; the restart keeps the lifecycle
+	// semantics identical to single-node mode.
+	if s.store.Settings().LoadBalanceEnabled {
+		s.manager.AppendLog("info", "loadbalance", "负载均衡模式：当前节点记录已更新，正在重启代理")
+	}
 	state := s.manager.State()
 	if state.Status != "running" && state.Status != "starting" {
 		return state, nil
@@ -253,6 +259,7 @@ func (s *ProxyService) schedulerLoop(ctx context.Context) {
 	var nextAutoSelect time.Time
 	var lastHealthCheck time.Time
 	consecutiveFailures := 0
+	loadBalanceNotified := false
 
 	for {
 		select {
@@ -264,6 +271,20 @@ func (s *ProxyService) schedulerLoop(ctx context.Context) {
 		settings := s.store.Settings()
 		state := s.manager.State()
 		now := time.Now()
+
+		// Load balancing delegates node selection to Xray's balancer/observatory,
+		// so the app-level automatic selection and failover stay idle.
+		if settings.LoadBalanceEnabled {
+			if !loadBalanceNotified {
+				s.manager.AppendLog("info", "loadbalance", "负载均衡已启用，自动选路与故障切换暂不执行（由 Xray observatory 调度节点）")
+				loadBalanceNotified = true
+			}
+			nextAutoSelect = time.Time{}
+			lastHealthCheck = time.Time{}
+			consecutiveFailures = 0
+			continue
+		}
+		loadBalanceNotified = false
 
 		// Automatic node selection. TUN mode captures the temporary URL-test core's
 		// direct dials as tunnel traffic, so a probe would measure the tunnel

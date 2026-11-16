@@ -31,15 +31,33 @@ const (
 	trafficQueryTimeoutSeconds = 2
 	trafficExecDeadline        = 5 * time.Second
 
-	// trafficCounterPattern is the statsquery pattern for the proxy outbound.
-	trafficCounterPattern  = "outbound>>>proxy>>>traffic>>>"
-	trafficUplinkCounter   = trafficCounterPattern + "uplink"
-	trafficDownlinkCounter = trafficCounterPattern + "downlink"
+	// trafficQueryPattern asks for every outbound counter. The parser below
+	// selects the counters that belong to user proxy traffic, so the pattern also
+	// covers the per-node balancer outbounds of load balancing mode.
+	trafficQueryPattern = "outbound>>>"
+	// trafficOutboundPrefix and trafficTrafficMarker split a counter name of the
+	// form outbound>>>TAG>>>traffic>>>(uplink|downlink).
+	trafficOutboundPrefix = "outbound>>>"
+	trafficTrafficMarker  = ">>>traffic>>>"
+	// trafficUplinkSuffix / trafficDownlinkSuffix are the two counted directions.
+	trafficUplinkSuffix   = "uplink"
+	trafficDownlinkSuffix = "downlink"
 )
 
-// parseStatsOutput converts the output of
-// `xray api statsquery --pattern outbound>>>proxy>>>traffic>>>` into the
-// cumulative uplink/downlink byte counters of the "proxy" outbound.
+// countedOutboundTag reports whether an Xray outbound tag carries user proxy
+// traffic. Single-node mode uses the "proxy" tag while load balancing mode uses
+// one "balancer-node-<index>" outbound per node; everything else (direct, block,
+// api, the internal dns outbound, ...) must never be added to the dashboard
+// traffic counters.
+func countedOutboundTag(tag string) bool {
+	tag = strings.TrimSpace(tag)
+	return tag == proxyOutboundTag || strings.HasPrefix(tag, loadBalanceOutboundPrefix)
+}
+
+// parseStatsOutput converts the output of `xray api statsquery -pattern
+// outbound>>>` into the cumulative uplink/downlink byte counters of the proxy
+// traffic. In single-node mode that is the "proxy" outbound; in load balancing
+// mode every "balancer-node-<index>" outbound counter is summed.
 //
 // Xray 26.x prints JSON:
 //
@@ -67,7 +85,7 @@ func parseStatsOutput(output []byte) (uplink, downlink int64, err error) {
 	}
 	if up, down, found, jsonErr := parseJSONStats(trimmed); jsonErr == nil {
 		if !found {
-			return 0, 0, errors.New("statsquery returned no outbound proxy traffic counters")
+			return 0, 0, errors.New("statsquery returned no outbound traffic counters")
 		}
 		return up, down, nil
 	}
@@ -82,8 +100,31 @@ type statsJSONEntry struct {
 	Value json.RawMessage `json:"value"`
 }
 
-// parseJSONStats parses the JSON form. A nil error means the payload was valid
-// JSON; found reports whether a proxy traffic counter was present at all.
+// parseOutboundCounterName splits an Xray stats counter name into its outbound
+// tag and direction. Non outbound counters are reported as not parsed.
+func parseOutboundCounterName(name string) (tag string, direction string, ok bool) {
+	if !strings.HasPrefix(name, trafficOutboundPrefix) {
+		return "", "", false
+	}
+	rest := name[len(trafficOutboundPrefix):]
+	marker := strings.Index(rest, trafficTrafficMarker)
+	if marker < 0 {
+		return "", "", false
+	}
+	tag = rest[:marker]
+	switch tail := rest[marker+len(trafficTrafficMarker):]; tail {
+	case trafficUplinkSuffix:
+		return tag, trafficUplinkSuffix, true
+	case trafficDownlinkSuffix:
+		return tag, trafficDownlinkSuffix, true
+	default:
+		return "", "", false
+	}
+}
+
+// parseJSONStats parses the JSON form and sums every counted outbound counter. A
+// nil error means the payload was valid JSON; found reports whether a counted
+// proxy traffic counter was present at all.
 func parseJSONStats(raw []byte) (uplink, downlink int64, found bool, err error) {
 	var response struct {
 		Stat []statsJSONEntry `json:"stat"`
@@ -91,16 +132,20 @@ func parseJSONStats(raw []byte) (uplink, downlink int64, found bool, err error) 
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return 0, 0, false, err
 	}
-	var foundUplink, foundDownlink bool
 	for _, entry := range response.Stat {
-		switch entry.Name {
-		case trafficUplinkCounter:
-			uplink, foundUplink = parseJSONCounter(entry.Value), true
-		case trafficDownlinkCounter:
-			downlink, foundDownlink = parseJSONCounter(entry.Value), true
+		tag, direction, ok := parseOutboundCounterName(entry.Name)
+		if !ok || !countedOutboundTag(tag) {
+			continue
 		}
+		value := parseJSONCounter(entry.Value)
+		if direction == trafficUplinkSuffix {
+			uplink += value
+		} else {
+			downlink += value
+		}
+		found = true
 	}
-	return uplink, downlink, foundUplink || foundDownlink, nil
+	return uplink, downlink, found, nil
 }
 
 // parseJSONCounter accepts a JSON number, a numeric string, or a missing value
@@ -129,75 +174,83 @@ func parseJSONCounter(raw json.RawMessage) int64 {
 }
 
 // parseTextStats parses protobuf text output (and tolerates plain
-// "counter<separator>value" lines). The name and its value may sit on the same
-// line or on consecutive lines.
+// "counter<separator>value" lines) and sums every counted outbound counter. The
+// name and its value may sit on the same line or on consecutive lines.
 func parseTextStats(raw []byte) (uplink, downlink int64, found bool) {
-	var foundUplink, foundDownlink bool
-	assign := func(kind string, value int64) {
-		switch kind {
-		case "uplink":
-			uplink, foundUplink = value, true
-		case "downlink":
-			downlink, foundDownlink = value, true
+	text := string(raw)
+	for searchFrom := 0; ; {
+		index := strings.Index(text[searchFrom:], trafficOutboundPrefix)
+		if index < 0 {
+			break
 		}
-	}
+		nameStart := searchFrom + index + len(trafficOutboundPrefix)
+		markerOffset := strings.Index(text[nameStart:], trafficTrafficMarker)
+		if markerOffset < 0 {
+			break
+		}
+		markerIndex := nameStart + markerOffset
+		tag := strings.TrimSpace(text[nameStart:markerIndex])
+		kindStart := markerIndex + len(trafficTrafficMarker)
 
-	pending := ""
-	for _, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimRight(line, "\r")
-		rest := line
-		for {
-			index := strings.Index(rest, trafficCounterPattern)
-			if index < 0 {
-				break
-			}
-			tail := rest[index+len(trafficCounterPattern):]
-			rest = tail
-			kind := ""
-			switch {
-			case strings.HasPrefix(tail, "uplink"):
-				kind = "uplink"
-			case strings.HasPrefix(tail, "downlink"):
-				kind = "downlink"
-			default:
-				continue
-			}
-			if value, ok := extractTextCounterValue(tail); ok {
-				assign(kind, value)
-				pending = ""
-			} else {
-				pending = kind
-			}
+		direction := ""
+		directionEnd := kindStart
+		switch {
+		case strings.HasPrefix(text[kindStart:], trafficUplinkSuffix):
+			direction = trafficUplinkSuffix
+			directionEnd = kindStart + len(trafficUplinkSuffix)
+		case strings.HasPrefix(text[kindStart:], trafficDownlinkSuffix):
+			direction = trafficDownlinkSuffix
+			directionEnd = kindStart + len(trafficDownlinkSuffix)
+		default:
+			// Not a traffic counter that ends with a known direction; keep
+			// scanning after this marker.
+			searchFrom = kindStart
+			continue
 		}
-		if pending != "" {
-			if value, ok := extractTextCounterValue(line); ok {
-				assign(pending, value)
-				pending = ""
-			}
+		searchFrom = directionEnd
+		if !countedOutboundTag(tag) {
+			continue
 		}
+		// The value belongs to this counter until the next counter name starts.
+		windowEnd := len(text)
+		if next := strings.Index(text[directionEnd:], "name:"); next >= 0 {
+			windowEnd = directionEnd + next
+		}
+		value, ok := extractTextCounterValue(text[directionEnd:windowEnd])
+		if !ok {
+			continue
+		}
+		if direction == trafficUplinkSuffix {
+			uplink += value
+		} else {
+			downlink += value
+		}
+		found = true
 	}
-	return uplink, downlink, foundUplink || foundDownlink
+	return uplink, downlink, found
 }
 
 // extractTextCounterValue looks for the value that belongs to a counter name.
-// It understands `value: 123` / `value: <123>`, bare `name: 123` and plain
-// table style `name    123` layouts.
-func extractTextCounterValue(text string) (int64, bool) {
-	lower := strings.ToLower(text)
-	if index := strings.Index(lower, "value"); index >= 0 {
-		if value, ok := parseNumberToken(text[index+len("value"):]); ok {
+// It understands `value: 123` / `value: <123>` / nested `value: < value: 123 >`
+// and plain table style `name    123` layouts.
+func extractTextCounterValue(window string) (int64, bool) {
+	for from := 0; ; {
+		index := strings.Index(window[from:], "value")
+		if index < 0 {
+			break
+		}
+		index += from
+		if value, ok := parseNumberToken(window[index+len("value"):]); ok {
 			return value, true
 		}
+		from = index + len("value")
 	}
-	if index := strings.IndexAny(text, ":="); index >= 0 {
-		if value, ok := parseNumberToken(text[index+1:]); ok {
-			return value, true
-		}
-	}
-	if value, ok := parseNumberToken(text); ok {
+	// Fallback for layouts such as "counter>>>uplink    123" where the number is
+	// not separated by a colon or a "value" keyword.
+	if value, ok := parseNumberToken(window); ok {
 		return value, true
 	}
-	return lastNumberToken(text)
+	return lastNumberToken(window)
 }
 
 // lastNumberToken returns the right-most integer in text. It is the fallback for
@@ -503,7 +556,7 @@ func (s *trafficSampler) execQuery(ctx context.Context) ([]byte, error) {
 	args := []string{
 		"api", "statsquery",
 		"--server=127.0.0.1:" + strconv.Itoa(s.apiPort),
-		"-pattern", trafficCounterPattern,
+		"-pattern", trafficQueryPattern,
 		"-t", strconv.Itoa(trafficQueryTimeoutSeconds),
 	}
 	cmd := exec.CommandContext(ctx, s.corePath, args...)

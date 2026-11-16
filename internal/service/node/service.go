@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skip2/go-qrcode"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/nodeconfig"
@@ -101,6 +104,24 @@ func (s *NodeService) SetEnabled(id string, enabled bool) (model.NodeView, error
 		return model.NodeView{}, err
 	}
 	return *s.view(item), nil
+}
+
+// SetEnabledBatch enables or disables several nodes at once. Individual failures
+// are collected in BatchResult.Errors instead of aborting the whole batch.
+func (s *NodeService) SetEnabledBatch(ids []string, enabled bool) (model.BatchResult, error) {
+	result := model.BatchResult{Errors: make([]string, 0)}
+	ids = uniqueNodeIDs(ids)
+	if len(ids) == 0 {
+		return result, errors.New("请先选择要操作的节点")
+	}
+	for _, id := range ids {
+		if _, err := s.SetEnabled(id, enabled); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("节点 %s 更新失败: %v", id, err))
+			continue
+		}
+		result.Affected++
+	}
+	return result, nil
 }
 
 // SetFavorite marks or unmarks a node as favorite. Favorites survive
@@ -250,6 +271,27 @@ func normalizeLinkProtocol(value string) string {
 	return value
 }
 
+// qrCodeImageSize is the edge length in pixels of the generated QR code image.
+const qrCodeImageSize = 320
+
+// QRCode renders the share link of a node as a 320px PNG data URL so the UI can
+// display it for scanning without any extra image dependency.
+func (s *NodeService) QRCode(id string) (string, error) {
+	item, err := s.store.FindNode(id)
+	if err != nil {
+		return "", fmt.Errorf("节点不存在: %s", id)
+	}
+	link, err := exportNodeLink(item)
+	if err != nil {
+		return "", err
+	}
+	pngData, err := qrcode.Encode(link, qrcode.Medium, qrCodeImageSize)
+	if err != nil {
+		return "", fmt.Errorf("节点 %q 的分享链接过长，无法生成二维码: %w", item.Name, err)
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData), nil
+}
+
 func (s *NodeService) Config(id string) (model.NodeConfig, error) {
 	item, err := s.store.FindNode(id)
 	if err != nil {
@@ -314,6 +356,45 @@ func (s *NodeService) SaveConfig(input model.NodeConfig) (model.NodeView, error)
 }
 func (s *NodeService) Delete(id string) error {
 	return s.store.DeleteNode(id)
+}
+
+// DeleteBatch deletes several nodes at once. Deleting a node also clears it as
+// the active node and keeps the owning subscription's node count in sync (both
+// handled by store.DeleteNode). Individual failures are collected instead of
+// aborting the whole batch, so the caller still gets the affected count.
+func (s *NodeService) DeleteBatch(ids []string) (model.BatchResult, error) {
+	result := model.BatchResult{Errors: make([]string, 0)}
+	ids = uniqueNodeIDs(ids)
+	if len(ids) == 0 {
+		return result, errors.New("请先选择要删除的节点")
+	}
+	for _, id := range ids {
+		if err := s.Delete(id); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("节点 %s 删除失败: %v", id, err))
+			continue
+		}
+		result.Affected++
+	}
+	return result, nil
+}
+
+// uniqueNodeIDs removes empty and duplicated ids while preserving the request
+// order, so a batch operation never counts the same node twice.
+func uniqueNodeIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func (s *NodeService) TestLatency(ids []string) []model.NodeLatency {

@@ -7,6 +7,7 @@ import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/inter
 import { Service as SubscriptionService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/subscription";
 import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import QRModal, { QRCodeIcon } from "../components/QRModal";
 
 function formatTime(value: string) {
   if (!value) return "从未更新";
@@ -51,6 +52,22 @@ export default function SubscriptionsPage() {
   const [error, setError] = createSignal("");
   const [nodes, setNodes] = createSignal<NodeView[] | null>(null);
   const [nodesTitle, setNodesTitle] = createSignal("");
+
+  // Subscription QR dialog state. The subscription URL itself is never exposed
+  // through the bindings (it contains the user's private token), so the dialog
+  // shows the generated QR image only — no text link to copy.
+  const [qrOpen, setQROpen] = createSignal(false);
+  const [qrTitle, setQRTitle] = createSignal("");
+  const [qrImage, setQRImage] = createSignal("");
+  const [qrLoading, setQRLoading] = createSignal(false);
+  const [qrError, setQRError] = createSignal("");
+  const [qrTarget, setQRTarget] = createSignal<SubscriptionView | null>(null);
+  let qrRequest = 0;
+  let alive = true;
+
+  onCleanup(() => {
+    alive = false;
+  });
 
   const totalNodes = () => subscriptions().reduce((sum, sub) => sum + sub.nodeCount, 0);
   const activeCount = () => subscriptions().filter((sub) => sub.enabled).length;
@@ -167,6 +184,41 @@ export default function SubscriptionsPage() {
     }
   };
 
+  const closeQRCode = () => {
+    qrRequest += 1;
+    setQROpen(false);
+    setQRLoading(false);
+  };
+
+  const openSubscriptionQRCode = async (sub: SubscriptionView) => {
+    setQRTarget(sub);
+    setQRTitle(sub.name);
+    setQRImage("");
+    setQRError("");
+    setQRLoading(true);
+    setQROpen(true);
+    const token = ++qrRequest;
+    try {
+      const image = await SubscriptionService.QRCode(sub.id);
+      if (!alive || token !== qrRequest) return;
+      if (!image) {
+        setQRError("后端没有返回二维码图片，请稍后重试。");
+        return;
+      }
+      setQRImage(image);
+    } catch (err) {
+      if (!alive || token !== qrRequest) return;
+      setQRError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (alive && token === qrRequest) setQRLoading(false);
+    }
+  };
+
+  const retryQRCode = () => {
+    const sub = qrTarget();
+    if (sub) void openSubscriptionQRCode(sub);
+  };
+
   return (
     <div class="page-stack">
       <section class="mini-stats subscription-stats">
@@ -276,6 +328,14 @@ export default function SubscriptionsPage() {
                       </Show>
                     </div>
                     <div class="subscription-actions">
+                      <button
+                        class="btn secondary"
+                        type="button"
+                        onClick={() => void openSubscriptionQRCode(sub)}
+                        title="订阅二维码包含私有令牌，请谨慎分享"
+                      >
+                        <QRCodeIcon size={14} /> 二维码
+                      </button>
                       <button class="btn secondary" onClick={() => openNodes(sub)}>
                         <Icon name="nodes" size={14} /> 节点
                       </button>
@@ -337,6 +397,18 @@ export default function SubscriptionsPage() {
           </div>
         </div>
       </Show>
+
+      <QRModal
+        open={qrOpen()}
+        title={qrTitle() ? `订阅二维码 · ${qrTitle()}` : "订阅二维码"}
+        subtitle="扫码可在其他设备或客户端中导入该订阅"
+        image={qrImage()}
+        loading={qrLoading()}
+        error={qrError()}
+        hint="订阅链接包含私有令牌；为保证安全，后端只提供二维码图片，无法在此显示或复制文本链接。"
+        onClose={closeQRCode}
+        onRetry={retryQRCode}
+      />
     </div>
   );
 }

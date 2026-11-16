@@ -690,3 +690,260 @@ func TestSockoptFinalMaskPassesXrayValidation(t *testing.T) {
 		t.Fatalf("xray finalmask/sockopt config validation failed: %v\n%s", err, output)
 	}
 }
+
+// loadBalanceNodes returns two enabled VLESS nodes for load balancing tests.
+func loadBalanceNodes() []model.Node {
+	return []model.Node{
+		{
+			ID: "node-0", Name: "Node 0", Protocol: "vless", Address: "node0.example.com", Port: 443, Enabled: true,
+			Raw: "vless://00000000-0000-0000-0000-000000000011@node0.example.com:443?security=tls#Node0",
+		},
+		{
+			ID: "node-1", Name: "Node 1", Protocol: "vless", Address: "node1.example.com", Port: 443, Enabled: true,
+			Raw: "vless://00000000-0000-0000-0000-000000000012@node1.example.com:443?security=tls#Node1",
+		},
+	}
+}
+
+func TestBuildLoadBalanceConfigOutboundsAndBalancer(t *testing.T) {
+	settings := testSettings()
+	settings.LoadBalanceEnabled = true
+	settings.LoadBalanceMode = "leastPing"
+	settings.XrayAPIEnabled = true
+	settings.XrayAPIPort = 10085
+	raw, err := BuildLoadBalanceConfig(loadBalanceNodes(), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+
+	outbounds, _ := config["outbounds"].([]any)
+	if len(outbounds) != 4 {
+		t.Fatalf("expected two node outbounds and direct/block, got %+v", outbounds)
+	}
+	wantTags := []string{"balancer-node-0", "balancer-node-1", "direct", "block"}
+	for i, want := range wantTags {
+		outbound, _ := outbounds[i].(map[string]any)
+		if outbound["tag"] != want {
+			t.Fatalf("outbound %d: expected tag %q, got %+v", i, want, outbound)
+		}
+	}
+	first, _ := outbounds[0].(map[string]any)
+	if first["protocol"] != "vless" {
+		t.Fatalf("unexpected node outbound: %+v", first)
+	}
+	// The normal outbound path (mux here) must keep working for node outbounds.
+	mux, _ := first["mux"].(map[string]any)
+	if mux["enabled"] != true || int(mux["concurrency"].(float64)) != 16 {
+		t.Fatalf("node outbound lost the mux settings: %+v", first)
+	}
+
+	routing := config["routing"].(map[string]any)
+	balancers, _ := routing["balancers"].([]any)
+	if len(balancers) != 1 {
+		t.Fatalf("expected one balancer, got %+v", routing["balancers"])
+	}
+	balancer, _ := balancers[0].(map[string]any)
+	if balancer["tag"] != "proxy" {
+		t.Fatalf("balancer tag must stay \"proxy\" for routing compatibility: %+v", balancer)
+	}
+	mustContainValue(t, balancer["selector"], "balancer-node-")
+	strategy, _ := balancer["strategy"].(map[string]any)
+	if strategy["type"] != "leastPing" {
+		t.Fatalf("unexpected balancer strategy: %+v", strategy)
+	}
+
+	observatory, ok := config["observatory"].(map[string]any)
+	if !ok {
+		t.Fatalf("observatory is required for leastPing: %+v", config["observatory"])
+	}
+	mustContainValue(t, observatory["subjectSelector"], "balancer-node-")
+	if observatory["probeURL"] != settings.TestURL {
+		t.Fatalf("observatory probe URL must follow the test URL: %+v", observatory)
+	}
+	if observatory["probeInterval"] != "300s" {
+		t.Fatalf("observatory probe interval must be the duration string 300s: %+v", observatory)
+	}
+	if observatory["enableConcurrency"] != true {
+		t.Fatalf("observatory concurrent probing is expected: %+v", observatory)
+	}
+
+	rules, _ := routing["rules"].([]any)
+	if len(rules) != 4 {
+		t.Fatalf("expected api rule plus the default rules, got %+v", rules)
+	}
+	if apiRule, _ := rules[0].(map[string]any); apiRule["outboundTag"] != "api" {
+		t.Fatalf("api routing rule must stay untouched: %+v", apiRule)
+	}
+	catchAll, _ := rules[len(rules)-1].(map[string]any)
+	if catchAll["balancerTag"] != "proxy" {
+		t.Fatalf("proxy rules must target the balancer tag: %+v", catchAll)
+	}
+	if _, ok := catchAll["outboundTag"]; ok {
+		t.Fatalf("proxy rules must not keep an outboundTag: %+v", catchAll)
+	}
+}
+
+func TestBuildLoadBalanceConfigRewritesProxyRules(t *testing.T) {
+	settings := testSettings()
+	settings.LoadBalanceEnabled = true
+	proxyRule := model.RoutingRule{ID: "r1", Name: "Proxy Example", Type: "domain_suffix", Value: "example.com", Action: "proxy", Enabled: true}
+	directRule := model.RoutingRule{ID: "r2", Name: "Direct Private", Type: "geoip", Value: "private", Action: "direct", Enabled: true}
+	blockRule := model.RoutingRule{ID: "r3", Name: "Block Ads", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true}
+	raw, err := BuildLoadBalanceConfig(loadBalanceNodes(), settings, proxyRule, directRule, blockRule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	rules, _ := config["routing"].(map[string]any)["rules"].([]any)
+	if len(rules) != 4 {
+		t.Fatalf("expected three custom rules and the catch-all, got %+v", rules)
+	}
+	proxy, _ := rules[0].(map[string]any)
+	if proxy["balancerTag"] != "proxy" {
+		t.Fatalf("custom proxy rule must target the balancer: %+v", proxy)
+	}
+	if _, ok := proxy["outboundTag"]; ok {
+		t.Fatalf("custom proxy rule must not keep an outboundTag: %+v", proxy)
+	}
+	direct, _ := rules[1].(map[string]any)
+	if direct["outboundTag"] != "direct" {
+		t.Fatalf("direct rule must stay an outbound rule: %+v", direct)
+	}
+	block, _ := rules[2].(map[string]any)
+	if block["outboundTag"] != "block" {
+		t.Fatalf("block rule must stay an outbound rule: %+v", block)
+	}
+
+	// Direct proxy mode keeps its direct catch-all while the balancer stays in the
+	// configuration (it is simply unused by the rules).
+	directMode := settings
+	directMode.ProxyMode = "direct"
+	raw, err = BuildLoadBalanceConfig(loadBalanceNodes(), directMode, proxyRule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	rules, _ = config["routing"].(map[string]any)["rules"].([]any)
+	catchAll, _ := rules[len(rules)-1].(map[string]any)
+	if catchAll["outboundTag"] != "direct" {
+		t.Fatalf("direct mode catch-all must stay a direct rule: %+v", catchAll)
+	}
+	if _, ok := config["routing"].(map[string]any)["balancers"]; !ok {
+		t.Fatal("the balancer must still be generated in direct mode")
+	}
+}
+
+func TestBuildLoadBalanceConfigStrategies(t *testing.T) {
+	cases := []struct {
+		mode string
+		want string
+	}{
+		{"leastPing", "leastPing"},
+		{"leastLoad", "leastLoad"},
+		{"roundRobin", "roundRobin"},
+		{"", "leastPing"},
+		{"unknown", "leastPing"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.mode, func(t *testing.T) {
+			settings := testSettings()
+			settings.LoadBalanceEnabled = true
+			settings.LoadBalanceMode = tc.mode
+			raw, err := BuildLoadBalanceConfig(loadBalanceNodes(), settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config map[string]any
+			if err := json.Unmarshal(raw, &config); err != nil {
+				t.Fatal(err)
+			}
+			balancers, _ := config["routing"].(map[string]any)["balancers"].([]any)
+			strategy, _ := balancers[0].(map[string]any)["strategy"].(map[string]any)
+			if strategy["type"] != tc.want {
+				t.Fatalf("mode %q: expected strategy %q, got %+v", tc.mode, tc.want, strategy)
+			}
+			if _, ok := config["observatory"].(map[string]any); !ok {
+				t.Fatalf("mode %q: observatory is missing", tc.mode)
+			}
+		})
+	}
+}
+
+func TestBuildLoadBalanceConfigRequiresTwoNodes(t *testing.T) {
+	settings := testSettings()
+	settings.LoadBalanceEnabled = true
+	if _, err := BuildLoadBalanceConfig(nil, settings); err == nil {
+		t.Fatal("expected an error without nodes")
+	}
+	nodes := loadBalanceNodes()
+	if _, err := BuildLoadBalanceConfig(nodes[:1], settings); err == nil {
+		t.Fatal("expected an error with a single node")
+	}
+	singbox := settings
+	singbox.CoreType = "singbox"
+	if _, err := BuildLoadBalanceConfig(nodes, singbox); err == nil {
+		t.Fatal("expected an error for a non-Xray core")
+	}
+}
+
+func TestLoadBalanceConfigPassesXrayValidation(t *testing.T) {
+	binary := filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+	customRules := []model.RoutingRule{
+		{ID: "r1", Name: "Direct", Type: "domain_suffix", Value: "example.com", Action: "direct", Enabled: true},
+		{ID: "r2", Name: "Block Ads", Type: "geosite", Value: "category-ads-all", Action: "block", Enabled: true},
+		{ID: "r3", Name: "Proxy Force", Type: "domain_keyword", Value: "example.org", Action: "proxy", Enabled: true},
+	}
+	cases := []struct {
+		name   string
+		modify func(*model.Settings)
+		rules  []model.RoutingRule
+	}{
+		{"leastPing default", func(settings *model.Settings) {}, nil},
+		{"leastLoad", func(settings *model.Settings) { settings.LoadBalanceMode = "leastLoad" }, nil},
+		{"roundRobin", func(settings *model.Settings) { settings.LoadBalanceMode = "roundRobin" }, nil},
+		{"stats api and custom rules", func(settings *model.Settings) {
+			settings.StatsEnabled = true
+			settings.XrayAPIEnabled = true
+			settings.XrayAPIPort = 10085
+		}, customRules},
+		{"global mode", func(settings *model.Settings) {
+			settings.ProxyMode = "global"
+		}, customRules},
+		{"direct mode", func(settings *model.Settings) {
+			settings.ProxyMode = "direct"
+		}, customRules},
+		{"tun inbound", func(settings *model.Settings) { settings.TunMode = true }, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := testSettings()
+			settings.LoadBalanceEnabled = true
+			tc.modify(&settings)
+			raw, err := BuildLoadBalanceConfig(loadBalanceNodes(), settings, tc.rules...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(t.TempDir(), "loadbalance-config.json")
+			if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(binary, "run", "-test", "-config", configPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("xray load balancing config validation failed: %v\n%s", err, output)
+			}
+		})
+	}
+}

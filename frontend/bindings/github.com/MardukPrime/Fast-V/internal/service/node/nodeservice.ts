@@ -27,6 +27,16 @@ export function Delete(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * DeleteBatch deletes several nodes at once. Deleting a node also clears it as
+ * the active node and keeps the owning subscription's node count in sync (both
+ * handled by store.DeleteNode). Individual failures are collected instead of
+ * aborting the whole batch, so the caller still gets the affected count.
+ */
+export function DeleteBatch(ids: string[] | null): $CancellablePromise<model$0.BatchResult> {
+    return $Call.ByID(1416204812, ids);
+}
+
+/**
  * ExportLinks returns share links for the requested node ids (all nodes when ids
  * is empty). The original raw link is reused when it still matches the node
  * protocol, otherwise it is rebuilt from the extracted node configuration.
@@ -53,6 +63,14 @@ export function Preview(input: model$0.NodeConfig): $CancellablePromise<model$0.
 }
 
 /**
+ * QRCode renders the share link of a node as a 320px PNG data URL so the UI can
+ * display it for scanning without any extra image dependency.
+ */
+export function QRCode(id: string): $CancellablePromise<string> {
+    return $Call.ByID(349900405, id);
+}
+
+/**
  * Reorder persists a drag-and-drop ordering for the node list.
  */
 export function Reorder(ids: string[] | null): $CancellablePromise<void> {
@@ -69,6 +87,14 @@ export function SetActive(id: string): $CancellablePromise<model$0.NodeView> {
 
 export function SetEnabled(id: string, enabled: boolean): $CancellablePromise<model$0.NodeView> {
     return $Call.ByID(1395997942, id, enabled);
+}
+
+/**
+ * SetEnabledBatch enables or disables several nodes at once. Individual failures
+ * are collected in BatchResult.Errors instead of aborting the whole batch.
+ */
+export function SetEnabledBatch(ids: string[] | null, enabled: boolean): $CancellablePromise<model$0.BatchResult> {
+    return $Call.ByID(163007618, ids, enabled);
 }
 
 /**

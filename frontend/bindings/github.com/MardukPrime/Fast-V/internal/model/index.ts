@@ -4,6 +4,7 @@
 export type {
     AppInfo,
     BackupResult,
+    BatchResult,
     CoreInfo,
     CoreUpdateResult,
     DashboardSummary,

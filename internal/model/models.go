@@ -61,6 +61,8 @@ type Settings struct {
 	AutoSelectIntervalMinutes int    `json:"autoSelectIntervalMinutes"`
 	AutoSelectToleranceMS     int    `json:"autoSelectToleranceMs"`
 	FailoverEnabled           bool   `json:"failoverEnabled"`
+	LoadBalanceEnabled        bool   `json:"loadBalanceEnabled"`
+	LoadBalanceMode           string `json:"loadBalanceMode"`
 	TestURL                   string `json:"testUrl"`
 	XrayAPIEnabled            bool   `json:"xrayApiEnabled"`
 	XrayAPIPort               int    `json:"xrayApiPort"`
@@ -152,6 +154,12 @@ type NodeLink struct {
 	Link string `json:"link"`
 }
 
+// BatchResult summarizes a bulk node operation.
+type BatchResult struct {
+	Affected int      `json:"affected"`
+	Errors   []string `json:"errors"`
+}
+
 // BackupResult summarizes a configuration restore.
 type BackupResult struct {
 	RestoredSubscriptions int `json:"restoredSubscriptions"`
@@ -176,6 +184,31 @@ type RoutingPreset struct {
 	Name        string        `json:"name"`
 	Description string        `json:"description"`
 	Rules       []RoutingRule `json:"rules"`
+}
+
+// DailyTraffic aggregates one day of through-proxy traffic.
+type DailyTraffic struct {
+	Date          string `json:"date"`
+	UplinkBytes   int64  `json:"uplinkBytes"`
+	DownlinkBytes int64  `json:"downlinkBytes"`
+}
+
+// LatencySample is one recorded URL latency measurement.
+type LatencySample struct {
+	NodeID    string `json:"nodeId"`
+	NodeName  string `json:"nodeName"`
+	LatencyMS int64  `json:"latencyMs"`
+	Error     string `json:"error"`
+	CheckedAt string `json:"checkedAt"`
+}
+
+// CheckResult is one diagnostics self-check outcome.
+type CheckResult struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+	Hint   string `json:"hint"`
 }
 
 // DashboardSummary is the data shown on the overview page.
