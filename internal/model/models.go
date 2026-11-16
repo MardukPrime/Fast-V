@@ -176,6 +176,10 @@ type UpdateInfo struct {
 	Available      bool   `json:"available"`
 	Notes          string `json:"notes"`
 	URL            string `json:"url"`
+	AssetName      string `json:"assetName"`
+	AssetURL       string `json:"assetUrl"`
+	AssetSize      int64  `json:"assetSize"`
+	DownloadedPath string `json:"downloadedPath"`
 	CheckedAt      string `json:"checkedAt"`
 	Error          string `json:"error"`
 }

@@ -279,7 +279,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 实时流量统计与每日流量历史（Xray StatsService）
 - 网络诊断与 10 项一键自检
 - 运行日志（筛选、暂停、导出）
-- 配置备份与恢复、开机自启、系统托盘、关闭 / 最小化到托盘、应用更新检查
+- 配置备份与恢复、开机自启、系统托盘、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
 - 深色 / 浅色 / 跟随系统主题（默认浅色）
 
 当前仅支持 Xray-core。

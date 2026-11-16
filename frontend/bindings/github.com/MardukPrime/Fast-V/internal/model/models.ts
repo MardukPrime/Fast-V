@@ -425,6 +425,10 @@ export interface UpdateInfo {
     "available": boolean;
     "notes": string;
     "url": string;
+    "assetName": string;
+    "assetUrl": string;
+    "assetSize": number;
+    "downloadedPath": string;
     "checkedAt": string;
     "error": string;
 }

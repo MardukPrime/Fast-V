@@ -47,10 +47,30 @@ func New() *Checker {
 
 // release mirrors the GitHub release payload fields FastV consumes.
 type release struct {
-	TagName string `json:"tag_name"`
-	Body    string `json:"body"`
-	HTMLURL string `json:"html_url"`
+	TagName string         `json:"tag_name"`
+	Body    string         `json:"body"`
+	HTMLURL string         `json:"html_url"`
+	Assets  []releaseAsset `json:"assets"`
 }
+
+// releaseAsset mirrors one GitHub release asset entry.
+type releaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
+}
+
+// Asset selection ranks. Higher is better; zero means the asset is not a usable
+// Windows update package.
+const (
+	// assetRankFastVExe is the fallback: a FastV installer executable.
+	assetRankFastVExe = 1
+	// assetRankWindowsZip is a Windows archive without an explicit amd64 tag.
+	assetRankWindowsZip = 2
+	// assetRankWindowsZipAMD64 is the preferred package: Windows zip built for
+	// the amd64/x64 architecture this application is distributed for.
+	assetRankWindowsZipAMD64 = 3
+)
 
 // Check fetches the latest published release and compares it with
 // currentVersion. A failed check (network error, non-200 response, malformed
@@ -72,7 +92,74 @@ func (c *Checker) Check(ctx context.Context, currentVersion string) (model.Updat
 	info.Notes = strings.TrimSpace(latest.Body)
 	info.URL = strings.TrimSpace(latest.HTMLURL)
 	info.Available = CompareVersions(info.LatestVersion, info.CurrentVersion) > 0
+
+	// A missing Windows asset is not an error: the release may only publish
+	// source archives, in which case AssetURL stays empty and the UI keeps
+	// showing the release page instead of a download button.
+	if asset, ok := selectReleaseAsset(latest.Assets); ok {
+		info.AssetName = strings.TrimSpace(asset.Name)
+		info.AssetURL = strings.TrimSpace(asset.BrowserDownloadURL)
+		info.AssetSize = asset.Size
+	}
 	return info, nil
+}
+
+// selectReleaseAsset picks the best Windows update package from the release
+// assets. The second result is false when none of the assets is usable.
+func selectReleaseAsset(assets []releaseAsset) (releaseAsset, bool) {
+	selected := releaseAsset{}
+	selectedRank := 0
+	for _, asset := range assets {
+		rank := assetRank(asset)
+		if rank > selectedRank {
+			selected = asset
+			selectedRank = rank
+		}
+	}
+	return selected, selectedRank > 0
+}
+
+// assetRank scores one release asset; zero means "not a Windows update
+// package". The name checks are case-insensitive and tolerant of how release
+// workflows order their architecture markers.
+func assetRank(asset releaseAsset) int {
+	name := strings.ToLower(strings.TrimSpace(asset.Name))
+	if name == "" || strings.TrimSpace(asset.BrowserDownloadURL) == "" {
+		return 0
+	}
+	// Requiring the .zip suffix also steers clear of signature/checksum sidecar
+	// assets such as "FastV-windows-amd64.zip.sha256".
+	if strings.Contains(name, "windows") && strings.HasSuffix(name, ".zip") {
+		if isAMD64AssetName(name) {
+			return assetRankWindowsZipAMD64
+		}
+		return assetRankWindowsZip
+	}
+	if isFastVExecutableName(name) {
+		return assetRankFastVExe
+	}
+	return 0
+}
+
+// isAMD64AssetName reports whether a release asset name names the amd64/x64
+// architecture.
+func isAMD64AssetName(name string) bool {
+	for _, marker := range []string{"amd64", "x64", "x86_64", "x86-64"} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// isFastVExecutableName reports whether name is a FastV executable. Both
+// "FastV.exe" and "Fast-V-setup.exe" style names are accepted.
+func isFastVExecutableName(name string) bool {
+	if !strings.HasSuffix(name, ".exe") {
+		return false
+	}
+	compact := strings.NewReplacer("-", "", "_", "", " ", "").Replace(name)
+	return strings.Contains(compact, "fastv")
 }
 
 // fetch requests and decodes the latest release document.

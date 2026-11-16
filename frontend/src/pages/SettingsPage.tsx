@@ -5,8 +5,9 @@ import { Browser, Events } from "@wailsio/runtime";
 import { AppService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
 import { Service as BackupService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/backup";
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
+import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { BackupResult, CoreInfo, GeoDataInfo, Settings, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BackupResult, CoreInfo, GeoDataInfo, ProxyState, Settings, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 
 type SettingsProps = {
@@ -191,6 +192,27 @@ function formatCheckedAt(value: string) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// The self-update panel reports the release asset size in MB; the backend
+// returns 0 when GitHub does not expose a size for the asset.
+function formatAssetSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return "大小未知";
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updateStatusLabel(info: UpdateInfo) {
+  if (info.downloadedPath) return "更新已下载";
+  if (info.error) return "检查失败";
+  if (info.available) return info.assetUrl ? "有可用更新" : "有可用更新（需手动下载）";
+  return "已是最新";
+}
+
+function updateHint(info: UpdateInfo) {
+  if (info.downloadedPath) return " · 更新包已就绪，可立即重启并安装。";
+  if (info.error) return "";
+  if (!info.available) return " · 无需更新。";
+  return info.assetUrl ? " · 可在下方下载安装包并自动安装。" : " · 请前往发布页面手动下载。";
+}
+
 const autoSelectIntervalRange = { min: 1, max: 1440 };
 const autoSelectToleranceRange = { min: 0, max: 5000 };
 
@@ -221,7 +243,27 @@ export default function SettingsPage(props: SettingsProps) {
   const [updateBusy, setUpdateBusy] = createSignal(false);
   const [updateInfo, setUpdateInfo] = createSignal<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = createSignal("");
+  const [updateDownloadBusy, setUpdateDownloadBusy] = createSignal(false);
+  const [updateInstallBusy, setUpdateInstallBusy] = createSignal(false);
+  const [updateNotice, setUpdateNotice] = createSignal("");
+  const [proxyRunning, setProxyRunning] = createSignal(false);
   let backupFileInput: HTMLInputElement | undefined;
+
+  // CheckUpdate never returns the downloaded package path, so a fresh check
+  // after a successful download would hide the "install now" state. Keep the
+  // downloaded package when the reported version is still the same.
+  const mergeCheckedUpdate = (info: UpdateInfo): UpdateInfo => {
+    const previous = updateInfo();
+    if (!previous?.downloadedPath || previous.latestVersion !== info.latestVersion) {
+      return info;
+    }
+    return {
+      ...info,
+      assetName: info.assetName || previous.assetName,
+      assetSize: info.assetSize || previous.assetSize,
+      downloadedPath: previous.downloadedPath,
+    };
+  };
 
   const load = async () => {
     setLoading(true);
@@ -268,9 +310,28 @@ export default function SettingsPage(props: SettingsProps) {
 
   onMount(() => {
     const off = Events.On("app:update", (event) => {
-      const info = event.data as UpdateInfo;
+      const info = mergeCheckedUpdate(event.data as UpdateInfo);
       setUpdateInfo(info);
       setUpdateError(info.error || "");
+      setUpdateNotice("");
+    });
+    onCleanup(off);
+  });
+
+  // The proxy state is only used for an advisory hint before installing an
+  // update: replacing the executable is safest while the proxy is stopped.
+  onMount(() => {
+    void (async () => {
+      try {
+        const state = await ProxyService.State();
+        setProxyRunning(state.status === "running" || state.status === "starting");
+      } catch {
+        // The hint is optional; ignore failures so the panel keeps working.
+      }
+    })();
+    const off = Events.On("proxy:state", (event) => {
+      const state = event.data as ProxyState;
+      setProxyRunning(state.status === "running" || state.status === "starting");
     });
     onCleanup(off);
   });
@@ -496,12 +557,13 @@ export default function SettingsPage(props: SettingsProps) {
   };
 
   const checkUpdate = async () => {
-    if (updateBusy()) return;
+    if (updateBusy() || updateDownloadBusy() || updateInstallBusy()) return;
     setUpdateBusy(true);
     setMessage("");
     setUpdateError("");
+    setUpdateNotice("");
     try {
-      const info = await AppService.CheckUpdate();
+      const info = mergeCheckedUpdate(await AppService.CheckUpdate());
       setUpdateInfo(info);
       setUpdateError(info.error || "");
       if (!info.error) {
@@ -511,6 +573,61 @@ export default function SettingsPage(props: SettingsProps) {
       setUpdateError(`检查更新失败：${errorMessage(err)}`);
     } finally {
       setUpdateBusy(false);
+    }
+  };
+
+  const downloadUpdate = async () => {
+    if (updateBusy() || updateDownloadBusy() || updateInstallBusy()) return;
+    setUpdateDownloadBusy(true);
+    setMessage("");
+    setUpdateError("");
+    setUpdateNotice("");
+    try {
+      const info = await AppService.DownloadUpdate();
+      setUpdateInfo(info);
+      if (info.error) {
+        setUpdateError(`下载更新失败：${info.error}`);
+      } else {
+        setUpdateNotice(
+          `更新包 ${info.assetName || "安装包"}（${formatAssetSize(info.assetSize)}）已下载；确认后即可重启安装。`,
+        );
+      }
+    } catch (err) {
+      setUpdateError(`下载更新失败：${errorMessage(err)}`);
+    } finally {
+      setUpdateDownloadBusy(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    if (updateBusy() || updateDownloadBusy() || updateInstallBusy()) return;
+    const info = updateInfo();
+    if (!info?.downloadedPath) {
+      setUpdateError("没有已下载的更新包，请先下载更新。");
+      return;
+    }
+    const lines = [
+      `确定立即重启并安装 FastV v${info.latestVersion || "新版本"} 吗？`,
+      "",
+      "FastV 将退出，自动替换程序文件后重新启动。",
+    ];
+    if (proxyRunning()) {
+      lines.push("", "当前代理正在运行，安装前建议先停止代理；安装过程中网络会短暂中断。");
+    }
+    if (!window.confirm(lines.join("\n"))) return;
+    setUpdateInstallBusy(true);
+    setMessage("");
+    setUpdateError("");
+    setUpdateNotice("");
+    try {
+      await AppService.ApplyUpdate();
+      // The backend starts the replacement script and asks the app to quit.
+      // A successful call is expected to terminate FastV, so keep the button
+      // disabled and only surface the restart hint.
+      setUpdateNotice("正在重启并安装更新，FastV 将自动重新启动…");
+    } catch (err) {
+      setUpdateError(`安装更新失败：${errorMessage(err)}`);
+      setUpdateInstallBusy(false);
     }
   };
 
@@ -1454,7 +1571,12 @@ export default function SettingsPage(props: SettingsProps) {
               </label>
 
               <div class="core-actions">
-                <button class="btn secondary" type="button" onClick={checkUpdate} disabled={updateBusy()}>
+                <button
+                  class="btn secondary"
+                  type="button"
+                  onClick={checkUpdate}
+                  disabled={updateBusy() || updateDownloadBusy() || updateInstallBusy()}
+                >
                   <Icon name="refresh" size={14} /> {updateBusy() ? "检查中..." : "立即检查更新"}
                 </button>
                 <Show when={updateInfo()?.url}>
@@ -1472,13 +1594,19 @@ export default function SettingsPage(props: SettingsProps) {
                 </div>
               </Show>
 
+              <Show when={updateNotice()}>
+                <div class="alert success settings-inline-alert">
+                  <span class="alert-message"><Icon name="check" size={15} /> {updateNotice()}</span>
+                </div>
+              </Show>
+
               <Show when={updateInfo()}>
                 {(info) => (
                   <div class="backup-result">
                     <div class="backup-result-grid">
                       <div><span>当前版本</span><strong>{info().currentVersion || "未知"}</strong></div>
                       <div><span>最新版本</span><strong>{info().latestVersion || "未获取"}</strong></div>
-                      <div><span>状态</span><strong>{info().error ? "检查失败" : info().available ? "有可用更新" : "已是最新"}</strong></div>
+                      <div><span>状态</span><strong>{updateStatusLabel(info())}</strong></div>
                     </div>
                     <Show when={info().notes}>
                       <p class="backup-result-hint" style="white-space: pre-wrap;">更新说明：{info().notes}</p>
@@ -1489,9 +1617,77 @@ export default function SettingsPage(props: SettingsProps) {
                         <code>{info().url}</code>
                       </div>
                     </Show>
+
+                    <Show when={info().available}>
+                      <Show when={!info().assetUrl}>
+                        <div class="settings-inline-warning">
+                          <Icon name="alert" size={13} />
+                          <span>该版本暂未提供 Windows 安装包，无法在应用内自动下载安装；请打开上方的发布页面手动下载。</span>
+                        </div>
+                      </Show>
+
+                      <Show when={info().assetUrl && !info().downloadedPath}>
+                        <p class="backup-result-hint">
+                          安装包：{info().assetName || "未命名安装包"} · {formatAssetSize(info().assetSize)}。下载可能需要数十秒，期间请保持网络连接。
+                        </p>
+                        <Show when={updateDownloadBusy()}>
+                          <p class="settings-note">
+                            <Icon name="refresh" size={13} />
+                            <span>正在从 GitHub 下载并解压安装包，可能需要数十秒，请勿关闭 FastV。</span>
+                          </p>
+                        </Show>
+                        <div class="core-actions">
+                          <button
+                            class="btn primary"
+                            type="button"
+                            onClick={downloadUpdate}
+                            disabled={updateDownloadBusy() || updateInstallBusy() || updateBusy()}
+                          >
+                            <Icon name="external" size={14} /> {updateDownloadBusy() ? "正在下载更新…" : "下载更新"}
+                          </button>
+                        </div>
+                      </Show>
+
+                      <Show when={info().downloadedPath}>
+                        <div class="backup-result-head" style="margin-top: 10px;">
+                          <Icon name="check" size={14} />
+                          <strong>更新已下载</strong>
+                        </div>
+                        <p class="backup-result-hint">
+                          安装包：{info().assetName || "FastV 安装包"} · {formatAssetSize(info().assetSize)}。点击「立即重启并安装」后 FastV 会退出并自动替换程序文件。
+                        </p>
+                        <div class="core-path-row">
+                          <span>下载位置</span>
+                          <code>{info().downloadedPath}</code>
+                        </div>
+                        <Show when={proxyRunning()}>
+                          <div class="settings-inline-warning">
+                            <Icon name="alert" size={13} />
+                            <span>代理正在运行：安装更新会退出 FastV 并短暂中断网络，建议先停止代理再安装。</span>
+                          </div>
+                        </Show>
+                        <div class="core-actions">
+                          <button
+                            class="btn primary"
+                            type="button"
+                            onClick={installUpdate}
+                            disabled={updateInstallBusy() || updateDownloadBusy() || updateBusy()}
+                          >
+                            <Icon name="refresh" size={14} /> {updateInstallBusy() ? "正在重启并安装…" : "立即重启并安装"}
+                          </button>
+                        </div>
+                        <Show when={updateInstallBusy()}>
+                          <p class="settings-note">
+                            <Icon name="refresh" size={13} />
+                            <span>正在退出 FastV 并替换程序文件，请勿手动启动应用；安装完成后 FastV 会自动重新启动。</span>
+                          </p>
+                        </Show>
+                      </Show>
+                    </Show>
+
                     <p class="backup-result-hint">
                       上次检查：{formatCheckedAt(info().checkedAt)}
-                      {info().available ? " · 建议前往发布页面下载新版本。" : info().error ? "" : " · 无需更新。"}
+                      {updateHint(info())}
                     </p>
                   </div>
                 )}

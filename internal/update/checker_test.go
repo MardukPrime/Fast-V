@@ -289,3 +289,176 @@ func TestNormalizeVersion(t *testing.T) {
 		}
 	}
 }
+
+// testAsset describes one asset in a fake GitHub release payload.
+type testAsset struct {
+	Name string
+	URL  string
+	Size int64
+}
+
+// releaseJSONWithAssets renders a GitHub release payload including assets.
+func releaseJSONWithAssets(tagName, body, htmlURL string, assets []testAsset) string {
+	rawAssets := make([]map[string]any, 0, len(assets))
+	for _, asset := range assets {
+		rawAssets = append(rawAssets, map[string]any{
+			"name":                 asset.Name,
+			"browser_download_url": asset.URL,
+			"size":                 asset.Size,
+		})
+	}
+	payload := map[string]any{
+		"tag_name": tagName,
+		"body":     body,
+		"html_url": htmlURL,
+		"assets":   rawAssets,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
+func TestCheckSelectsWindowsZipAsset(t *testing.T) {
+	const zipURL = "https://example.com/FastV-windows-amd64.zip"
+	release := releaseJSONWithAssets("v0.3.0", "notes", "https://example.com/release", []testAsset{
+		{Name: "FastV-linux-amd64.tar.gz", URL: "https://example.com/FastV-linux-amd64.tar.gz", Size: 11},
+		{Name: "FastV-windows-arm64.zip", URL: "https://example.com/FastV-windows-arm64.zip", Size: 22},
+		{Name: "FastV-windows-amd64.zip.sha256", URL: "https://example.com/FastV-windows-amd64.zip.sha256", Size: 33},
+		{Name: "FastV-windows-amd64.zip", URL: zipURL, Size: 1234},
+		{Name: "FastV-Setup.exe", URL: "https://example.com/FastV-Setup.exe", Size: 99},
+	})
+	checker := newTestChecker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(release))
+	})
+
+	info, err := checker.Check(context.Background(), "0.2.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if !info.Available {
+		t.Error("Available = false, want true")
+	}
+	if info.AssetName != "FastV-windows-amd64.zip" {
+		t.Errorf("AssetName = %q, want FastV-windows-amd64.zip", info.AssetName)
+	}
+	if info.AssetURL != zipURL {
+		t.Errorf("AssetURL = %q, want %q", info.AssetURL, zipURL)
+	}
+	if info.AssetSize != 1234 {
+		t.Errorf("AssetSize = %d, want 1234", info.AssetSize)
+	}
+}
+
+func TestCheckSelectsAssetCaseInsensitiveAndPrefersAMD64(t *testing.T) {
+	release := releaseJSONWithAssets("v0.3.0", "", "", []testAsset{
+		{Name: "FastV-WINDOWS-ARM64.ZIP", URL: "https://example.com/arm64.zip", Size: 1},
+		{Name: "FastV-Windows-X64.ZIP", URL: "https://example.com/x64.zip", Size: 2},
+	})
+	checker := newTestChecker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(release))
+	})
+
+	info, err := checker.Check(context.Background(), "0.2.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if info.AssetName != "FastV-Windows-X64.ZIP" {
+		t.Errorf("AssetName = %q, want the x64 zip even when arm64 comes first", info.AssetName)
+	}
+	if info.AssetURL != "https://example.com/x64.zip" {
+		t.Errorf("AssetURL = %q, want https://example.com/x64.zip", info.AssetURL)
+	}
+}
+
+func TestCheckFallsBackToFastVExecutable(t *testing.T) {
+	release := releaseJSONWithAssets("v0.3.0", "", "", []testAsset{
+		{Name: "FastV-linux-amd64.tar.gz", URL: "https://example.com/linux.tar.gz", Size: 1},
+		{Name: "Updater.exe", URL: "https://example.com/Updater.exe", Size: 2},
+		{Name: "Fast-V-Setup.exe", URL: "https://example.com/Fast-V-Setup.exe", Size: 3},
+	})
+	checker := newTestChecker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(release))
+	})
+
+	info, err := checker.Check(context.Background(), "0.2.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if info.AssetName != "Fast-V-Setup.exe" {
+		t.Errorf("AssetName = %q, want the FastV executable fallback", info.AssetName)
+	}
+	if info.AssetURL != "https://example.com/Fast-V-Setup.exe" {
+		t.Errorf("AssetURL = %q, want https://example.com/Fast-V-Setup.exe", info.AssetURL)
+	}
+	if info.AssetSize != 3 {
+		t.Errorf("AssetSize = %d, want 3", info.AssetSize)
+	}
+}
+
+func TestCheckWithoutUsableAssetLeavesAssetFieldsEmpty(t *testing.T) {
+	release := releaseJSONWithAssets("v0.3.0", "notes", "https://example.com/release", []testAsset{
+		{Name: "FastV-linux-amd64.tar.gz", URL: "https://example.com/linux.tar.gz", Size: 1},
+		{Name: "fastv.msi", URL: "https://example.com/fastv.msi", Size: 2},
+		{Name: "windows.zip", URL: "", Size: 3},
+	})
+	checker := newTestChecker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(release))
+	})
+
+	info, err := checker.Check(context.Background(), "0.2.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil for a release without Windows assets", err)
+	}
+	if !info.Available {
+		t.Error("Available = false, want true; version availability is independent of assets")
+	}
+	if info.AssetName != "" || info.AssetURL != "" || info.AssetSize != 0 {
+		t.Errorf("asset fields = (%q, %q, %d), want empty without a usable asset", info.AssetName, info.AssetURL, info.AssetSize)
+	}
+}
+
+func TestCheckIgnoresWindowsZipWithoutDownloadURL(t *testing.T) {
+	release := releaseJSONWithAssets("v0.3.0", "", "", []testAsset{
+		{Name: "FastV-windows-amd64.zip", URL: "  ", Size: 10},
+	})
+	checker := newTestChecker(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(release))
+	})
+
+	info, err := checker.Check(context.Background(), "0.2.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v, want nil", err)
+	}
+	if info.AssetURL != "" {
+		t.Errorf("AssetURL = %q, want empty when the asset has no download URL", info.AssetURL)
+	}
+}
+
+func TestAssetRank(t *testing.T) {
+	cases := []struct {
+		name  string
+		asset releaseAsset
+		want  int
+	}{
+		{name: "windows amd64 zip", asset: releaseAsset{Name: "FastV-windows-amd64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZipAMD64},
+		{name: "windows x64 zip", asset: releaseAsset{Name: "FastV-windows-x64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZipAMD64},
+		{name: "windows zip", asset: releaseAsset{Name: "FastV-windows.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZip},
+		{name: "windows arm64 zip", asset: releaseAsset{Name: "FastV-windows-arm64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZip},
+		{name: "checksum sidecar", asset: releaseAsset{Name: "FastV-windows-amd64.zip.sha256", BrowserDownloadURL: "u"}, want: 0},
+		{name: "fastv exe", asset: releaseAsset{Name: "FastV.exe", BrowserDownloadURL: "u"}, want: assetRankFastVExe},
+		{name: "fast-v exe", asset: releaseAsset{Name: "fast-v-setup.EXE", BrowserDownloadURL: "u"}, want: assetRankFastVExe},
+		{name: "unrelated exe", asset: releaseAsset{Name: "Updater.exe", BrowserDownloadURL: "u"}, want: 0},
+		{name: "linux archive", asset: releaseAsset{Name: "FastV-windows-files.gz", BrowserDownloadURL: "u"}, want: 0},
+		{name: "no url", asset: releaseAsset{Name: "FastV-windows-amd64.zip"}, want: 0},
+		{name: "empty name", asset: releaseAsset{BrowserDownloadURL: "u"}, want: 0},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := assetRank(testCase.asset); got != testCase.want {
+				t.Errorf("assetRank(%+v) = %d, want %d", testCase.asset, got, testCase.want)
+			}
+		})
+	}
+}

@@ -15,6 +15,18 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as model$0 from "../../model/models.js";
 
 /**
+ * ApplyUpdate installs the package downloaded by DownloadUpdate: it generates a
+ * replacement script, starts it detached and asks the application to quit. The
+ * script waits for this process to exit, overwrites the running executable and
+ * starts the new version.
+ * 
+ * A missing download is reported with a Chinese error instead of guessing.
+ */
+export function ApplyUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(348014144);
+}
+
+/**
  * AutostartEnabled reports whether FastV is registered to start with Windows.
  */
 export function AutostartEnabled(): $CancellablePromise<boolean> {
@@ -28,6 +40,19 @@ export function AutostartEnabled(): $CancellablePromise<boolean> {
  */
 export function CheckUpdate(): $CancellablePromise<model$0.UpdateInfo> {
     return $Call.ByID(6832128);
+}
+
+/**
+ * DownloadUpdate checks for a newer release and, when the release publishes a
+ * Windows package, downloads and extracts it into
+ * <data dir>/updates/<latest version>/. The returned UpdateInfo carries the
+ * extracted executable path in DownloadedPath; ApplyUpdate then installs it.
+ * 
+ * A release without a usable Windows asset is reported as an error so the UI
+ * can tell the user instead of silently doing nothing.
+ */
+export function DownloadUpdate(): $CancellablePromise<model$0.UpdateInfo> {
+    return $Call.ByID(3537426106);
 }
 
 export function Info(): $CancellablePromise<model$0.AppInfo> {
