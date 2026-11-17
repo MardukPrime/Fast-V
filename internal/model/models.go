@@ -296,6 +296,12 @@ func SubscriptionViewFrom(sub Subscription) SubscriptionView {
 		UpdatedAt: sub.UpdatedAt,
 		LastError: sub.LastError,
 		NodeCount: sub.NodeCount,
+
+		UploadBytes:    sub.UploadBytes,
+		DownloadBytes:  sub.DownloadBytes,
+		TotalBytes:     sub.TotalBytes,
+		ExpireAt:       sub.ExpireAt,
+		UsageUpdatedAt: sub.UsageUpdatedAt,
 	}
 }
 
