@@ -29,8 +29,11 @@ func TestProbeDirectWithSpeed(t *testing.T) {
 
 	checker := NewChecker()
 	checker.traceURL = server.URL + "/trace"
+	checker.traceFallbackURLs = nil
 	checker.ipURL = server.URL + "/ip"
+	checker.ipFallbackURLs = nil
 	checker.geoURL = server.URL + "/geo/%s"
+	checker.geoIPURL = server.URL + "/trace"
 	checker.speedURL = server.URL + "/speed?bytes=%d"
 	checker.speedBytes = 1024
 	checker.latencySamples = 2
@@ -68,8 +71,11 @@ func TestProbeFallsBackToIPService(t *testing.T) {
 
 	checker := NewChecker()
 	checker.traceURL = server.URL + "/trace"
+	checker.traceFallbackURLs = nil
 	checker.ipURL = server.URL + "/ip"
-	checker.geoURL = server.URL + "/geo/%s"
+	checker.ipFallbackURLs = nil
+	checker.geoURL = server.URL + "/geo-missing/%s"
+	checker.geoIPURL = server.URL + "/geo-missing"
 	checker.latencySamples = 1
 
 	result, err := checker.Probe(context.Background(), "direct", "", false)
@@ -99,8 +105,10 @@ func TestProbeFallsBackToIPWhoisSelf(t *testing.T) {
 
 	checker := NewChecker()
 	checker.traceURL = server.URL + "/trace"
+	checker.traceFallbackURLs = nil
 	checker.ipURL = server.URL + "/ip"
-	checker.geoURL = server.URL + "/geo/%s"
+	checker.ipFallbackURLs = nil
+	checker.geoURL = server.URL + "/geo-missing/%s"
 	checker.geoIPURL = server.URL + "/geo-self"
 	checker.latencySamples = 1
 
