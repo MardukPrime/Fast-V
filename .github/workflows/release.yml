@@ -1,0 +1,148 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example v0.2.0-pre.1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Publish as a pre-release"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    name: Build Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        shell: pwsh
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          PRERELEASE_INPUT: ${{ inputs.prerelease }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          $tag = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:TAG_INPUT } else { $env:REF_NAME }
+          if ([string]::IsNullOrWhiteSpace($tag)) { throw "release tag is required" }
+          $tag = $tag.Trim()
+          if (-not $tag.StartsWith('v')) { throw "release tag must start with 'v': $tag" }
+          $version = $tag.Substring(1)
+          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
+            throw "invalid semver in tag: $version"
+          }
+          $prerelease = $version.Contains('-') -or ($env:PRERELEASE_INPUT -eq 'true')
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($prerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Windows executable
+        shell: pwsh
+        env:
+          CGO_ENABLED: 0
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $commit = $env:GITHUB_SHA
+          $ldflags = @(
+            '-w', '-s', '-H', 'windowsgui',
+            "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.Version=$env:APP_VERSION",
+            "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=$commit",
+            "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.BuildDate=$buildDate"
+          ) -join ' '
+          go build -tags production -trimpath -buildvcs=false -ldflags="$ldflags" -o dist/Fast-V.exe .
+          if (-not (Test-Path dist/Fast-V.exe)) { throw "build did not produce dist/Fast-V.exe" }
+          Write-Host ("Built Fast-V.exe: {0:N1} MB" -f ((Get-Item dist/Fast-V.exe).Length / 1MB))
+
+      - name: Package release assets
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          $zip = "dist/FastV-$env:APP_VERSION-windows-amd64.zip"
+          Compress-Archive -Path dist/Fast-V.exe, LICENSE, README.md -DestinationPath $zip -Force
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $zip -Leaf)" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Build webview2 / app metadata summary
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          @(
+            "version=$env:APP_VERSION",
+            "commit=$env:GITHUB_SHA",
+            "runner=$env:RUNNER_OS-$env:RUNNER_ARCH",
+            "requires=Windows 10/11 x64 + Microsoft Edge WebView2 Runtime"
+          ) | Set-Content dist/release-info.txt -Encoding ascii
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastV-${{ steps.meta.outputs.version }}-windows-x64
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: FastV ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          body: |
+            FastV ${{ steps.meta.outputs.tag }} — automated Windows build.
+
+            - Portable build: `FastV-${{ steps.meta.outputs.version }}-windows-amd64.zip` (extract and run `Fast-V.exe`)
+            - Requires Windows 10/11 x64 with the Microsoft Edge WebView2 Runtime
+            - SHA-256 checksums: `SHA256SUMS.txt`
+            - Self-update: keep `Fast-V.exe` unlocked; in-app updater restarts it after replacing
+          files: |
+            dist/FastV-${{ steps.meta.outputs.version }}-windows-amd64.zip
+            dist/SHA256SUMS.txt
+            dist/release-info.txt

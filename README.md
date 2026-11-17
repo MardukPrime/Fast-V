@@ -6,7 +6,7 @@
 
 Windows 10/11 · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.1.0-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.2.0--pre.1-5B8DEF)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
 ![License](https://img.shields.io/badge/license-GPL--3.0-718096)

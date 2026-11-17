@@ -53,7 +53,6 @@ frontend/.vite/
 # Build configuration and platform assets are local-only
 /build/
 /Taskfile.yml
-/.github/workflows/
 
 # Build outputs
 build/bin/

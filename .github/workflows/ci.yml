@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-windows:
+    name: Verify on Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: pnpm typecheck
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        shell: pwsh
+        run: go vet ./internal/...
+
+      - name: Test
+        shell: pwsh
+        run: go test -count=1 ./internal/...
+
+      - name: Build executable
+        shell: pwsh
+        env:
+          CGO_ENABLED: 0
+        run: go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o dist/Fast-V.exe .
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastV-ci-windows-x64
+          path: dist/Fast-V.exe
+          if-no-files-found: error
