@@ -48,7 +48,7 @@ func TestSaveAndReset(t *testing.T) {
 	service := newService(t)
 
 	defaults := service.Get()
-	if defaults.Theme != "light" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 || defaults.DockTransparency != 28 || defaults.SystemProxyMode != "system" {
+	if defaults.Theme != "light" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "dock" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 || defaults.DockTransparency != 28 || defaults.SystemProxyMode != "system" {
 		t.Fatalf("unexpected defaults: %+v", defaults)
 	}
 	if defaults.AccentColor != "sky" || !defaults.HotkeysEnabled {

@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 5
+const storeVersion = 6
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -99,7 +99,7 @@ func DefaultSettings() Settings {
 		Theme:                 "light",
 		Language:              "zh-CN",
 		AccentColor:           "sky",
-		LayoutMode:            "sidebar",
+		LayoutMode:            "dock",
 		DockTransparency:      28,
 		AutoUpdate:            false,
 		UpdateIntervalMinutes: 360,
@@ -225,6 +225,10 @@ func mergeStoreData(loaded storeData) storeData {
 	// v5 added accent color presets and global hotkeys.
 	if loaded.Version < 5 {
 		loaded.Settings.HotkeysEnabled = true
+	}
+	// v6 changed the default navigation layout from sidebar to dock.
+	if loaded.Version < 6 && loaded.Settings.LayoutMode == "sidebar" {
+		loaded.Settings.LayoutMode = "dock"
 	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion

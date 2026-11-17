@@ -137,7 +137,7 @@
 |---|---|
 | theme | 深色、浅色或跟随系统 |
 | language | 界面语言 |
-| layoutMode | 导航布局：sidebar 或 dock |
+| layoutMode | 导航布局：sidebar 或 dock（默认 dock，存储 v6 起旧 sidebar 配置自动迁移） |
 | dockTransparency | 底栏玻璃背景透明度，5-90 |
 | autoUpdate | 订阅自动更新开关 |
 | updateIntervalMinutes | 订阅自动更新间隔 |

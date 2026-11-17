@@ -89,7 +89,7 @@ export default function App() {
   const [proxyModeBusy, setProxyModeBusy] = createSignal(false);
   const [proxyModeError, setProxyModeError] = createSignal("");
   const [dockTransparency, setDockTransparency] = createSignal(28);
-  const layoutMode = () => settings()?.layoutMode === "dock" ? "dock" : "sidebar";
+  const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
   let dockNavElement: HTMLDivElement | undefined;
   const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
 

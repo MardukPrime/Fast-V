@@ -21,7 +21,7 @@ const defaults: Settings = {
   theme: "light",
   language: "zh-CN",
   accentColor: "sky",
-  layoutMode: "sidebar",
+  layoutMode: "dock",
   systemProxyMode: "system",
   dockTransparency: 28,
   autoUpdate: false,
