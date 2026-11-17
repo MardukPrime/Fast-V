@@ -7,6 +7,7 @@
 Windows 10/11 · Wails v3 · Xray-core · SolidJS
 
 ![Version](https://img.shields.io/badge/version-0.2.0--pre.1-5B8DEF)
+[![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
 ![License](https://img.shields.io/badge/license-GPL--3.0-718096)
@@ -187,6 +188,16 @@ TUN 模式需要：
 - REALITY
 - Mux
 - 流量嗅探
+
+## 下载
+
+首个预发布版本（`v0.2.0-pre.1`，pre-release）由 GitHub Actions 自动构建：
+
+- Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
+- Windows x64 便携包：`FastV-<version>-windows-amd64.zip`，解压后运行 `Fast-V.exe`
+- 完整性校验：同页 `SHA256SUMS.txt`；运行要求：Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
+- 发布流程与标签约定见 [发布说明](docs/operations/release.md)
+
 ## 快速开始
 
 ### 运行要求
