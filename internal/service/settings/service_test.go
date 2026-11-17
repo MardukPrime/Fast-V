@@ -22,6 +22,7 @@ func validSettings() model.Settings {
 	return model.Settings{
 		Theme:                     "dark",
 		Language:                  "zh-CN",
+		AccentColor:               "sky",
 		LayoutMode:                "sidebar",
 		SystemProxyMode:           "system",
 		DockTransparency:          28,
@@ -49,6 +50,9 @@ func TestSaveAndReset(t *testing.T) {
 	defaults := service.Get()
 	if defaults.Theme != "light" || defaults.UpdateIntervalMinutes != 360 || defaults.CoreType != "xray" || defaults.XrayLocalPort != 10808 || defaults.XrayAPIPort != 10085 || defaults.LayoutMode != "sidebar" || defaults.XrayDNSStrategy != "UseIP" || defaults.XrayDNSServers == "" || defaults.XrayTunMTU != 1500 || defaults.DockTransparency != 28 || defaults.SystemProxyMode != "system" {
 		t.Fatalf("unexpected defaults: %+v", defaults)
+	}
+	if defaults.AccentColor != "sky" || !defaults.HotkeysEnabled {
+		t.Fatalf("unexpected accent color / hotkey defaults: %+v", defaults)
 	}
 
 	input := validSettings()
@@ -277,5 +281,69 @@ func TestInboundAuthValidation(t *testing.T) {
 	lan.AllowLan = true
 	if _, err := service.Save(lan); err != nil {
 		t.Fatalf("AllowLan must not require credentials: %v", err)
+	}
+}
+
+func TestAccentColorValidation(t *testing.T) {
+	service := newService(t)
+
+	for _, accent := range []string{"sky", "violet", "emerald", "amber", "rose"} {
+		input := validSettings()
+		input.AccentColor = "  " + accent + "  "
+		saved, err := service.Save(input)
+		if err != nil {
+			t.Fatalf("%s: expected the accent color to be accepted: %v", accent, err)
+		}
+		if saved.AccentColor != accent {
+			t.Fatalf("%s: the accent color was not trimmed: %q", accent, saved.AccentColor)
+		}
+		if stored := service.Get(); stored.AccentColor != accent {
+			t.Fatalf("%s: the accent color was not persisted: %q", accent, stored.AccentColor)
+		}
+	}
+
+	// A rejected save must leave the previously stored accent color untouched.
+	previous := service.Get().AccentColor
+	for _, accent := range []string{"", "   ", "neon", "Sky", "#ff0000", "violet-dark"} {
+		input := validSettings()
+		input.AccentColor = accent
+		if _, err := service.Save(input); err == nil {
+			t.Fatalf("%q: expected an accent color error", accent)
+		} else if !strings.Contains(err.Error(), "不支持的强调色") {
+			t.Fatalf("%q: expected a Chinese accent color error, got %v", accent, err)
+		}
+	}
+	if got := service.Get().AccentColor; got != previous {
+		t.Fatalf("a rejected save changed the stored accent color: %q", got)
+	}
+}
+
+// HotkeysEnabled has no validation of its own: toggling it must simply persist,
+// and the default install starts with the hotkeys enabled.
+func TestHotkeysEnabledValidation(t *testing.T) {
+	service := newService(t)
+
+	if !service.Get().HotkeysEnabled {
+		t.Fatal("global hotkeys should be enabled by default")
+	}
+
+	disabled := validSettings()
+	disabled.HotkeysEnabled = false
+	saved, err := service.Save(disabled)
+	if err != nil {
+		t.Fatalf("disabling global hotkeys must be accepted: %v", err)
+	}
+	if saved.HotkeysEnabled || service.Get().HotkeysEnabled {
+		t.Fatal("disabling global hotkeys was not persisted")
+	}
+
+	enabled := validSettings()
+	enabled.HotkeysEnabled = true
+	saved, err = service.Save(enabled)
+	if err != nil {
+		t.Fatalf("enabling global hotkeys must be accepted: %v", err)
+	}
+	if !saved.HotkeysEnabled || !service.Get().HotkeysEnabled {
+		t.Fatal("enabling global hotkeys was not persisted")
 	}
 }

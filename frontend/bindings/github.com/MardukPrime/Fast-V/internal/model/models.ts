@@ -318,6 +318,7 @@ export interface RoutingRule {
 export interface Settings {
     "theme": string;
     "language": string;
+    "accentColor": string;
     "layoutMode": string;
     "dockTransparency": number;
     "autoUpdate": boolean;
@@ -351,6 +352,7 @@ export interface Settings {
     "inboundPassword": string;
     "closeToTray": boolean;
     "minimizeToTray": boolean;
+    "hotkeysEnabled": boolean;
     "autoCheckUpdate": boolean;
     "statsEnabled": boolean;
     "autoSelectEnabled": boolean;

@@ -48,6 +48,15 @@ function applyTheme(theme: string) {
   document.documentElement.dataset.theme = resolved;
 }
 
+// Accent presets must stay in sync with the backend validation in
+// internal/service/settings. Anything outside the whitelist falls back to the
+// default sky palette so the stylesheet always has a matching theme layer.
+const accentColors = ["sky", "violet", "emerald", "amber", "rose"];
+
+function applyAccent(accent: string | undefined) {
+  document.documentElement.dataset.accent = accent && accentColors.includes(accent) ? accent : "sky";
+}
+
 // Proxy mode quick switch in the global topbar. Values must stay in sync with
 // the backend validation used by the settings page.
 const proxyModes: Array<{ value: string; label: string; title: string }> = [
@@ -149,6 +158,7 @@ export default function App() {
       setProxy(proxyState);
       setDockTransparency(loadedSettings.dockTransparency || 28);
       applyTheme(loadedSettings.theme);
+      applyAccent(loadedSettings.accentColor);
     } catch (error) {
       console.error("Failed to load application state", error);
     }
@@ -161,6 +171,17 @@ export default function App() {
     const offProxy = Events.On("proxy:state", (event) => {
       setProxy(event.data as ProxyState);
     });
+    // Settings can also change outside this window: the tray menu and the
+    // global shortcuts save through the same service and broadcast the result.
+    // Re-apply the visual tokens so accent/theme/layout never drift.
+    const offSettings = Events.On("settings:changed", (event) => {
+      const next = event.data as Settings;
+      if (!next) return;
+      setSettings(next);
+      setDockTransparency(next.dockTransparency || 28);
+      applyTheme(next.theme);
+      applyAccent(next.accentColor);
+    });
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const handleSystemTheme = () => {
       if (settings()?.theme === "system") applyTheme("system");
@@ -169,6 +190,7 @@ export default function App() {
     onCleanup(() => {
       offCore();
       offProxy();
+      offSettings();
       systemTheme.removeEventListener("change", handleSystemTheme);
     });
   });
@@ -243,6 +265,7 @@ export default function App() {
     setSettings(next);
     setDockTransparency(next.dockTransparency || 28);
     applyTheme(next.theme);
+    applyAccent(next.accentColor);
     // A successful full save makes any earlier quick-switch error stale.
     setProxyModeError("");
   };
@@ -430,7 +453,7 @@ export default function App() {
             <LogsPage proxyState={proxy()} />
           </Show>
           <Show when={active() === "settings"}>
-            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewDockTransparency={setDockTransparency} />
+            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewDockTransparency={setDockTransparency} />
           </Show>
 
         </main>

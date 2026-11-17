@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { Browser, Events } from "@wailsio/runtime";
 
@@ -13,12 +13,14 @@ import Icon from "../components/Icon";
 type SettingsProps = {
   onSaved: (settings: Settings) => void;
   onPreviewTheme: (theme: string) => void;
+  onPreviewAccent: (accent: string) => void;
   onPreviewDockTransparency: (value: number) => void;
 };
 
 const defaults: Settings = {
   theme: "light",
   language: "zh-CN",
+  accentColor: "sky",
   layoutMode: "sidebar",
   systemProxyMode: "system",
   dockTransparency: 28,
@@ -52,6 +54,7 @@ const defaults: Settings = {
   inboundPassword: "",
   closeToTray: false,
   minimizeToTray: false,
+  hotkeysEnabled: true,
   autoCheckUpdate: true,
   statsEnabled: true,
   autoSelectEnabled: false,
@@ -69,6 +72,23 @@ const themes = [
   { value: "dark", label: "深色", hint: "低光环境" },
   { value: "light", label: "浅色", hint: "明亮环境" },
   { value: "system", label: "跟随系统", hint: "自动切换" },
+];
+
+// Must stay in sync with the backend whitelist in internal/service/settings.
+// The swatch palette itself is defined in styles.css for both page themes.
+const accentColors = [
+  { value: "sky", label: "天空蓝", hint: "默认" },
+  { value: "violet", label: "紫罗兰", hint: "柔和" },
+  { value: "emerald", label: "翡翠绿", hint: "自然" },
+  { value: "amber", label: "琥珀橙", hint: "温暖" },
+  { value: "rose", label: "玫瑰红", hint: "醒目" },
+];
+
+// Read-only list of the global shortcuts registered by internal/bootstrap/hotkey.go.
+const globalHotkeys = [
+  { action: "启动 / 停止代理", keys: ["Ctrl", "Shift", "F"] },
+  { action: "切换代理模式（规则 → 全局 → 直连）", keys: ["Ctrl", "Shift", "M"] },
+  { action: "切换到下一个启用节点", keys: ["Ctrl", "Shift", "N"] },
 ];
 
 const layoutModes = [
@@ -705,6 +725,36 @@ export default function SettingsPage(props: SettingsProps) {
                   </Show>
                 </button>
               ))}
+            </div>
+            <div class="accent-picker">
+              <div class="setting-label">
+                <strong>强调色</strong>
+                <small>用于主按钮、开关、选中态和焦点环；点击立即预览，保存后持久化。</small>
+              </div>
+              <div class="accent-options" role="radiogroup" aria-label="强调色">
+                {accentColors.map((item) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={settings().accentColor === item.value}
+                    aria-label={item.label}
+                    classList={{ "accent-option": true, active: settings().accentColor === item.value }}
+                    onClick={() => {
+                      update("accentColor", item.value);
+                      props.onPreviewAccent(item.value);
+                    }}
+                  >
+                    <span classList={{ "accent-swatch": true, [item.value]: true }} aria-hidden="true" />
+                    <span class="accent-option-copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.hint}</small>
+                    </span>
+                    <Show when={settings().accentColor === item.value}>
+                      <span class="accent-check"><Icon name="check" size={11} /></span>
+                    </Show>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -1524,6 +1574,52 @@ export default function SettingsPage(props: SettingsProps) {
               <Icon name="external" size={13} />
               <span>开机自启按当前 FastV.exe 路径注册；移动或重命名程序后需要重新开启一次。</span>
             </p>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>全局快捷键</strong>
+                <small>在任意应用中都能触发代理操作；修改开关后需要保存设置才会生效。</small>
+              </div>
+              <label class="switch-row">
+                <span>
+                  <strong>启用全局快捷键</strong>
+                  <small>关闭后快捷键立即失效；若启动 FastV 时处于关闭状态，重新开启后需要重启应用才会重新注册。</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().hotkeysEnabled }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().hotkeysEnabled}
+                    onChange={(event) => update("hotkeysEnabled", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+
+              <ul classList={{ "hotkey-list": true, disabled: !settings().hotkeysEnabled }} aria-label="全局快捷键列表">
+                {globalHotkeys.map((item) => (
+                  <li class="hotkey-row">
+                    <span class="hotkey-action">{item.action}</span>
+                    <span class="hotkey-keys">
+                      <For each={item.keys}>
+                        {(key, index) => (
+                          <>
+                            <Show when={index() > 0}>
+                              <span class="hotkey-plus" aria-hidden="true">+</span>
+                            </Show>
+                            <kbd class="hotkey-key">{key}</kbd>
+                          </>
+                        )}
+                      </For>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>快捷键全局生效；若被其他程序占用会注册失败，可在日志页查看原因。修改开关需保存后生效；启动时若为关闭状态，重新开启后需要重启 FastV 才会注册。</span>
+              </p>
+            </div>
 
             <div class="setting-block">
               <div class="setting-label">

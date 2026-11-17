@@ -94,8 +94,11 @@ func Run(assets embed.FS) error {
 
 	// The tray and the close/minimize-to-tray behavior are wired after the
 	// window exists and before the event loop starts; Wails creates the tray
-	// icon itself once the application is running.
-	newTray(app, st, window, proxySvc, appSvc)
+	// icon itself once the application is running. The global hotkeys are
+	// registered afterwards so a shortcut can drive the proxy and the tray at
+	// the same time.
+	newTray(app, st, window, proxySvc, settingsSvc, appSvc)
+	startGlobalHotkeys(st, settingsSvc, proxySvc)
 
 	return app.Run()
 }

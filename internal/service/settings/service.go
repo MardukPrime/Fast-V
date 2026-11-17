@@ -9,9 +9,20 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/wailsapp/wails/v3/pkg/application"
+
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
+
+// accentColors lists the accent color presets shared with the frontend theme.
+var accentColors = map[string]struct{}{
+	"sky":     {},
+	"violet":  {},
+	"emerald": {},
+	"amber":   {},
+	"rose":    {},
+}
 
 // SettingsService manages basic application settings.
 type SettingsService struct {
@@ -33,6 +44,7 @@ func (s *SettingsService) Get() model.Settings {
 func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	input.Theme = strings.TrimSpace(input.Theme)
 	input.Language = strings.TrimSpace(input.Language)
+	input.AccentColor = strings.TrimSpace(input.AccentColor)
 	input.ProxyMode = strings.TrimSpace(input.ProxyMode)
 	input.CoreType = strings.TrimSpace(input.CoreType)
 	input.XrayLogLevel = strings.TrimSpace(input.XrayLogLevel)
@@ -51,6 +63,11 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	}
 	if input.Theme != "dark" && input.Theme != "light" && input.Theme != "system" {
 		return model.Settings{}, errors.New("invalid theme")
+	}
+	// Only the fixed preset list is a valid accent color; the frontend theme
+	// layer has no palette for anything else.
+	if _, ok := accentColors[input.AccentColor]; !ok {
+		return model.Settings{}, errors.New("不支持的强调色")
 	}
 	if input.Language != "zh-CN" && input.Language != "en-US" {
 		return model.Settings{}, errors.New("invalid language")
@@ -155,6 +172,7 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if err := s.store.SaveSettings(input); err != nil {
 		return model.Settings{}, err
 	}
+	emitSettingsChanged(input)
 	return input, nil
 }
 
@@ -163,7 +181,20 @@ func (s *SettingsService) Reset() (model.Settings, error) {
 	if err := s.store.SaveSettings(defaults); err != nil {
 		return model.Settings{}, err
 	}
+	emitSettingsChanged(defaults)
 	return defaults, nil
+}
+
+// emitSettingsChanged broadcasts a successful settings mutation so the tray
+// menu, the hotkey wiring and the frontend can follow changes made from another
+// surface. The application may not exist yet (unit tests, early startup), in
+// which case there is nobody to notify.
+func emitSettingsChanged(settings model.Settings) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	app.Event.Emit("settings:changed", settings)
 }
 
 func validateJSONObject(value string) error {

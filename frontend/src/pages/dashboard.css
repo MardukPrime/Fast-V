@@ -385,3 +385,66 @@
   font-size: var(--fs-caption);
   line-height: 1.6;
 }
+
+/* ================================================================
+   M10 · 强调色主题：顶栏代理模式胶囊
+   调色板与派生变量由 styles.css 末尾的强调色主题层定义
+   （<html data-accent="sky|violet|emerald|amber|rose">），这里只把
+   原先写死的天蓝色换成当前强调色，深浅两套主题分别覆盖。
+   ================================================================ */
+
+.topbar .topbar-mode-option.active {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: linear-gradient(145deg, var(--accent-tint-strong), var(--accent-tint));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 4px 12px var(--accent-glow);
+}
+
+/* Hover on the selected segment keeps the accent tint instead of the
+   generic white hover wash from the base rule. */
+.topbar .topbar-mode-option.active:hover:not(:disabled) {
+  color: var(--accent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 30%, transparent), var(--accent-tint));
+}
+
+.topbar .topbar-mode-option.active .topbar-mode-dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.topbar .topbar-mode-select {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background-color: var(--accent-tint);
+}
+
+.topbar .topbar-mode-select:focus,
+.topbar .topbar-mode-select:focus-visible {
+  border-color: var(--accent-line);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-option.active {
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  color: var(--accent-strong);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 18%, rgba(255, 255, 255, 0.88)), color-mix(in srgb, var(--accent) 7%, rgba(255, 255, 255, 0.6)));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 4px 12px color-mix(in srgb, var(--accent) 14%, rgba(54, 80, 106, 0.12));
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-option.active:hover:not(:disabled) {
+  color: var(--accent-strong);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 24%, rgba(255, 255, 255, 0.9)), color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.66)));
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-select {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  color: var(--accent-strong);
+  background-color: color-mix(in srgb, var(--accent) 8%, rgba(255, 255, 255, 0.78));
+}

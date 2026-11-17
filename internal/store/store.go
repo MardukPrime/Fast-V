@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 4
+const storeVersion = 5
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -98,6 +98,7 @@ func DefaultSettings() Settings {
 	return Settings{
 		Theme:                 "light",
 		Language:              "zh-CN",
+		AccentColor:           "sky",
 		LayoutMode:            "sidebar",
 		DockTransparency:      28,
 		AutoUpdate:            false,
@@ -125,6 +126,7 @@ func DefaultSettings() Settings {
 		InboundPassword:       "",
 		CloseToTray:           false,
 		MinimizeToTray:        false,
+		HotkeysEnabled:        true,
 		AutoCheckUpdate:       true,
 		StatsEnabled:          true,
 
@@ -220,6 +222,10 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Version < 4 {
 		loaded.Settings.AutoCheckUpdate = true
 	}
+	// v5 added accent color presets and global hotkeys.
+	if loaded.Version < 5 {
+		loaded.Settings.HotkeysEnabled = true
+	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion
 	}
@@ -266,6 +272,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.Language == "" {
 		value.Language = fallback.Language
+	}
+	if value.AccentColor == "" {
+		value.AccentColor = fallback.AccentColor
 	}
 	if value.SystemProxyMode == "" {
 		value.SystemProxyMode = fallback.SystemProxyMode

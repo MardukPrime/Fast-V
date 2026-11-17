@@ -6,7 +6,7 @@
 
 Windows 10/11 · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.2.0--pre.1-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.2.0--pre.2-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -191,7 +191,7 @@ TUN 模式需要：
 
 ## 下载
 
-首个预发布版本（`v0.2.0-pre.1`，pre-release）由 GitHub Actions 自动构建：
+首个预发布版本（`v0.2.0-pre.2`，pre-release）由 GitHub Actions 自动构建：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - Windows x64 便携包：`FastV-<version>-windows-amd64.zip`，解压后运行 `Fast-V.exe`
@@ -290,8 +290,9 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 实时流量统计与每日流量历史（Xray StatsService）
 - 网络诊断与 10 项一键自检
 - 运行日志（筛选、暂停、导出）
-- 配置备份与恢复、开机自启、系统托盘、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
-- 深色 / 浅色 / 跟随系统主题（默认浅色）
+- 配置备份与恢复、开机自启、系统托盘（代理模式切换与重启代理）、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
+- 全局快捷键（Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换代理模式、Ctrl+Shift+N 下一个启用节点）
+- 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
 
 当前仅支持 Xray-core。
 

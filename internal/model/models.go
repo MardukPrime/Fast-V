@@ -22,6 +22,7 @@ type AppInfo struct {
 type Settings struct {
 	Theme                     string `json:"theme"`
 	Language                  string `json:"language"`
+	AccentColor               string `json:"accentColor"`
 	LayoutMode                string `json:"layoutMode"`
 	DockTransparency          int    `json:"dockTransparency"`
 	AutoUpdate                bool   `json:"autoUpdate"`
@@ -55,6 +56,7 @@ type Settings struct {
 	InboundPassword           string `json:"inboundPassword"`
 	CloseToTray               bool   `json:"closeToTray"`
 	MinimizeToTray            bool   `json:"minimizeToTray"`
+	HotkeysEnabled            bool   `json:"hotkeysEnabled"`
 	AutoCheckUpdate           bool   `json:"autoCheckUpdate"`
 	StatsEnabled              bool   `json:"statsEnabled"`
 	AutoSelectEnabled         bool   `json:"autoSelectEnabled"`

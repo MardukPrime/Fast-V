@@ -10,9 +10,11 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
+	"github.com/MardukPrime/Fast-V/internal/hotkey"
 	"github.com/MardukPrime/Fast-V/internal/model"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
+	settingsservice "github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
 
@@ -32,24 +34,32 @@ const (
 // All menu mutations after construction run on the UI thread (see apply):
 // Wails menu items update the native Win32/AppKit menu directly.
 type trayController struct {
-	app    *application.App
-	store  *store.Store
-	window *application.WebviewWindow
-	proxy  *proxyservice.ProxyService
-	appSvc *appservice.AppService
+	app         *application.App
+	store       *store.Store
+	window      *application.WebviewWindow
+	proxy       *proxyservice.ProxyService
+	settingsSvc *settingsservice.SettingsService
+	appSvc      *appservice.AppService
 
 	tray *application.SystemTray
 	menu *application.Menu
 
-	startItem *application.MenuItem
-	stopItem  *application.MenuItem
-	nodesItem *application.MenuItem
-	nodesMenu *application.Menu
-	checkItem *application.MenuItem
+	startItem   *application.MenuItem
+	stopItem    *application.MenuItem
+	restartItem *application.MenuItem
+	modeMenu    *application.Menu
+	modeItems   map[string]*application.MenuItem
+	nodesItem   *application.MenuItem
+	nodesMenu   *application.Menu
+	checkItem   *application.MenuItem
 
 	// nodesSignature detects changes to the enabled node list so the submenu is
 	// only rebuilt when its contents actually changed.
 	nodesSignature string
+
+	// lastState keeps the latest proxy state snapshot so the tooltip can be
+	// re-rendered when the settings change without a new proxy event.
+	lastState model.ProxyState
 }
 
 // newTray creates the system tray, its menu and the close/minimize-to-tray
@@ -60,6 +70,7 @@ func newTray(
 	st *store.Store,
 	window *application.WebviewWindow,
 	proxy *proxyservice.ProxyService,
+	settingsSvc *settingsservice.SettingsService,
 	appSvc *appservice.AppService,
 ) *trayController {
 	if app == nil || window == nil {
@@ -67,11 +78,12 @@ func newTray(
 	}
 
 	tray := &trayController{
-		app:    app,
-		store:  st,
-		window: window,
-		proxy:  proxy,
-		appSvc: appSvc,
+		app:         app,
+		store:       st,
+		window:      window,
+		proxy:       proxy,
+		settingsSvc: settingsSvc,
+		appSvc:      appSvc,
 	}
 	tray.tray = app.SystemTray.New()
 	tray.tray.SetIcon(trayIconPNG())
@@ -84,8 +96,8 @@ func newTray(
 	return tray
 }
 
-// buildMenu assembles the static tray menu. Dynamic labels and the node
-// submenu contents are refreshed later by applyProxyState.
+// buildMenu assembles the static tray menu. Dynamic labels and the node/mode
+// submenu contents are refreshed later by the event listeners.
 func (t *trayController) buildMenu() {
 	menu := application.NewMenu()
 
@@ -99,6 +111,17 @@ func (t *trayController) buildMenu() {
 
 	t.stopItem = menu.Add("停止代理")
 	t.stopItem.OnClick(func(*application.Context) { t.stopProxy() })
+
+	t.restartItem = menu.Add("重启代理")
+	t.restartItem.OnClick(func(*application.Context) { t.restartProxy() })
+
+	t.modeMenu = menu.AddSubmenu("代理模式")
+	t.modeItems = make(map[string]*application.MenuItem, len(hotkey.ProxyModes()))
+	for _, mode := range hotkey.ProxyModes() {
+		item := t.modeMenu.AddRadio(hotkey.ProxyModeLabel(mode), false)
+		item.OnClick(func(*application.Context) { t.setProxyMode(mode) })
+		t.modeItems[mode] = item
+	}
 
 	menu.AddSeparator()
 
@@ -114,6 +137,7 @@ func (t *trayController) buildMenu() {
 
 	t.menu = menu
 	t.applyIdleState()
+	t.applySettings(t.storeSettings())
 	t.syncNodes(t.activeNodeID())
 }
 
@@ -124,6 +148,9 @@ func (t *trayController) applyIdleState() {
 	}
 	if t.stopItem != nil {
 		t.stopItem.SetEnabled(false)
+	}
+	if t.restartItem != nil {
+		t.restartItem.SetEnabled(false)
 	}
 }
 
@@ -146,6 +173,16 @@ func (t *trayController) listen() {
 			t.refreshMenu()
 		})
 	})
+	// Any surface can save the settings (settings page, tray mode items, global
+	// hotkeys). Following the broadcast keeps the mode check marks and the
+	// tooltip correct without re-reading the store on a timer.
+	t.app.Event.On("settings:changed", func(event *application.CustomEvent) {
+		settings, ok := event.Data.(model.Settings)
+		if !ok {
+			return
+		}
+		t.apply(func() { t.applySettings(settings) })
+	})
 }
 
 // apply runs fn on the UI thread, where the native menus and tray must be
@@ -160,9 +197,13 @@ func (t *trayController) apply(fn func()) {
 // applyProxyState refreshes the tooltip and menu items from a proxy state
 // snapshot.
 func (t *trayController) applyProxyState(state model.ProxyState) {
-	if t.tray != nil {
-		t.tray.SetTooltip(proxyTooltip(state))
-	}
+	t.lastState = state
+
+	// The mode radio items follow the persisted setting, while the tooltip uses
+	// the mode the running core reports when it has one.
+	settings := t.storeSettings()
+	t.applyModeChecks(settings.ProxyMode)
+	t.refreshTooltip(settings)
 
 	busy := state.Status == "starting" || state.Status == "running" || state.Status == "stopping"
 	if t.startItem != nil {
@@ -170,6 +211,10 @@ func (t *trayController) applyProxyState(state model.ProxyState) {
 	}
 	if t.stopItem != nil {
 		t.stopItem.SetEnabled(state.Status == "running" || state.Status == "starting")
+	}
+	if t.restartItem != nil {
+		// "重启代理" is only meaningful once the proxy is actually running.
+		t.restartItem.SetEnabled(state.Status == "running")
 	}
 
 	activeNodeID := strings.TrimSpace(state.NodeID)
@@ -300,6 +345,107 @@ func (t *trayController) switchNode(id string) {
 	t.apply(func() { t.applyProxyState(state) })
 }
 
+// restartProxy restarts a running proxy from the tray menu. The menu item is
+// disabled while the proxy is stopped, so clicking it only happens while a
+// restart is meaningful.
+func (t *trayController) restartProxy() {
+	if t == nil || t.proxy == nil {
+		return
+	}
+	state, err := t.proxy.Restart()
+	if err != nil {
+		t.emitLog("error", "从托盘重启代理失败："+err.Error())
+		return
+	}
+	// Restart emits proxy:state while the proxy is running; applying the
+	// snapshot here also covers the (disabled) stopped case.
+	t.apply(func() { t.applyProxyState(state) })
+}
+
+// setProxyMode persists the requested proxy mode and restarts a running proxy
+// so the new routing mode takes effect immediately. The settings service
+// validates the payload and broadcasts "settings:changed", which refreshes the
+// check marks and the tooltip through the listener installed in listen.
+func (t *trayController) setProxyMode(mode string) {
+	if t == nil || t.store == nil || t.settingsSvc == nil {
+		return
+	}
+	if _, known := t.modeItems[mode]; !known {
+		return
+	}
+	settings := t.store.Settings()
+	if settings.ProxyMode == mode {
+		t.apply(func() { t.applySettings(settings) })
+		return
+	}
+	settings.ProxyMode = mode
+	saved, err := t.settingsSvc.Save(settings)
+	if err != nil {
+		t.emitLog("error", "从托盘切换代理模式失败："+err.Error())
+		// A rejected save leaves the persisted mode untouched; re-sync the
+		// check marks with it.
+		t.apply(func() { t.applySettings(t.storeSettings()) })
+		return
+	}
+	t.emitLog("info", "代理模式已切换为"+hotkey.ProxyModeLabel(saved.ProxyMode))
+	t.apply(func() { t.applySettings(saved) })
+
+	if t.proxy == nil {
+		return
+	}
+	state := t.proxy.State()
+	if state.Status != "running" && state.Status != "starting" {
+		return
+	}
+	if _, err := t.proxy.Restart(); err != nil {
+		t.emitLog("error", "切换代理模式后重启代理失败："+err.Error())
+	}
+}
+
+// storeSettings returns the persisted settings, tolerating a nil store during
+// construction.
+func (t *trayController) storeSettings() model.Settings {
+	if t == nil || t.store == nil {
+		return model.Settings{}
+	}
+	return t.store.Settings()
+}
+
+// applySettings refreshes everything that depends on the persisted settings:
+// the checked proxy mode radio item and the tooltip.
+func (t *trayController) applySettings(settings model.Settings) {
+	if t == nil {
+		return
+	}
+	t.applyModeChecks(settings.ProxyMode)
+	t.refreshTooltip(settings)
+}
+
+// applyModeChecks marks the radio item matching mode as checked and every other
+// mode item as unchecked.
+func (t *trayController) applyModeChecks(mode string) {
+	for itemMode, item := range t.modeItems {
+		if item == nil {
+			continue
+		}
+		item.SetChecked(itemMode == mode)
+	}
+}
+
+// refreshTooltip renders the tooltip from the last proxy state plus the current
+// settings. The running state's own mode wins while the proxy is active because
+// it describes what the core is actually doing.
+func (t *trayController) refreshTooltip(settings model.Settings) {
+	if t == nil || t.tray == nil {
+		return
+	}
+	mode := strings.TrimSpace(t.lastState.ProxyMode)
+	if mode == "" {
+		mode = settings.ProxyMode
+	}
+	t.tray.SetTooltip(proxyTooltip(t.lastState, mode))
+}
+
 // checkForUpdates runs the application update check from the tray menu. The
 // result is broadcast by AppService as "app:update" (model.UpdateInfo); the main
 // window is shown so the user can see the result.
@@ -419,15 +565,31 @@ func trayNodes(st *store.Store) []model.Node {
 	return enabled
 }
 
-// proxyTooltip renders the tray tooltip for the current proxy state.
-func proxyTooltip(state model.ProxyState) string {
+// proxyTooltip renders the tray tooltip for the current proxy state, including
+// the active proxy mode while the proxy is starting or running (for example
+// 「FastV - 代理运行中：香港01 · 规则分流」).
+func proxyTooltip(state model.ProxyState, mode string) string {
 	name := strings.TrimSpace(state.NodeName)
+	modeLabel := ""
+	if strings.TrimSpace(mode) != "" {
+		modeLabel = hotkey.ProxyModeLabel(mode)
+	}
 	switch state.Status {
 	case "starting":
+		if modeLabel != "" {
+			return "FastV - 正在启动代理 · " + modeLabel
+		}
 		return "FastV - 正在启动代理"
 	case "running":
+		parts := make([]string, 0, 2)
 		if name != "" {
-			return "FastV - 代理运行中：" + truncateLabel(name, trayLabelWidth)
+			parts = append(parts, truncateLabel(name, trayLabelWidth))
+		}
+		if modeLabel != "" {
+			parts = append(parts, modeLabel)
+		}
+		if len(parts) > 0 {
+			return "FastV - 代理运行中：" + strings.Join(parts, " · ")
 		}
 		return "FastV - 代理运行中"
 	case "stopping":
