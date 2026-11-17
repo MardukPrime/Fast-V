@@ -5,6 +5,7 @@ import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/inter
 import type { BatchResult, NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
+import "./servers.css";
 
 type ServersProps = {
   onNavigate: (page: string) => void;
@@ -107,7 +108,6 @@ export default function ServersPage(props: ServersProps) {
   const [testingAll, setTestingAll] = createSignal(false);
   const [busyID, setBusyID] = createSignal("");
   const [sortMode, setSortMode] = createSignal<SortMode>("default");
-  const [copiedID, setCopiedID] = createSignal("");
 
   // Batch node selection and sharing QR dialog state.
   const [selectedIDs, setSelectedIDs] = createSignal<Set<string>>(new Set());
@@ -122,7 +122,6 @@ export default function ServersPage(props: ServersProps) {
   const [qrError, setQRError] = createSignal("");
   const [qrTarget, setQRTarget] = createSignal<NodeView | null>(null);
 
-  let copyTimer: number | undefined;
   let pageNoticeTimer: number | undefined;
   // Only the latest QR request is allowed to update the dialog (the user may
   // close it or open another node while the previous request is in flight).
@@ -151,7 +150,6 @@ export default function ServersPage(props: ServersProps) {
 
   onCleanup(() => {
     alive = false;
-    if (copyTimer !== undefined) window.clearTimeout(copyTimer);
     if (pageNoticeTimer !== undefined) window.clearTimeout(pageNoticeTimer);
   });
 
@@ -357,32 +355,6 @@ export default function ServersPage(props: ServersProps) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyID("");
-    }
-  };
-
-  const copyLink = async (node: NodeView) => {
-    setError("");
-    try {
-      const links = await NodeService.ExportLinks([node.id]);
-      const link = links?.[0]?.link ?? "";
-      if (!link) {
-        setError("该节点没有可导出的分享链接。");
-        return;
-      }
-      if (!navigator.clipboard?.writeText) {
-        setError("当前环境不支持剪贴板，无法复制分享链接。");
-        return;
-      }
-      await navigator.clipboard.writeText(link);
-      setCopiedID(node.id);
-      showPageNotice(`已复制「${node.name}」的分享链接。`);
-      if (copyTimer !== undefined) window.clearTimeout(copyTimer);
-      copyTimer = window.setTimeout(() => {
-        setCopiedID("");
-        copyTimer = undefined;
-      }, 1600);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -893,15 +865,15 @@ export default function ServersPage(props: ServersProps) {
   };
 
   return (
-    <div class="page-stack">
+    <div class="page-stack srv-page">
       <section class="mini-stats">
         <div class="mini-stat"><span>全部节点</span><strong>{nodes().length}</strong><small>{enabledCount()} 个启用</small></div>
         <div class="mini-stat"><span>当前节点</span><strong>{activeCount()}</strong><small>已选择</small></div>
         <div class="mini-stat"><span>筛选结果</span><strong>{filteredNodes().length}</strong><small>当前列表</small></div>
       </section>
 
-      <section class="panel node-panel">
-        <div class="panel-heading node-heading">
+      <section class="panel srv-panel">
+        <div class="panel-heading srv-heading">
           <div class="heading-with-icon">
             <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
             <div>
@@ -909,86 +881,121 @@ export default function ServersPage(props: ServersProps) {
               <span>编辑节点配置、快速切换当前节点和测试连通性</span>
             </div>
           </div>
-          <button
-            class="btn secondary"
-            onClick={testAll}
-            disabled={urlTestBusy() || filteredNodes().length === 0}
-            title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
-          >
-            <Icon name="refresh" size={14} /> {testingAll() ? "测速中..." : "测试当前列表"}
-          </button>
+          <div class="srv-heading-actions">
+            <select
+              class="srv-quick-switch"
+              value={activeNodeID()}
+              onChange={(event) => switchActiveNode(event.currentTarget.value)}
+              disabled={nodes().length === 0 || busyID() !== ""}
+              aria-label="快速切换当前节点"
+              title="快速切换当前节点"
+            >
+              <option value="">快速切换节点</option>
+              <For each={nodes().filter((node) => node.enabled)}>
+                {(node) => <option value={node.id} selected={node.id === activeNodeID()}>{node.active ? "✓ " : ""}{node.name}</option>}
+              </For>
+            </select>
+            <button
+              class="btn secondary srv-test-list"
+              onClick={testAll}
+              disabled={urlTestBusy() || filteredNodes().length === 0}
+              title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
+            >
+              <Icon name="refresh" size={14} /> {testingAll() ? "测速中..." : "测试当前列表"}
+            </button>
+          </div>
         </div>
 
-        <div class="node-toolbar">
-          <label class="node-search">
+        <div class="srv-toolbar">
+          <label class="srv-search">
             <Icon name="search" size={14} />
             <input
               value={search()}
               onInput={(event) => setSearch(event.currentTarget.value)}
               placeholder="搜索节点、标签、地址或订阅"
+              aria-label="搜索节点"
             />
           </label>
-          <select class="quick-switch-select" value={activeNodeID()} onChange={(event) => switchActiveNode(event.currentTarget.value)} disabled={nodes().length === 0 || busyID() !== ""}>
-            <option value="">快速切换节点</option>
-            <For each={nodes().filter((node) => node.enabled)}>
-              {(node) => <option value={node.id} selected={node.id === activeNodeID()}>{node.active ? "✓ " : ""}{node.name}</option>}
-            </For>
-          </select>
-          <select value={protocol()} onChange={(event) => setProtocol(event.currentTarget.value)}>
-            <option value="">全部协议</option>
-            <For each={protocolOptions}>{(item) => <option value={item}>{item}</option>}</For>
-          </select>
-          <select value={subscriptionID()} onChange={(event) => setSubscriptionID(event.currentTarget.value)}>
-            <option value="">全部订阅</option>
-            <For each={subscriptions()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
-          </select>
-          <select class="node-tag-filter" value={tagFilter()} onChange={(event) => setTagFilter(event.currentTarget.value)} title="按标签筛选节点" aria-label="按标签筛选节点">
-            <option value="">全部标签</option>
-            <For each={tags()}>{(tag) => <option value={tag}>{tag}</option>}</For>
-          </select>
-          <select class="node-sort" value={sortMode()} onChange={(event) => { const value = event.currentTarget.value; if (isSortMode(value)) setSortMode(value); }} aria-label="节点排序方式">
-            <For each={sortOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
-          </select>
-          <button class="btn secondary" onClick={openImport} disabled={loading()}>
-            <Icon name="plus" size={14} /> 导入节点
-          </button>
-          <button class="btn ghost icon-only" onClick={load} disabled={loading()} aria-label="刷新节点">
-            <Icon name="refresh" size={14} />
-          </button>
+          <div class="srv-filters" role="group" aria-label="筛选与排序">
+            <span class="srv-filter-label" aria-hidden="true">筛选</span>
+            <select
+              class="srv-select srv-select-protocol"
+              value={protocol()}
+              onChange={(event) => setProtocol(event.currentTarget.value)}
+              aria-label="按协议筛选"
+              title="按协议筛选"
+            >
+              <option value="">全部协议</option>
+              <For each={protocolOptions}>{(item) => <option value={item}>{protocolLabel(item)}</option>}</For>
+            </select>
+            <select
+              class="srv-select srv-select-tag"
+              value={tagFilter()}
+              onChange={(event) => setTagFilter(event.currentTarget.value)}
+              aria-label="按标签筛选节点"
+              title="按标签筛选节点"
+            >
+              <option value="">全部标签</option>
+              <For each={tags()}>{(tag) => <option value={tag}>{tag}</option>}</For>
+            </select>
+            <select
+              class="srv-select srv-select-sub"
+              value={subscriptionID()}
+              onChange={(event) => setSubscriptionID(event.currentTarget.value)}
+              aria-label="按订阅筛选"
+              title="按订阅筛选"
+            >
+              <option value="">全部订阅</option>
+              <For each={subscriptions()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
+            </select>
+            <span class="srv-filter-sep" aria-hidden="true" />
+            <select
+              class="srv-select srv-select-sort"
+              value={sortMode()}
+              onChange={(event) => { const value = event.currentTarget.value; if (isSortMode(value)) setSortMode(value); }}
+              aria-label="节点排序方式"
+              title="节点排序方式"
+            >
+              <For each={sortOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+            </select>
+          </div>
+          <div class="srv-tools">
+            <button class="btn secondary srv-import" onClick={openImport} disabled={loading()}>
+              <Icon name="plus" size={14} /> 导入节点
+            </button>
+            <button class="btn ghost icon-only srv-refresh" onClick={load} disabled={loading()} aria-label="刷新节点" title="刷新节点">
+              <Icon name="refresh" size={14} />
+            </button>
+          </div>
         </div>
 
-        <Show when={filteredNodes().length > 0}>
-          <div classList={{ "node-batch-bar": true, active: selectedCount() > 0 }} aria-label="批量操作">
-            <Show
-              when={selectedCount() > 0}
-              fallback={<span class="node-batch-hint">勾选左侧复选框即可批量启用、禁用、复制、删除或设置标签。</span>}
-            >
-              <span class="node-batch-count">已选 <strong>{selectedCount()}</strong> 项</span>
-            </Show>
-            <div class="node-batch-actions">
+        <Show when={selectedCount() > 0}>
+          <div class="srv-batch-bar" role="region" aria-label="批量操作">
+            <span class="srv-batch-count">已选 <strong>{selectedCount()}</strong> 项</span>
+            <div class="srv-batch-actions">
               <button class="btn ghost compact" type="button" onClick={toggleSelectAll} disabled={batchBusyActive() || selectableIDs().length === 0}>
                 {allSelected() ? "取消全选" : "全选"}
               </button>
               <button class="btn ghost compact" type="button" onClick={invertSelection} disabled={batchBusyActive() || selectableIDs().length === 0}>
                 反选
               </button>
-              <button class="btn ghost compact" type="button" onClick={clearSelection} disabled={batchBusyActive() || selectedCount() === 0}>
+              <button class="btn ghost compact" type="button" onClick={clearSelection} disabled={batchBusyActive()}>
                 清空选择
               </button>
-              <span class="node-batch-divider" aria-hidden="true" />
-              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(true)} disabled={batchBusyActive() || selectedCount() === 0}>
+              <span class="srv-batch-divider" aria-hidden="true" />
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(true)} disabled={batchBusyActive()}>
                 <Icon name="check" size={13} /> {batchBusy() === "enable" ? "启用中..." : "批量启用"}
               </button>
-              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(false)} disabled={batchBusyActive() || selectedCount() === 0}>
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(false)} disabled={batchBusyActive()}>
                 <Icon name="stop" size={13} /> {batchBusy() === "disable" ? "禁用中..." : "批量禁用"}
               </button>
-              <button class="btn secondary compact" type="button" onClick={() => void runBatchCopyLinks()} disabled={batchBusyActive() || selectedCount() === 0}>
+              <button class="btn secondary compact" type="button" onClick={() => void runBatchCopyLinks()} disabled={batchBusyActive()}>
                 <CopyLinkIcon /> {batchBusy() === "copy" ? "复制中..." : "批量复制链接"}
               </button>
-              <button class="btn secondary compact" type="button" onClick={openBatchTagEditor} disabled={batchBusyActive() || selectedCount() === 0}>
+              <button class="btn secondary compact" type="button" onClick={openBatchTagEditor} disabled={batchBusyActive()}>
                 <Icon name="edit" size={13} /> 设置标签
               </button>
-              <button class="btn danger compact" type="button" onClick={() => void runBatchDelete()} disabled={batchBusyActive() || selectedCount() === 0}>
+              <button class="btn danger compact" type="button" onClick={() => void runBatchDelete()} disabled={batchBusyActive()}>
                 <Icon name="trash" size={13} /> {batchBusy() === "delete" ? "删除中..." : "批量删除"}
               </button>
             </div>
@@ -996,7 +1003,7 @@ export default function ServersPage(props: ServersProps) {
         </Show>
 
         <Show when={pageNotice()}>
-          <div class="alert success node-import-notice">
+          <div class="alert success srv-notice">
             <span class="alert-message"><Icon name="check" size={15} /> {pageNotice()}</span>
             <button class="icon-button" onClick={() => setPageNotice("")} aria-label="关闭导入提示">
               <Icon name="close" size={14} />
@@ -1005,7 +1012,7 @@ export default function ServersPage(props: ServersProps) {
         </Show>
 
         <Show when={error()}>
-          <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {error()}</span></div>
+          <div class="alert error srv-notice"><span class="alert-message"><Icon name="alert" size={15} /> {error()}</span></div>
         </Show>
 
         <Show when={!loading()} fallback={<div class="empty-state">正在读取节点...</div>}>
@@ -1022,12 +1029,12 @@ export default function ServersPage(props: ServersProps) {
               </Show>
             </div>
           }>
-            <div class="node-table">
-              <div class="node-table-head">
-                <label class="node-select-all" title="全选当前列表">
+            <div class="srv-table">
+              <div class="srv-table-head">
+                <label class="srv-select-all" title="全选当前列表">
                   <input
                     ref={(element) => { selectAllRef = element; }}
-                    class="node-select"
+                    class="srv-check"
                     type="checkbox"
                     checked={allSelected()}
                     disabled={batchBusyActive() || selectableIDs().length === 0}
@@ -1035,20 +1042,20 @@ export default function ServersPage(props: ServersProps) {
                     aria-label="全选当前列表"
                   />
                 </label>
-                <span>节点</span>
-                <span>协议</span>
-                <span>地址</span>
-                <span>延迟</span>
-                <span>状态</span>
-                <span>操作</span>
+                <span class="srv-col-name">节点</span>
+                <span class="srv-col-protocol">协议</span>
+                <span class="srv-col-address">地址</span>
+                <span class="srv-col-latency">延迟</span>
+                <span class="srv-col-state">状态</span>
+                <span class="srv-col-actions">操作</span>
               </div>
               <For each={sortedNodes()}>
                 {(node) => (
-                  <div classList={{ "node-row": true, active: node.active, disabled: !node.enabled, selected: selectedIDs().has(node.id) }}>
-                    <div class="node-select-cell">
-                      <label class="node-select-label" title={selectedIDs().has(node.id) ? "取消选择该节点" : "选择该节点"}>
+                  <div classList={{ "srv-row": true, active: node.active, disabled: !node.enabled, selected: selectedIDs().has(node.id) }}>
+                    <div class="srv-cell-select">
+                      <label class="srv-check-label" title={selectedIDs().has(node.id) ? "取消选择该节点" : "选择该节点"}>
                         <input
-                          class="node-select"
+                          class="srv-check"
                           type="checkbox"
                           checked={selectedIDs().has(node.id)}
                           disabled={batchBusyActive()}
@@ -1057,7 +1064,7 @@ export default function ServersPage(props: ServersProps) {
                         />
                       </label>
                       <button
-                        classList={{ "node-radio": true, selected: node.active }}
+                        classList={{ "srv-radio": true, selected: node.active }}
                         aria-label={node.active ? "当前节点" : `将 ${node.name} 设为当前节点`}
                         onClick={() => switchActiveNode(node.id)}
                         disabled={busyID() === node.id}
@@ -1065,16 +1072,16 @@ export default function ServersPage(props: ServersProps) {
                         <span />
                       </button>
                     </div>
-                    <div class="node-name">
-                      <div class="node-name-main">
-                        <strong title={node.name}>{node.name}</strong>
+                    <div class="srv-node">
+                      <div class="srv-node-main">
+                        <strong class="srv-node-name" title={node.name}>{node.name}</strong>
                         <Show when={node.manual}>
-                          <span class="tag manual" title="通过分享链接手动导入的节点">手动</span>
+                          <span class="srv-chip srv-chip-manual" title="通过分享链接手动导入的节点">手动</span>
                         </Show>
                         <Show when={node.tag}>
                           <button
                             type="button"
-                            class="tag node-tag-chip"
+                            class="srv-chip srv-chip-tag"
                             onClick={() => openNodeTagEditor(node)}
                             disabled={batchBusyActive() || tagBusy()}
                             title={`标签：${node.tag}（点击编辑）`}
@@ -1084,22 +1091,24 @@ export default function ServersPage(props: ServersProps) {
                           </button>
                         </Show>
                       </div>
-                      <small>{node.subscriptionName || (node.manual ? "手动添加" : "")}</small>
+                      <small class="srv-node-sub">{node.subscriptionName || (node.manual ? "手动添加" : "")}</small>
                     </div>
-                    <span class="tag neutral">{node.protocol}</span>
-                    <span class="node-address">{node.address}:{node.port}</span>
-                    <span>{latencyLabel(node)}</span>
+                    <span class="srv-proto" title={protocolLabel(node.protocol)}>{protocolLabel(node.protocol)}</span>
+                    <span class="srv-addr" title={`${node.address}:${node.port}`}>{node.address}:{node.port}</span>
+                    <span class="srv-latency-cell">{latencyLabel(node)}</span>
                     <button
-                      classList={{ "state-pill": true, on: node.enabled }}
+                      classList={{ "srv-state": true, on: node.enabled }}
                       onClick={() => toggleEnabled(node)}
                       disabled={busyID() === node.id}
+                      aria-label={`${node.enabled ? "禁用" : "启用"} ${node.name}`}
+                      title={node.enabled ? "点击禁用该节点" : "点击启用该节点"}
                     >
                       <span class="status-dot" />
                       {node.enabled ? "启用" : "禁用"}
                     </button>
-                    <div class="node-actions">
+                    <div class="srv-actions">
                       <button
-                        classList={{ "icon-button": true, "favorite-button": true, on: node.favorite }}
+                        classList={{ "srv-action": true, "srv-favorite": true, on: node.favorite }}
                         onClick={() => toggleFavorite(node)}
                         aria-pressed={node.favorite}
                         aria-label={node.favorite ? `取消收藏 ${node.name}` : `收藏 ${node.name}`}
@@ -1108,37 +1117,40 @@ export default function ServersPage(props: ServersProps) {
                         <FavoriteStarIcon filled={node.favorite} />
                       </button>
                       <button
-                        class="icon-button qr-button"
+                        classList={{ "srv-action": true, "srv-speed": true, running: testingID() === node.id }}
+                        onClick={() => testNode(node)}
+                        disabled={urlTestBusy()}
+                        aria-busy={testingID() === node.id}
+                        aria-label={`测试 ${node.name} 的真实链路延迟`}
+                        title={testingID() === node.id ? "测速中..." : "真实链路 HTTP 延迟测速（会临时启动 Xray）"}
+                      >
+                        <Icon name="speed" size={14} />
+                      </button>
+                      <button
+                        class="srv-action srv-qr"
                         onClick={() => void openNodeQRCode(node)}
                         disabled={batchBusyActive()}
                         aria-label={`查看 ${node.name} 的分享二维码`}
-                        title="分享二维码"
+                        title="分享二维码（弹窗内可复制链接）"
                       >
                         <QRCodeIcon />
                       </button>
                       <button
-                        classList={{ "icon-button": true, "copy-link": true, copied: copiedID() === node.id }}
-                        onClick={() => copyLink(node)}
+                        class="srv-action"
+                        onClick={() => openEditor(node)}
                         disabled={busyID() === node.id}
-                        aria-label={copiedID() === node.id ? "已复制分享链接" : `复制 ${node.name} 的分享链接`}
-                        title={copiedID() === node.id ? "已复制" : "复制分享链接"}
+                        aria-label={`编辑 ${node.name}`}
+                        title="编辑节点配置"
                       >
-                        <Show when={copiedID() === node.id} fallback={<CopyLinkIcon />}>
-                          <Icon name="check" size={14} />
-                        </Show>
-                      </button>
-                      <button
-                        class="btn secondary compact"
-                        onClick={() => testNode(node)}
-                        disabled={urlTestBusy()}
-                        title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
-                      >
-                        <Icon name="speed" size={13} /> {testingID() === node.id ? "测速中" : "测速"}
-                      </button>
-                      <button class="icon-button" onClick={() => openEditor(node)} disabled={busyID() === node.id} aria-label={`编辑 ${node.name}`}>
                         <Icon name="edit" size={14} />
                       </button>
-                      <button class="icon-button danger" onClick={() => removeNode(node)} disabled={busyID() === node.id} aria-label={`删除 ${node.name}`}>
+                      <button
+                        class="srv-action srv-danger"
+                        onClick={() => removeNode(node)}
+                        disabled={busyID() === node.id}
+                        aria-label={`删除 ${node.name}`}
+                        title="删除节点"
+                      >
                         <Icon name="trash" size={14} />
                       </button>
                     </div>
@@ -1149,7 +1161,7 @@ export default function ServersPage(props: ServersProps) {
           </Show>
         </Show>
 
-        <p class="node-hint">
+        <p class="srv-hint">
           「测速」为真实代理链路的 HTTP 延迟测试（会临时启动 Xray，可能耗时数秒）；没有真实链路结果时，延迟列回退显示 TCP 连通性结果。切换节点时会自动重启正在运行的代理。
         </p>
       </section>

@@ -1,0 +1,561 @@
+/* ------------------------------------------------------------------
+   Subscriptions page — quota-aware card rows.
+   Page-level styles for SubscriptionsPage.tsx. Every selector uses the
+   .sub-* prefix and consumes the shared design tokens declared at the
+   end of styles.css (--radius-*, --fs-*, --space-*, --accent, --text,
+   --muted, --faint, --glass-border, --success, --warning, --danger).
+   ------------------------------------------------------------------ */
+
+/* ---------- Card row list ---------- */
+.sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.sub-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) minmax(104px, 124px) auto;
+  grid-template-areas: "identity usage side actions";
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.014));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+@media (hover: hover) {
+  .sub-card:hover {
+    border-color: var(--glass-border-strong);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      0 10px 26px rgba(0, 0, 0, 0.12);
+  }
+}
+
+:root[data-theme="light"] .sub-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.44));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 22px rgba(32, 51, 70, 0.06);
+}
+
+/* Broken subscription: whole row carries the danger tone. */
+.sub-card.is-error {
+  border-color: color-mix(in srgb, var(--danger) 32%, var(--glass-border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--danger) 7%, transparent), transparent 68%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--danger) 72%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="light"] .sub-card.is-error {
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--danger) 6%, transparent), transparent 68%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.46));
+}
+
+.sub-card.is-busy {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border));
+}
+
+/* ---------- Left: avatar, name, status, host ---------- */
+.sub-identity {
+  grid-area: identity;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sub-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.sub-card.is-error .sub-avatar {
+  border-color: color-mix(in srgb, var(--danger) 26%, var(--glass-border));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.sub-identity-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sub-title-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sub-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.sub-badge .status-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.sub-badge.is-ok {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 24%, transparent);
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+}
+
+.sub-badge.is-ok .status-dot {
+  background: var(--success);
+}
+
+.sub-badge.is-error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 24%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+
+.sub-badge.is-error .status-dot {
+  background: var(--danger);
+}
+
+.sub-host {
+  overflow: hidden;
+  color: var(--faint);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+}
+
+.sub-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.sub-chip svg {
+  opacity: 0.65;
+}
+
+.sub-chip .status-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.sub-chip .status-dot.online {
+  background: var(--success);
+  box-shadow: none;
+}
+
+/* ---------- Middle: quota usage ---------- */
+.sub-usage {
+  grid-area: usage;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sub-usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sub-usage-label {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-usage-label strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sub-usage-pct {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.sub-usage-pct.is-warning {
+  color: var(--warning);
+}
+
+.sub-usage-pct.is-danger {
+  color: var(--danger);
+}
+
+.sub-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="light"] .sub-progress {
+  background: rgba(16, 23, 32, 0.08);
+  box-shadow: inset 0 1px 2px rgba(32, 51, 70, 0.1);
+}
+
+.sub-progress-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--success));
+  transition: width 240ms ease;
+}
+
+.sub-progress-fill.is-warning {
+  background: linear-gradient(90deg, var(--warning), var(--danger));
+}
+
+.sub-progress-fill.is-danger {
+  background: var(--danger);
+}
+
+.sub-usage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  color: var(--faint);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.sub-usage-meta span {
+  white-space: nowrap;
+}
+
+/* Total quota unknown: hide the bar and say so explicitly. */
+.sub-usage-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 36px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: var(--fs-caption);
+}
+
+:root[data-theme="light"] .sub-usage-empty {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.sub-usage-unknown {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sub-usage-note {
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ---------- Right: remaining days + last update ---------- */
+.sub-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--glass-border);
+}
+
+.sub-side-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sub-side-label {
+  color: var(--faint);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.sub-side-days {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-side-days.is-muted {
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.sub-side-days.is-warning {
+  color: var(--warning);
+}
+
+.sub-side-days.is-danger {
+  color: var(--danger);
+}
+
+.sub-side-note,
+.sub-side-value {
+  overflow: hidden;
+  font-size: var(--fs-caption);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub-side-note {
+  color: var(--faint);
+}
+
+.sub-side-value {
+  color: var(--text-secondary);
+}
+
+/* ---------- Actions ---------- */
+.sub-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sub-actions .btn {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: var(--fs-caption);
+}
+
+/* ---------- Inline error line ---------- */
+.sub-error {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-xs);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.sub-error svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
+}
+
+.sub-error span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Empty state ---------- */
+.sub-empty {
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+}
+
+.sub-empty .empty-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-md);
+}
+
+.sub-empty-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+  counter-reset: sub-step;
+}
+
+.sub-empty-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 10px 3px 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+:root[data-theme="light"] .sub-empty-steps li {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.sub-empty-steps li::before {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  content: counter(sub-step);
+  counter-increment: sub-step;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sub-empty .btn {
+  margin-top: var(--space-1);
+}
+
+/* ---------- Responsive ---------- */
+/* Narrow windows: usage and expiry fold under the identity/actions row. */
+@media (max-width: 1100px) {
+  .sub-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "identity actions"
+      "usage side";
+    row-gap: var(--space-3);
+  }
+
+  .sub-actions {
+    flex-wrap: nowrap;
+  }
+
+  .sub-side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    align-self: center;
+    justify-content: flex-end;
+    gap: var(--space-1) var(--space-4);
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* Very narrow: stack everything and let the actions wrap, never scroll sideways. */
+@media (max-width: 720px) {
+  .sub-card {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "identity"
+      "usage"
+      "side"
+      "actions";
+    row-gap: var(--space-3);
+  }
+
+  .sub-side {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: var(--space-2) var(--space-5);
+    padding: var(--space-3) 0 0;
+    border-top: 1px solid var(--glass-border);
+    border-left: 0;
+  }
+
+  .sub-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding-top: var(--space-1);
+  }
+
+  .sub-actions .btn {
+    flex: 1 1 calc(50% - var(--space-1));
+  }
+
+  .sub-actions .btn.danger {
+    flex: 0 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-card,
+  .sub-progress-fill {
+    transition: none;
+  }
+}

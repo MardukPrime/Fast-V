@@ -1,0 +1,387 @@
+/* ------------------------------------------------------------------
+   FastV v2 · 全局顶栏「代理模式」切换 + 概览页（连接中枢）页面级样式
+
+   说明：
+   - 本文件由 pages/DashboardPage.tsx 顶部 import，DashboardPage 在
+     App 启动时静态加载，因此顶栏代理模式控件的样式也随本文件全局生效
+     （本次改动不修改 styles.css）。
+   - 选择器刻意加高优先级（.topbar .xxx / .dashboard-page .xxx），避免
+     与 styles.css 中既有的组件规则和深浅主题覆盖互相打架。
+   - 只使用 styles.css 末尾定义的设计令牌；新写字号 >= 11px
+     （唯一例外是既有微标签，不新增 <11px 字号）。
+   ------------------------------------------------------------------ */
+
+/* ================================================================
+   全局顶栏 · 代理模式三段切换（规则 / 全局 / 直连）
+   ================================================================ */
+
+.topbar .topbar-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.topbar .topbar-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+}
+
+.topbar .topbar-mode-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 26px;
+  padding: 2px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.topbar .topbar-mode-option:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.topbar .topbar-mode-option.active {
+  border-color: rgba(182, 216, 239, 0.32);
+  color: var(--accent);
+  background: linear-gradient(145deg, rgba(182, 216, 239, 0.22), rgba(134, 182, 213, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 4px 12px rgba(90, 145, 180, 0.12);
+}
+
+.topbar .topbar-mode-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.topbar .topbar-mode-option.active .topbar-mode-dot {
+  opacity: 1;
+  box-shadow: 0 0 8px rgba(182, 216, 239, 0.55);
+}
+
+/* 切换中：选中态呼吸提示 + 按钮自身 disabled 变暗 */
+.topbar .topbar-mode.switching .topbar-mode-option.active {
+  animation: dash-mode-pulse 900ms ease-in-out infinite;
+}
+
+@keyframes dash-mode-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* 窄窗口降级：折叠成单个紧凑 select，避免挤压状态 chip */
+.topbar .topbar-mode-select {
+  display: none;
+  width: auto;
+  min-width: 96px;
+  min-height: 32px;
+  padding: 4px 28px 4px var(--space-3);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background-color: rgba(255, 255, 255, 0.035);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b3bcc9' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-switch {
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-option:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-option.active {
+  border-color: rgba(70, 123, 158, 0.32);
+  color: var(--accent-strong);
+  background: linear-gradient(145deg, rgba(70, 123, 158, 0.18), rgba(70, 123, 158, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 4px 12px rgba(54, 80, 106, 0.12);
+}
+
+:root[data-theme="light"] .topbar .topbar-mode-select {
+  border-color: rgba(44, 67, 90, 0.16);
+  color: var(--text-secondary);
+  background-color: rgba(255, 255, 255, 0.78);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235a6775' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* styles.css 的 :root[data-theme="light"] select 用了 background 简写，
+     会把 repeat/position 重置为默认值；这里显式重申一次性覆盖。 */
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
+}
+
+@media (max-width: 1100px) {
+  .topbar .topbar-mode-switch {
+    display: none;
+  }
+
+  .topbar .topbar-mode-select {
+    display: inline-block;
+  }
+}
+
+/* 切换失败：顶栏下方的轻量错误条（替代打断式弹窗） */
+.content > .topbar-mode-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: var(--space-2) auto 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid rgba(225, 154, 154, 0.24);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  background: rgba(225, 154, 154, 0.07);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.content > .topbar-mode-error > svg {
+  flex: 0 0 auto;
+}
+
+.content > .topbar-mode-error > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.content > .topbar-mode-error .topbar-mode-error-dismiss {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: inherit;
+  background: transparent;
+  opacity: 0.75;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.content > .topbar-mode-error .topbar-mode-error-dismiss:hover {
+  opacity: 1;
+  background: rgba(225, 154, 154, 0.14);
+}
+
+/* ================================================================
+   概览页 · 连接中枢（hero 压缩 + 会话流量并入 meta）
+   ================================================================ */
+
+.dashboard-page .connection-hero {
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.dashboard-page .connection-main {
+  gap: var(--space-3);
+}
+
+.dashboard-page .connection-orb {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-md);
+}
+
+.dashboard-page .connection-copy h2 {
+  margin-top: var(--space-1);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.dashboard-page .connection-copy p {
+  margin-top: var(--space-1);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.dashboard-page .connection-eyebrow {
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+}
+
+.dashboard-page .connection-meta {
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+/* 实时速率 + 本次会话累计：由原全宽「本次会话流量」卡片合并而来 */
+.dashboard-page .connection-meta .dash-hero-traffic {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-page .connection-meta .dash-hero-rate {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.dashboard-page .connection-meta .dash-hero-session {
+  color: var(--faint);
+}
+
+.dashboard-page .connection-meta .dash-hero-share {
+  display: inline-flex;
+  width: 52px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dashboard-page .connection-meta .dash-hero-share > span {
+  display: block;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.dashboard-page .connection-meta .dash-hero-share-down {
+  background: var(--accent);
+}
+
+.dashboard-page .connection-meta .dash-hero-share-up {
+  background: var(--success);
+}
+
+.dashboard-page .dash-hero-actions {
+  gap: var(--space-2);
+}
+
+.dashboard-page .dash-hero-actions .connection-toggle {
+  min-height: 40px;
+}
+
+/* 无当前节点：hero 中只保留一个主 CTA「选择节点」 */
+.dashboard-page .dash-hero-cta {
+  width: 100%;
+}
+
+:root[data-theme="light"] .dashboard-page .connection-meta .dash-hero-traffic {
+  border-color: rgba(44, 67, 90, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+:root[data-theme="light"] .dashboard-page .connection-meta .dash-hero-share {
+  background: rgba(44, 67, 90, 0.12);
+}
+
+@media (max-width: 860px) {
+  .dashboard-page .connection-hero {
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .dashboard-page .dash-hero-actions {
+    width: 100%;
+  }
+}
+
+/* ================================================================
+   概览页 · 套餐流量卡：最近到期订阅的剩余天数 / 到期日期
+   ================================================================ */
+
+.dashboard-page .dashboard-stat small.dash-plan-expiry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  overflow: hidden;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-page .dashboard-stat small.dash-plan-expiry svg {
+  flex: 0 0 auto;
+}
+
+.dashboard-page .dashboard-stat small.dash-plan-expiry.warning {
+  color: var(--warning);
+}
+
+.dashboard-page .dashboard-stat small.dash-plan-expiry.expired {
+  color: var(--danger);
+}
+
+/* ================================================================
+   概览页 · 空状态统一（当前节点 / 7 天流量 / 最近订阅）
+   ================================================================ */
+
+.dashboard-page .empty-state.dash-empty {
+  gap: var(--space-2);
+  min-height: 150px;
+  padding: var(--space-6) var(--space-4);
+}
+
+.dashboard-page .empty-state.dash-empty .empty-icon {
+  margin-bottom: var(--space-1);
+}
+
+.dashboard-page .empty-state.dash-empty strong {
+  font-size: var(--fs-body);
+  line-height: 1.4;
+}
+
+.dashboard-page .empty-state.dash-empty span {
+  max-width: 340px;
+  color: var(--faint);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+}

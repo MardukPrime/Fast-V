@@ -7,6 +7,7 @@ import { Service as HistoryService } from "../../bindings/github.com/MardukPrime
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import type { AppInfo, DailyTraffic, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView, TrafficStats } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import "./dashboard.css";
 
 type DashboardProps = {
   info: AppInfo | null;
@@ -60,6 +61,41 @@ function formatRate(value: number) {
   if (rate >= 1024 ** 2) return `${(rate / 1024 ** 2).toFixed(1)} MB/s`;
   if (rate >= 1024) return `${(rate / 1024).toFixed(1)} KB/s`;
   return `${rate.toFixed(1)} B/s`;
+}
+
+// Subscription backends report expiry as a unix timestamp in seconds; 0 means
+// "not provided". The plan card surfaces the nearest valid expiry because that
+// is the subscription the user has to renew first.
+function earliestExpireAt(subscriptions: SubscriptionView[] | null | undefined) {
+  let earliest = 0;
+  for (const sub of subscriptions ?? []) {
+    const value = Number(sub.expireAt ?? 0);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    if (earliest === 0 || value < earliest) earliest = value;
+  }
+  return earliest;
+}
+
+function planExpiryText(expireAtSeconds: number, now: number) {
+  const target = expireAtSeconds * 1000;
+  const date = new Date(target);
+  if (!expireAtSeconds || !Number.isFinite(target) || Number.isNaN(date.getTime())) return "";
+  const days = Math.ceil((target - now) / 86_400_000);
+  if (!Number.isFinite(days)) return "";
+  const dateLabel = `${date.getMonth() + 1}/${date.getDate()}`;
+  if (days < 0) return `已过期 · ${dateLabel}`;
+  if (days === 0) return `今天到期 · ${dateLabel}`;
+  return `剩余 ${days} 天 · ${dateLabel} 到期`;
+}
+
+function planExpiryLevel(expireAtSeconds: number, now: number) {
+  const target = expireAtSeconds * 1000;
+  if (!expireAtSeconds || !Number.isFinite(target)) return "none";
+  const days = Math.ceil((target - now) / 86_400_000);
+  if (!Number.isFinite(days)) return "none";
+  if (days < 0) return "expired";
+  if (days <= 7) return "warning";
+  return "ok";
 }
 
 // The weekly chart always shows a rolling seven-day window, so the backend only
@@ -206,6 +242,11 @@ export default function DashboardPage(props: DashboardProps) {
   const quotaPercent = () => usagePercent(summary()?.uploadBytes ?? 0, summary()?.downloadBytes ?? 0, totalBytes());
   const isRunning = () => props.proxyState.status === "running";
   const canStart = () => Boolean(activeNode()) && summary()?.coreStatus !== "not_installed" && summary()?.coreStatus !== "error";
+  // A running proxy always has a node, even if a summary reload failed: fall
+  // back to the runtime proxy state so the hero never claims "no node" while
+  // traffic is flowing.
+  const heroHasNode = () => isRunning() || Boolean(activeNode());
+  const heroNodeName = () => (isRunning() ? props.proxyState.nodeName : activeNode()?.name ?? "尚未选择节点");
 
   // Live traffic: subscribe to the "proxy:traffic" broadcast while the proxy runs,
   // and poll every second as a fallback because broadcasts can be missed while the
@@ -270,9 +311,15 @@ export default function DashboardPage(props: DashboardProps) {
     return Math.min(100, Math.max(0, Math.round((stats.totalDownlinkBytes / total) * 100)));
   };
 
+  // Plan quota card: nearest subscription expiry plus a small urgency level so
+  // the card can warn before the subscription actually lapses.
+  const planExpireAt = createMemo(() => earliestExpireAt(summary()?.recentSubscriptions));
+  const planExpiry = createMemo(() => planExpiryText(planExpireAt(), clock()));
+  const planExpiryTone = createMemo(() => planExpiryLevel(planExpireAt(), clock()));
+
   return (
     <div class="page-stack dashboard-page">
-      <section classList={{ "connection-hero": true, running: isRunning(), error: props.proxyState.status === "error" }}>
+      <section classList={{ "connection-hero": true, "dash-hero": true, running: isRunning(), error: props.proxyState.status === "error" }}>
         <div class="connection-glow" />
         <div class="connection-main">
           <div classList={{ "connection-orb": true, running: isRunning() }}>
@@ -285,20 +332,32 @@ export default function DashboardPage(props: DashboardProps) {
               <span class="tag neutral">{proxyModeLabel(props.settings?.proxyMode ?? "rule")}</span>
               <Show when={props.settings?.tunMode}><span class="tag warning">TUN</span></Show>
             </div>
-            <h2>{isRunning() ? props.proxyState.nodeName : activeNode()?.name ?? "准备连接"}</h2>
-            <p>
-              {isRunning()
-                ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
-                : activeNode()
-                  ? `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`
-                  : "还没有选择节点，先在服务器页面选择一个节点。"}
-            </p>
+            <h2>{heroNodeName()}</h2>
+            <Show when={heroHasNode()}>
+              <p>
+                {isRunning()
+                  ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
+                  : `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`}
+              </p>
+            </Show>
             <div class="connection-meta">
               <span><Icon name="route" size={12} /> {isRunning() ? props.proxyState.localAddr : "本地 SOCKS/HTTP 未监听"}</span>
               <Show when={isRunning()}>
                 <span><Icon name="speed" size={12} /> 运行 {formatUptime(props.proxyState.startedAt, clock())}</span>
               </Show>
-              <span title="实时速率：下行 / 上行">↓ {downlinkRateLabel()} / ↑ {uplinkRateLabel()}</span>
+              <span
+                class="dash-hero-traffic"
+                title={`实时速率：下行 ${downlinkRateLabel()} / 上行 ${uplinkRateLabel()}；本次会话累计下行 ${formatBytes(traffic()?.totalDownlinkBytes ?? 0)} / 上行 ${formatBytes(traffic()?.totalUplinkBytes ?? 0)}`}
+              >
+                <span class="dash-hero-rate">{sessionRateLabel()}</span>
+                <span class="dash-hero-session">本次 {sessionTotalLabel()}</span>
+                <Show when={isRunning() && totalSessionTraffic() > 0}>
+                  <span class="dash-hero-share" aria-hidden="true">
+                    <span class="dash-hero-share-down" style={{ width: `${downlinkShare()}%` }} />
+                    <span class="dash-hero-share-up" style={{ width: `${100 - downlinkShare()}%` }} />
+                  </span>
+                </Show>
+              </span>
               <Show when={summary()?.coreVersion}>
                 <span><Icon name="server" size={12} /> Xray {summary()?.coreVersion}</span>
               </Show>
@@ -306,22 +365,28 @@ export default function DashboardPage(props: DashboardProps) {
           </div>
         </div>
 
-        <div class="connection-actions">
-          <Show when={isRunning()} fallback={
-            <button class="btn primary connection-toggle" onClick={props.onStartProxy} disabled={props.proxyBusy || !canStart()}>
-              <Icon name="play" size={16} /> {props.proxyBusy ? "启动中..." : "启动代理"}
+        <div class="connection-actions dash-hero-actions">
+          <Show when={heroHasNode()} fallback={
+            <button class="btn primary connection-toggle dash-hero-cta" onClick={() => props.onNavigate("servers")}>
+              <Icon name="server" size={16} /> 选择节点
             </button>
           }>
-            <button class="btn primary danger-action connection-toggle" onClick={props.onStopProxy} disabled={props.proxyBusy}>
-              <Icon name="stop" size={16} /> {props.proxyBusy ? "停止中..." : "停止代理"}
+            <Show when={isRunning()} fallback={
+              <button class="btn primary connection-toggle" onClick={props.onStartProxy} disabled={props.proxyBusy || !canStart()}>
+                <Icon name="play" size={16} /> {props.proxyBusy ? "启动中..." : "启动代理"}
+              </button>
+            }>
+              <button class="btn primary danger-action connection-toggle" onClick={props.onStopProxy} disabled={props.proxyBusy}>
+                <Icon name="stop" size={16} /> {props.proxyBusy ? "停止中..." : "停止代理"}
+              </button>
+            </Show>
+            <button class="btn glass" onClick={props.onTestProxy} disabled={props.proxyBusy || !isRunning()}>
+              <Icon name="speed" size={15} /> 测试
+            </button>
+            <button class="btn ghost" onClick={() => props.onNavigate("servers")}>
+              <Icon name="server" size={15} /> 切换节点
             </button>
           </Show>
-          <button class="btn glass" onClick={props.onTestProxy} disabled={props.proxyBusy || !isRunning()}>
-            <Icon name="speed" size={15} /> 测试
-          </button>
-          <button class="btn ghost" onClick={() => props.onNavigate("servers")}>
-            <Icon name="server" size={15} /> 切换节点
-          </button>
         </div>
 
         <Show when={props.proxyError}>
@@ -332,9 +397,6 @@ export default function DashboardPage(props: DashboardProps) {
             <Icon name={props.proxyTest?.success ? "check" : "alert"} size={13} />
             {props.proxyTest?.success ? `代理可用 · ${props.proxyTest?.latencyMs} ms · HTTP ${props.proxyTest?.statusCode}` : `代理测试失败${props.proxyTest?.error ? ` · ${props.proxyTest.error}` : ""}`}
           </div>
-        </Show>
-        <Show when={!activeNode()}>
-          <div class="proxy-inline-alert muted connection-alert"><Icon name="alert" size={13} /> 请先在服务器页面选择一个当前节点。</div>
         </Show>
       </section>
 
@@ -347,38 +409,37 @@ export default function DashboardPage(props: DashboardProps) {
           <span class="dashboard-stat-icon indigo"><Icon name="server" size={17} /></span>
           <div><span>节点</span><strong>{loading() ? "—" : summary()?.nodeCount ?? 0}</strong><small>已解析节点</small></div>
         </div>
-        <div class="glass-panel dashboard-stat traffic">
+        <div class="glass-panel dashboard-stat traffic dash-stat-plan">
           <span class="dashboard-stat-icon green"><Icon name="speed" size={17} /></span>
           <div>
             <span>套餐流量</span>
             <strong>{formatBytes(usedBytes())}</strong>
-            <small>{totalBytes() > 0 ? `${quotaPercent()}% · 共 ${formatBytes(totalBytes())}` : "订阅端未提供"}</small>
+            <small>{totalBytes() > 0 ? `${quotaPercent()}% · 共 ${formatBytes(totalBytes())}` : planExpiry() ? "用量未提供" : "订阅端未提供"}</small>
             <Show when={totalBytes() > 0}><div class="dashboard-progress"><span style={{ width: `${quotaPercent()}%` }} /></div></Show>
+            <Show
+              when={planExpiry()}
+              fallback={
+                <Show when={totalBytes() > 0}>
+                  <small class="dash-plan-expiry">到期时间未提供</small>
+                </Show>
+              }
+            >
+              <small
+                classList={{
+                  "dash-plan-expiry": true,
+                  warning: planExpiryTone() === "warning",
+                  expired: planExpiryTone() === "expired",
+                }}
+              >
+                <Icon name={planExpiryTone() === "expired" ? "alert" : "subscription"} size={11} />
+                {planExpiry()}
+              </small>
+            </Show>
           </div>
         </div>
         <div class="glass-panel dashboard-stat">
           <span class="dashboard-stat-icon amber"><Icon name="server" size={17} /></span>
           <div><span>Xray 内核</span><strong>{coreStatusLabel(summary()?.coreStatus ?? "")}</strong><small>{summary()?.coreVersion || "未安装"}</small></div>
-        </div>
-        <div class="glass-panel dashboard-stat" style={{ "grid-column": "1 / -1" }}>
-          <span class="dashboard-stat-icon green"><Icon name="speed" size={17} /></span>
-          <div>
-            <div style={{ display: "flex", "align-items": "baseline", "flex-wrap": "wrap", gap: "2px 16px" }}>
-              <span>本次会话流量</span>
-              <strong style={{ "margin-top": "0" }}>{sessionTotalLabel()}</strong>
-              <small style={{ "margin-top": "0" }} title={traffic()?.error || "实时速率：下行 / 上行"}>{sessionRateLabel()}</small>
-            </div>
-            <Show when={isRunning() && totalSessionTraffic() > 0}>
-              <div
-                class="dashboard-progress"
-                style={{ display: "flex" }}
-                title={`下行 ${downlinkShare()}% · 上行 ${100 - downlinkShare()}%`}
-              >
-                <span style={{ width: `${downlinkShare()}%`, background: "var(--accent)" }} />
-                <span style={{ width: `${100 - downlinkShare()}%`, background: "var(--success)" }} />
-              </div>
-            </Show>
-          </div>
         </div>
       </section>
 
@@ -396,7 +457,7 @@ export default function DashboardPage(props: DashboardProps) {
             <button class="btn secondary" onClick={() => props.onNavigate("servers")}>切换节点</button>
           </div>
           <Show when={activeNode()} fallback={
-            <div class="empty-state dashboard-node-empty">
+            <div class="empty-state dashboard-node-empty dash-empty">
               <div class="empty-icon"><Icon name="server" size={22} /></div>
               <strong>还没有选择节点</strong>
               <span>从服务器页面选择一个节点后再启动代理。</span>
@@ -478,7 +539,7 @@ export default function DashboardPage(props: DashboardProps) {
             <Show
               when={trafficHasData()}
               fallback={
-                <div class="empty-state">
+                <div class="empty-state dash-empty">
                   <div class="empty-icon"><Icon name="speed" size={22} /></div>
                   <strong>还没有流量历史</strong>
                   <span>启动代理并产生流量后，这里会显示每天的上行与下行总量。</span>
@@ -522,7 +583,7 @@ export default function DashboardPage(props: DashboardProps) {
           <button class="btn ghost" onClick={() => props.onNavigate("subscriptions")}>查看全部</button>
         </div>
         <Show when={(summary()?.recentSubscriptions ?? []).length > 0} fallback={
-          <div class="empty-state"><div class="empty-icon"><Icon name="subscription" size={22} /></div><strong>还没有订阅</strong><span>添加第一个订阅后，节点和套餐用量会显示在这里。</span></div>
+          <div class="empty-state dash-empty"><div class="empty-icon"><Icon name="subscription" size={22} /></div><strong>还没有订阅</strong><span>添加第一个订阅后，节点和套餐用量会显示在这里。</span></div>
         }>
           <div class="recent-list">
             <For each={summary()?.recentSubscriptions ?? []}>

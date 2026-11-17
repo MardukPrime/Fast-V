@@ -227,6 +227,9 @@ export default function SettingsPage(props: SettingsProps) {
   const [elevated, setElevated] = createSignal(false);
   const [message, setMessage] = createSignal("");
   const [error, setError] = createSignal("");
+  // The top bar can switch proxyMode while this page is open. Only overwrite the
+  // stored proxy mode from this form when the user actually changed it here.
+  const [proxyModeDirty, setProxyModeDirty] = createSignal(false);
   const [clientExpanded, setClientExpanded] = createSignal(readSectionState("fastv.settings.clientOpen", false));
   const [coreExpanded, setCoreExpanded] = createSignal(readSectionState("fastv.settings.coreOpen", false));
   const [autoSelectExpanded, setAutoSelectExpanded] = createSignal(readSectionState("fastv.settings.autoSelectOpen", false));
@@ -399,8 +402,16 @@ export default function SettingsPage(props: SettingsProps) {
     setError("");
     setMessage("");
     try {
-      const saved = await SettingsService.Save(settings());
+      const input: Settings = { ...settings() };
+      if (!proxyModeDirty()) {
+        // Merge the freshest proxy mode so a top-bar switch made after this page
+        // mounted is not reverted by an unrelated settings save.
+        const latest = await SettingsService.Get().catch(() => null);
+        if (latest) input.proxyMode = latest.proxyMode;
+      }
+      const saved = await SettingsService.Save(input);
       setSettings(saved);
+      setProxyModeDirty(false);
       props.onSaved(saved);
       setMessage("设置已保存。");
       if (saved.tunMode && !elevated()) {
@@ -763,7 +774,10 @@ export default function SettingsPage(props: SettingsProps) {
                 <button
                   type="button"
                   classList={{ "mode-option": true, active: settings().proxyMode === item.value }}
-                  onClick={() => update("proxyMode", item.value)}
+                  onClick={() => {
+                    update("proxyMode", item.value);
+                    setProxyModeDirty(true);
+                  }}
                 >
                   <strong>{item.label}</strong>
                   <small>{item.hint}</small>

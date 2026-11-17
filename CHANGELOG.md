@@ -27,6 +27,7 @@ All notable changes to FastV are documented here.
 
 - 设置页拆分为客户端 / 内核 / 智能选路 / 流量统计 / 系统集成 / 备份恢复区块。
 - 代理启动前使用 `xray run -test` 校验配置。
+- UI refresh（参考 Clash Verge Rev / v2rayN / FlClash / Hiddify）：顶栏快捷代理模式切换；概览页压缩为连接中枢并补充套餐到期提示；服务器页单行工具栏、按需批量条与紧凑操作列；订阅页卡片化（用量进度、剩余天数、异常态）；新增共享设计令牌与键盘焦点可见性；亮色主题次要文字对比度提升至 WCAG AA。
 
 ## [0.1.0] - 2026-10-31
 

@@ -9,11 +9,23 @@ import type { NodeView, SubscriptionView } from "../../bindings/github.com/Mardu
 import Icon from "../components/Icon";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
 
+import "./subscriptions.css";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 function formatTime(value: string) {
   if (!value) return "从未更新";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+// Compact timestamp for the info column: "11/17 11:24".
+function formatRecentTime(value: string) {
+  if (!value) return "从未更新";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatBytes(value: number) {
@@ -40,6 +52,29 @@ function usagePercent(sub: SubscriptionView) {
   if (!sub.totalBytes || sub.totalBytes <= 0) return 0;
   return Math.min(100, Math.round((usageOf(sub) / sub.totalBytes) * 100));
 }
+
+// Whole days left until expireAt (unix seconds); null when no expiry is known.
+// Values <= 0 mean the subscription already expired.
+function remainingDays(expireAt: number): number | null {
+  if (!expireAt || expireAt <= 0) return null;
+  return Math.ceil((expireAt * 1000 - Date.now()) / DAY_MS);
+}
+
+function formatRemainingDays(days: number | null) {
+  if (days === null) return "—";
+  if (days <= 0) return "已过期";
+  return `剩余 ${days} 天`;
+}
+
+type UsageLevel = "normal" | "warning" | "danger";
+
+// <70% normal, 70-90% warning, >90% danger.
+function usageLevel(percent: number): UsageLevel {
+  if (percent > 90) return "danger";
+  if (percent >= 70) return "warning";
+  return "normal";
+}
+
 export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] = createSignal<SubscriptionView[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -59,11 +94,12 @@ export default function SubscriptionsPage() {
   const [qrOpen, setQROpen] = createSignal(false);
   const [qrTitle, setQRTitle] = createSignal("");
   const [qrImage, setQRImage] = createSignal("");
-  const [qrLoading, setQRLoading] = createSignal(false);
+  const [qrLoading, setQrLoading] = createSignal(false);
   const [qrError, setQRError] = createSignal("");
   const [qrTarget, setQRTarget] = createSignal<SubscriptionView | null>(null);
   let qrRequest = 0;
   let alive = true;
+  let urlInput: HTMLInputElement | undefined;
 
   onCleanup(() => {
     alive = false;
@@ -74,6 +110,41 @@ export default function SubscriptionsPage() {
   const failedCount = () => subscriptions().filter((sub) => Boolean(sub.lastError)).length;
   const usedTotal = () => subscriptions().reduce((sum, sub) => sum + usageOf(sub), 0);
   const quotaTotal = () => subscriptions().reduce((sum, sub) => sum + (sub.totalBytes ?? 0), 0);
+
+  // Nearest upcoming expiry, plus how many subscriptions already expired.
+  const expirySummary = () => {
+    const now = Date.now();
+    let next: number | null = null;
+    let expired = 0;
+    for (const sub of subscriptions()) {
+      const expireAt = sub.expireAt ?? 0;
+      if (expireAt <= 0) continue;
+      const time = expireAt * 1000;
+      if (time <= now) {
+        expired += 1;
+        continue;
+      }
+      if (next === null || time < next) next = time;
+    }
+    return { next, expired };
+  };
+
+  const nearestExpiryHint = () => {
+    const summary = expirySummary();
+    if (summary.next !== null) {
+      const days = Math.max(1, Math.ceil((summary.next - Date.now()) / DAY_MS));
+      return ` · 最近 ${days} 天后到期`;
+    }
+    if (summary.expired > 0) return ` · ${summary.expired} 个已过期`;
+    return "";
+  };
+
+  const focusAddForm = () => {
+    const input = urlInput;
+    if (!input) return;
+    input.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus({ preventScroll: true });
+  };
 
   const load = async () => {
     setLoading(true);
@@ -187,7 +258,7 @@ export default function SubscriptionsPage() {
   const closeQRCode = () => {
     qrRequest += 1;
     setQROpen(false);
-    setQRLoading(false);
+    setQrLoading(false);
   };
 
   const openSubscriptionQRCode = async (sub: SubscriptionView) => {
@@ -195,7 +266,7 @@ export default function SubscriptionsPage() {
     setQRTitle(sub.name);
     setQRImage("");
     setQRError("");
-    setQRLoading(true);
+    setQrLoading(true);
     setQROpen(true);
     const token = ++qrRequest;
     try {
@@ -210,7 +281,7 @@ export default function SubscriptionsPage() {
       if (!alive || token !== qrRequest) return;
       setQRError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (alive && token === qrRequest) setQRLoading(false);
+      if (alive && token === qrRequest) setQrLoading(false);
     }
   };
 
@@ -222,10 +293,10 @@ export default function SubscriptionsPage() {
   return (
     <div class="page-stack">
       <section class="mini-stats subscription-stats">
-        <div class="mini-stat"><span>订阅</span><strong>{subscriptions().length}</strong><small>{activeCount()} 个启用</small></div>
-        <div class="mini-stat"><span>节点</span><strong>{totalNodes()}</strong><small>已解析</small></div>
+        <div class="mini-stat"><span>订阅</span><strong>{subscriptions().length}</strong><small>{activeCount()} 个启用{nearestExpiryHint()}</small></div>
+        <div class="mini-stat"><span>节点</span><strong>{totalNodes()}</strong><small>{failedCount() > 0 ? "部分订阅待修复" : "已解析"}</small></div>
         <div class="mini-stat"><span>套餐流量</span><strong>{formatBytes(usedTotal())}</strong><small>{quotaTotal() > 0 ? `共 ${formatBytes(quotaTotal())}` : "订阅端未提供"}</small></div>
-        <div class="mini-stat"><span>异常</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>需要处理</small></div>
+        <div class="mini-stat"><span>异常</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>{failedCount() > 0 ? "需要处理" : "全部正常"}</small></div>
       </section>
 
       <section class="panel add-panel">
@@ -249,6 +320,9 @@ export default function SubscriptionsPage() {
           <label class="grow">
             <span>订阅地址</span>
             <input
+              ref={(element) => {
+                urlInput = element;
+              }}
               value={url()}
               onInput={(event) => setURL(event.currentTarget.value)}
               placeholder="https://example.com/subscribe?token=..."
@@ -281,73 +355,172 @@ export default function SubscriptionsPage() {
 
         <Show when={!loading()} fallback={<div class="empty-state">正在读取订阅...</div>}>
           <Show when={subscriptions().length > 0} fallback={
-            <div class="empty-state">
+            <div class="empty-state sub-empty">
               <div class="empty-icon"><Icon name="subscription" size={24} /></div>
               <strong>还没有订阅</strong>
-              <span>添加第一个订阅地址后，解析出的节点会显示在这里。</span>
+              <span>添加订阅地址后，FastV 会自动解析节点，并同步套餐用量与到期时间。</span>
+              <ul class="sub-empty-steps">
+                <li>填写订阅地址</li>
+                <li>自动解析节点</li>
+                <li>同步用量与到期</li>
+              </ul>
+              <button class="btn secondary" type="button" onClick={focusAddForm}>
+                <Icon name="plus" size={14} /> 去添加订阅
+              </button>
             </div>
           }>
-            <div class="subscription-list">
+            <div class="sub-list">
               <For each={subscriptions()}>
-                {(sub) => (
-                  <article class="subscription-card">
-                    <div class="subscription-avatar"><Icon name="subscription" size={18} /></div>
-                    <div class="subscription-main">
-                      <div class="subscription-title">
-                        <strong>{sub.name}</strong>
-                        <span classList={{ "tag": true, danger: Boolean(sub.lastError), success: !sub.lastError }}>
-                          {sub.lastError ? "异常" : "正常"}
-                        </span>
-                      </div>
-                      <div class="subscription-host">{sub.host}</div>
-                      <div class="subscription-meta">
-                        <span><Icon name="nodes" size={12} /> {sub.nodeCount} 个节点</span>
-                        <span><Icon name="refresh" size={12} /> {formatTime(sub.updatedAt)}</span>
-                      </div>
-                      <Show when={Boolean(sub.usageUpdatedAt) || (sub.totalBytes ?? 0) > 0 || usageOf(sub) > 0} fallback={
-                        <div class="subscription-usage-empty">订阅端未提供套餐用量信息</div>
-                      }>
-                        <div classList={{ "subscription-usage": true, warning: usagePercent(sub) >= 90 }}>
-                          <div class="subscription-usage-summary">
-                            <span>已用 {formatBytes(usageOf(sub))}{sub.totalBytes > 0 ? ` / ${formatBytes(sub.totalBytes)}` : ""}</span>
-                            <Show when={sub.totalBytes > 0}>
-                              <strong>{usagePercent(sub)}%</strong>
-                            </Show>
+                {(sub) => {
+                  const days = remainingDays(sub.expireAt ?? 0);
+                  const expired = days !== null && days <= 0;
+                  const expiringSoon = days !== null && days > 0 && days <= 7;
+                  const percent = usagePercent(sub);
+                  const level = usageLevel(percent);
+                  const used = usageOf(sub);
+                  const hasQuota = (sub.totalBytes ?? 0) > 0;
+                  const updating = () => updatingId() === sub.id;
+                  return (
+                    <article
+                      class="sub-card"
+                      classList={{ "is-error": Boolean(sub.lastError), "is-busy": updating() }}
+                      aria-busy={updating() ? "true" : "false"}
+                    >
+                      <div class="sub-identity">
+                        <div class="sub-avatar"><Icon name="subscription" size={18} /></div>
+                        <div class="sub-identity-copy">
+                          <div class="sub-title-line">
+                            <strong class="sub-name" title={sub.name}>{sub.name}</strong>
+                            <span classList={{
+                              "sub-badge": true,
+                              "is-ok": !sub.lastError,
+                              "is-error": Boolean(sub.lastError),
+                            }}>
+                              <span class="status-dot" /> {sub.lastError ? "异常" : "正常"}
+                            </span>
                           </div>
-                          <Show when={sub.totalBytes > 0}>
-                            <div class="subscription-usage-track"><span style={{ width: `${usagePercent(sub)}%` }} /></div>
-                          </Show>
-                          <div class="subscription-usage-meta">
-                            <span>上传 {formatBytes(sub.uploadBytes ?? 0)}</span>
-                            <span>下载 {formatBytes(sub.downloadBytes ?? 0)}</span>
-                            <span>到期 {formatExpire(sub.expireAt ?? 0)}</span>
+                          <div class="sub-host" title={sub.host || undefined}>{sub.host || "—"}</div>
+                          <div class="sub-chips">
+                            <span class="sub-chip"><Icon name="nodes" size={12} /> {sub.nodeCount} 个节点</span>
+                            <span class="sub-chip">
+                              <span classList={{ "status-dot": true, online: sub.enabled }} />
+                              {sub.enabled ? "已启用" : "已停用"}
+                            </span>
                           </div>
                         </div>
-                      </Show>                      <Show when={sub.lastError}>
-                        <div class="inline-error"><Icon name="alert" size={12} /> {sub.lastError}</div>
+                      </div>
+
+                      <div class="sub-usage">
+                        <Show
+                          when={hasQuota}
+                          fallback={
+                            <div class="sub-usage-empty">
+                              <span class="sub-usage-unknown">用量未知</span>
+                              <Show when={used > 0}>
+                                <span class="sub-usage-note">已用 {formatBytes(used)}</span>
+                              </Show>
+                              <Show when={sub.usageUpdatedAt}>
+                                <span class="sub-usage-note">更新于 {formatRecentTime(sub.usageUpdatedAt)}</span>
+                              </Show>
+                            </div>
+                          }
+                        >
+                          <div class="sub-usage-head">
+                            <span class="sub-usage-label" title={`已用 ${formatBytes(used)} / ${formatBytes(sub.totalBytes)}`}>
+                              已用 <strong>{formatBytes(used)}</strong> / {formatBytes(sub.totalBytes)}
+                            </span>
+                            <span classList={{
+                              "sub-usage-pct": true,
+                              "is-warning": level === "warning",
+                              "is-danger": level === "danger",
+                            }}>
+                              {percent}%
+                            </span>
+                          </div>
+                          <div
+                            class="sub-progress"
+                            role="progressbar"
+                            aria-label={`${sub.name} 套餐用量`}
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow={String(percent)}
+                          >
+                            <span
+                              classList={{
+                                "sub-progress-fill": true,
+                                "is-warning": level === "warning",
+                                "is-danger": level === "danger",
+                              }}
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                          <div class="sub-usage-meta">
+                            <span>上传 {formatBytes(sub.uploadBytes ?? 0)}</span>
+                            <span>下载 {formatBytes(sub.downloadBytes ?? 0)}</span>
+                            <Show when={sub.usageUpdatedAt}>
+                              <span>用量更新 {formatRecentTime(sub.usageUpdatedAt)}</span>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+
+                      <div class="sub-side">
+                        <div class="sub-side-item">
+                          <span class="sub-side-label">剩余天数</span>
+                          <strong classList={{
+                            "sub-side-days": true,
+                            "is-muted": days === null,
+                            "is-warning": expiringSoon,
+                            "is-danger": expired,
+                          }}>
+                            {formatRemainingDays(days)}
+                          </strong>
+                          <Show when={(sub.expireAt ?? 0) > 0}>
+                            <span class="sub-side-note" title={`到期时间 ${formatExpire(sub.expireAt ?? 0)}`}>
+                              {formatExpire(sub.expireAt ?? 0)}
+                            </span>
+                          </Show>
+                        </div>
+                        <div class="sub-side-item">
+                          <span class="sub-side-label">最近更新</span>
+                          <span class="sub-side-value" title={formatTime(sub.updatedAt)}>{formatRecentTime(sub.updatedAt)}</span>
+                        </div>
+                      </div>
+
+                      <div class="sub-actions">
+                        <button
+                          class="btn secondary"
+                          type="button"
+                          onClick={() => void openSubscriptionQRCode(sub)}
+                          title="订阅二维码包含私有令牌，请谨慎分享"
+                        >
+                          <QRCodeIcon size={14} /> 二维码
+                        </button>
+                        <button class="btn secondary" type="button" onClick={() => openNodes(sub)}>
+                          <Icon name="nodes" size={14} /> 节点
+                        </button>
+                        <button class="btn secondary" type="button" onClick={() => updateSubscription(sub.id)} disabled={updating()}>
+                          <Icon name="refresh" size={14} /> {updating() ? "更新中" : "更新"}
+                        </button>
+                        <button
+                          class="btn danger"
+                          type="button"
+                          onClick={() => removeSubscription(sub)}
+                          aria-label={`删除 ${sub.name}`}
+                          title="删除订阅"
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </div>
+
+                      <Show when={sub.lastError}>
+                        <div class="sub-error" title={sub.lastError}>
+                          <Icon name="alert" size={13} /> <span>{sub.lastError}</span>
+                        </div>
                       </Show>
-                    </div>
-                    <div class="subscription-actions">
-                      <button
-                        class="btn secondary"
-                        type="button"
-                        onClick={() => void openSubscriptionQRCode(sub)}
-                        title="订阅二维码包含私有令牌，请谨慎分享"
-                      >
-                        <QRCodeIcon size={14} /> 二维码
-                      </button>
-                      <button class="btn secondary" onClick={() => openNodes(sub)}>
-                        <Icon name="nodes" size={14} /> 节点
-                      </button>
-                      <button class="btn secondary" onClick={() => updateSubscription(sub.id)} disabled={updatingId() === sub.id}>
-                        <Icon name="refresh" size={14} /> {updatingId() === sub.id ? "更新中" : "更新"}
-                      </button>
-                      <button class="btn danger" onClick={() => removeSubscription(sub)} aria-label={`删除 ${sub.name}`}>
-                        <Icon name="trash" size={14} />
-                      </button>
-                    </div>
-                  </article>
-                )}
+                    </article>
+                  );
+                }}
               </For>
             </div>
           </Show>

@@ -48,6 +48,26 @@ function applyTheme(theme: string) {
   document.documentElement.dataset.theme = resolved;
 }
 
+// Proxy mode quick switch in the global topbar. Values must stay in sync with
+// the backend validation used by the settings page.
+const proxyModes: Array<{ value: string; label: string; title: string }> = [
+  { value: "rule", label: "规则", title: "规则分流：按路由规则决定流量直连还是走代理" },
+  { value: "global", label: "全局", title: "全局代理：所有流量都经由当前节点转发" },
+  { value: "direct", label: "直连", title: "直连：所有流量都不经过代理节点" },
+];
+
+function normalizeProxyMode(mode: string | undefined) {
+  return mode === "global" || mode === "direct" ? mode : "rule";
+}
+
+function proxyModeTitle(mode: string) {
+  return proxyModes.find((item) => item.value === mode)?.title ?? "代理模式";
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export default function App() {
   const [active, setActive] = createSignal<PageKey>("dashboard");
   const [info, setInfo] = createSignal<AppInfo | null>(null);
@@ -57,6 +77,8 @@ export default function App() {
   const [proxyBusy, setProxyBusy] = createSignal(false);
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
+  const [proxyModeBusy, setProxyModeBusy] = createSignal(false);
+  const [proxyModeError, setProxyModeError] = createSignal("");
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "dock" ? "dock" : "sidebar";
   let dockNavElement: HTMLDivElement | undefined;
@@ -190,10 +212,39 @@ export default function App() {
       setProxyBusy(false);
     }
   };
+  const currentProxyMode = () => normalizeProxyMode(settings()?.proxyMode);
+
+  // Switching mode saves the full settings object (the service expects a
+  // complete payload) and restarts a running proxy so the new mode takes effect
+  // immediately. Errors surface as a lightweight bar right under the topbar.
+  const handleProxyModeChange = async (mode: string) => {
+    const current = settings();
+    if (!current || current.proxyMode === mode || proxyModeBusy()) return;
+    setProxyModeBusy(true);
+    setProxyModeError("");
+    try {
+      const saved = await SettingsService.Save({ ...current, proxyMode: mode });
+      setSettings(saved);
+      if (proxy().status === "running") {
+        try {
+          setProxy(await ProxyService.Restart());
+        } catch (error) {
+          setProxyModeError(`代理模式已保存，但重启代理失败：${errorMessage(error)}`);
+        }
+      }
+    } catch (error) {
+      setProxyModeError(`切换代理模式失败：${errorMessage(error)}`);
+    } finally {
+      setProxyModeBusy(false);
+    }
+  };
+
   const handleSettingsSaved = (next: Settings) => {
     setSettings(next);
     setDockTransparency(next.dockTransparency || 28);
     applyTheme(next.theme);
+    // A successful full save makes any earlier quick-switch error stale.
+    setProxyModeError("");
   };
 
   const dockGlassStyle = () => {
@@ -298,6 +349,35 @@ export default function App() {
               <p>{pageMeta[active()].subtitle}</p>
             </div>
             <div class="topbar-actions">
+              <div classList={{ "topbar-mode": true, switching: proxyModeBusy() }} role="group" aria-label="代理模式">
+                <div class="topbar-mode-switch">
+                  <For each={proxyModes}>
+                    {(option) => (
+                      <button
+                        type="button"
+                        aria-pressed={currentProxyMode() === option.value}
+                        title={option.title}
+                        classList={{ "topbar-mode-option": true, active: currentProxyMode() === option.value }}
+                        disabled={proxyModeBusy() || !settings()}
+                        onClick={() => { void handleProxyModeChange(option.value); }}
+                      >
+                        <span class="topbar-mode-dot" aria-hidden="true" />
+                        {option.label}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <select
+                  class="topbar-mode-select"
+                  aria-label="代理模式"
+                  title={proxyModeTitle(currentProxyMode())}
+                  value={currentProxyMode()}
+                  disabled={proxyModeBusy() || !settings()}
+                  onChange={(event) => { void handleProxyModeChange(event.currentTarget.value); }}
+                >
+                  <For each={proxyModes}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                </select>
+              </div>
               <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
               <span classList={{ "status-chip": true, muted: !core()?.installed }}>
                 <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
@@ -309,6 +389,16 @@ export default function App() {
               </span>
             </div>
           </header>
+
+          <Show when={proxyModeError()}>
+            <div class="topbar-mode-error" role="alert">
+              <Icon name="alert" size={13} />
+              <span>{proxyModeError()}</span>
+              <button type="button" class="topbar-mode-error-dismiss" aria-label="关闭提示" onClick={() => setProxyModeError("")}>
+                <Icon name="close" size={11} />
+              </button>
+            </div>
+          </Show>
 
           <Show when={active() === "dashboard"}>
             <DashboardPage
