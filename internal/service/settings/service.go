@@ -42,7 +42,35 @@ func (s *SettingsService) Get() model.Settings {
 	return s.store.Settings()
 }
 
+// Save validates, normalizes and persists the user-editable settings, then
+// broadcasts the change. The validation rules live in normalizeSettings so
+// derived operations can reuse the exact same path.
 func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
+	normalized, err := normalizeSettings(input)
+	if err != nil {
+		return model.Settings{}, err
+	}
+	if err := s.store.SaveSettings(normalized); err != nil {
+		return model.Settings{}, err
+	}
+	emitSettingsChanged(normalized)
+	return normalized, nil
+}
+
+// TunFallback disables TUN mode and switches to the fixed system proxy so a
+// user whose TUN adapter cannot start stays online after restarting the proxy.
+// The current settings are re-validated and persisted through the same path as
+// Save, and the resulting update is broadcast like any other settings change.
+func (s *SettingsService) TunFallback() (model.Settings, error) {
+	current := s.store.Settings()
+	current.TunMode = false
+	current.SystemProxyMode = "system"
+	return s.Save(current)
+}
+
+// normalizeSettings applies the trimming/defaulting rules and validates every
+// field of the user-editable settings. It has no side effects.
+func normalizeSettings(input model.Settings) (model.Settings, error) {
 	input.Theme = strings.TrimSpace(input.Theme)
 	input.Language = strings.TrimSpace(input.Language)
 	input.AccentColor = strings.TrimSpace(input.AccentColor)
@@ -195,10 +223,6 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 		}
 	}
 
-	if err := s.store.SaveSettings(input); err != nil {
-		return model.Settings{}, err
-	}
-	emitSettingsChanged(input)
 	return input, nil
 }
 

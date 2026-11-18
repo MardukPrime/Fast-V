@@ -8,5 +8,7 @@ export {
 
 export type {
     DNSAuditResult,
-    DNSProbeResult
+    DNSProbeResult,
+    TunAuditResult,
+    TunCheckItem
 } from "./models.js";

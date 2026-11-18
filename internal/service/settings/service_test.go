@@ -482,3 +482,86 @@ func TestHotkeyCombinationValidation(t *testing.T) {
 		t.Fatalf("expected no bindings for disabled shortcuts, got %+v", bindings)
 	}
 }
+
+// TestTunFallbackDisablesTunAndEnablesSystemProxy covers the TUN fallback: it
+// must switch TUN off, force the fixed system proxy and leave every other
+// setting untouched, no matter which proxy mode was active before.
+func TestTunFallbackDisablesTunAndEnablesSystemProxy(t *testing.T) {
+	service := newService(t)
+
+	for _, originalMode := range []string{"off", "pac", "system"} {
+		input := validSettings()
+		input.TunMode = true
+		input.SystemProxyMode = originalMode
+		input.AllowLan = true
+		input.AutoUpdate = true
+		before, err := service.Save(input)
+		if err != nil {
+			t.Fatalf("%s: save TUN settings: %v", originalMode, err)
+		}
+
+		after, err := service.TunFallback()
+		if err != nil {
+			t.Fatalf("%s: TunFallback: %v", originalMode, err)
+		}
+		if after.TunMode {
+			t.Fatalf("%s: TunFallback left TUN mode enabled", originalMode)
+		}
+		if after.SystemProxyMode != "system" {
+			t.Fatalf("%s: SystemProxyMode = %q, want system", originalMode, after.SystemProxyMode)
+		}
+
+		want := before
+		want.TunMode = false
+		want.SystemProxyMode = "system"
+		if after != want {
+			t.Fatalf("%s: TunFallback changed unrelated fields:\n got=%+v\nwant=%+v", originalMode, after, want)
+		}
+		if stored := service.Get(); stored != after {
+			t.Fatalf("%s: fallback settings were not persisted: got=%+v want=%+v", originalMode, stored, after)
+		}
+	}
+}
+
+// TestTunFallbackIsIdempotent makes sure the fallback is safe to repeat once TUN
+// is already off.
+func TestTunFallbackIsIdempotent(t *testing.T) {
+	service := newService(t)
+
+	input := validSettings()
+	input.TunMode = false
+	input.SystemProxyMode = "system"
+	before, err := service.Save(input)
+	if err != nil {
+		t.Fatalf("save settings: %v", err)
+	}
+	after, err := service.TunFallback()
+	if err != nil {
+		t.Fatalf("TunFallback: %v", err)
+	}
+	if after != before {
+		t.Fatalf("repeating the fallback changed settings:\n got=%+v\nwant=%+v", after, before)
+	}
+}
+
+// TestTunFallbackUsesSaveValidation proves the fallback runs through the same
+// validation path as Save: invalid stored settings are rejected and nothing is
+// persisted.
+func TestTunFallbackUsesSaveValidation(t *testing.T) {
+	service := newService(t)
+
+	invalid := validSettings()
+	invalid.TunMode = true
+	invalid.SystemProxyMode = "off"
+	invalid.Theme = "neon" // rejected by Save
+	if err := service.store.SaveSettings(invalid); err != nil {
+		t.Fatalf("seed invalid settings: %v", err)
+	}
+	if _, err := service.TunFallback(); err == nil || !strings.Contains(err.Error(), "invalid theme") {
+		t.Fatalf("expected the Save validation error, got %v", err)
+	}
+	stored := service.Get()
+	if !stored.TunMode || stored.SystemProxyMode != "off" || stored.Theme != "neon" {
+		t.Fatalf("a rejected fallback must not persist changes: %+v", stored)
+	}
+}

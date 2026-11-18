@@ -60,6 +60,9 @@ type trayController struct {
 	// lastState keeps the latest proxy state snapshot so the tooltip can be
 	// re-rendered when the settings change without a new proxy event.
 	lastState model.ProxyState
+	// lastIconStatus caches the status whose color is currently shown in the
+	// tray icon so repeated state events do not re-encode and re-apply the icon.
+	lastIconStatus string
 }
 
 // newTray creates the system tray, its menu and the close/minimize-to-tray
@@ -86,7 +89,8 @@ func newTray(
 		appSvc:      appSvc,
 	}
 	tray.tray = app.SystemTray.New()
-	tray.tray.SetIcon(trayIconPNG())
+	tray.tray.SetIcon(trayIconForStatus(""))
+	tray.lastIconStatus = "stopped"
 	tray.tray.SetTooltip(trayTooltipStopped)
 	tray.buildMenu()
 	tray.refreshMenu()
@@ -198,6 +202,7 @@ func (t *trayController) apply(fn func()) {
 // snapshot.
 func (t *trayController) applyProxyState(state model.ProxyState) {
 	t.lastState = state
+	t.updateIcon(state.Status)
 
 	// The mode radio items follow the persisted setting, while the tooltip uses
 	// the mode the running core reports when it has one.
@@ -605,6 +610,39 @@ func proxyTooltip(state model.ProxyState, mode string) string {
 	}
 }
 
+// updateIcon paints the tray icon according to the proxy status so the mode and
+// health of the proxy are visible at a glance: green when running, amber while
+// starting/stopping, red for errors and blue when stopped.
+func (t *trayController) updateIcon(status string) {
+	if t == nil || t.tray == nil {
+		return
+	}
+	if status == "" {
+		status = "stopped"
+	}
+	if status == t.lastIconStatus {
+		return
+	}
+	t.lastIconStatus = status
+	t.tray.SetIcon(trayIconForStatus(status))
+}
+
+// trayIconForStatus returns the PNG bytes for one proxy status.
+func trayIconForStatus(status string) []byte {
+	var background color.NRGBA
+	switch status {
+	case "running":
+		background = color.NRGBA{R: 0x2f, G: 0x9e, B: 0x63, A: 0xff}
+	case "starting", "stopping":
+		background = color.NRGBA{R: 0xc0, G: 0x8a, B: 0x2e, A: 0xff}
+	case "error":
+		background = color.NRGBA{R: 0xc9, G: 0x4b, B: 0x4b, A: 0xff}
+	default:
+		background = color.NRGBA{R: 0x2f, G: 0x6f, B: 0xe8, A: 0xff}
+	}
+	return trayIconPNG(background)
+}
+
 // truncateLabel shortens value to limit runes, appending an ellipsis.
 func truncateLabel(value string, limit int) string {
 	runes := []rune(value)
@@ -619,10 +657,9 @@ func truncateLabel(value string, limit int) string {
 
 // trayIconPNG renders the 32x32 tray icon in code, so the build needs no binary
 // asset and SetIcon always receives a valid, non-empty PNG.
-func trayIconPNG() []byte {
+func trayIconPNG(background color.NRGBA) []byte {
 	const size = 32
 	icon := image.NewNRGBA(image.Rect(0, 0, size, size))
-	background := color.NRGBA{R: 0x2f, G: 0x6f, B: 0xe8, A: 0xff}
 	foreground := color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
 
 	center := float64(size-1) / 2

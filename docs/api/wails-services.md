@@ -57,6 +57,13 @@
 | UpdateAll | - | UpdateAllResult | 更新全部启用的订阅 |
 | SetOptions | id, autoUpdate, intervalMinutes, userAgent | SubscriptionView | 更新单个订阅的自动更新开关、独立间隔（0=跟随全局）与自定义 User-Agent |
 
+## EnvironmentService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Inspect | - | EnvironmentReport | 检查 fastv:// 协议注册、开机自启、PAC 文件残留与数据目录 |
+| Cleanup | - | CleanupResult | 清理上述系统集成残留（不删除用户数据），返回已清理/失败项 |
+
 ## NodeGroupService
 
 | 方法 | 输入 | 输出 | 说明 |
@@ -120,6 +127,7 @@
 | Get | - | Settings | 读取客户端和内核设置 |
 | Save | Settings | Settings | 校验并保存设置 |
 | Reset | - | Settings | 恢复默认设置 |
+| TunFallback | - | Settings | 关闭 TUN 模式并切换为系统代理（TUN 自检失败时的一键回退） |
 
 ## CoreService
 
@@ -167,6 +175,7 @@
 | Check | mode, includeSpeed | NetworkProbe | 检测直连或本地代理出口的 IP、归属地和网络质量 |
 | ExportReport | - | string | 在数据目录生成脱敏诊断报告 ZIP，返回文件路径 |
 | DNSAudit | - | DNSAuditResult | 对比系统 DNS / Xray DNS 配置并实测多解析器 A 记录、延迟与风险提示 |
+| TunAudit | - | TunAuditResult | TUN 依赖自检（平台/开关/管理员/内核/wintun/代理状态）并给出修复建议与回退提示 |
 
 ## RescueService
 

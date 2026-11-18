@@ -49,3 +49,19 @@ export function DNSAudit(): $CancellablePromise<$models.DNSAuditResult> {
 export function ExportReport(): $CancellablePromise<string> {
     return $Call.ByID(1726484655);
 }
+
+/**
+ * TunAudit checks every local prerequisite of Windows TUN mode: the platform,
+ * the persisted TUN switch, administrator rights, the installed core, the
+ * wintun.dll beside it and the running proxy. Checks that are not applicable
+ * are reported as "skip" instead of failing the whole audit, so the result is
+ * always a complete checklist for the wizard UI.
+ * 
+ * The method itself never returns an error today: every failure is represented
+ * as a check item, which keeps a broken settings store or an unwired core
+ * provider from hiding the remaining checks. The error result stays in the
+ * signature for symmetry with the other audit entry points and future use.
+ */
+export function TunAudit(): $CancellablePromise<$models.TunAuditResult> {
+    return $Call.ByID(4173280285);
+}

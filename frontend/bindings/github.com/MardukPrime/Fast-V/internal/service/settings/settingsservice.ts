@@ -22,6 +22,21 @@ export function Reset(): $CancellablePromise<model$0.Settings> {
     return $Call.ByID(4253285672);
 }
 
+/**
+ * Save validates, normalizes and persists the user-editable settings, then
+ * broadcasts the change. The validation rules live in normalizeSettings so
+ * derived operations can reuse the exact same path.
+ */
 export function Save(input: model$0.Settings): $CancellablePromise<model$0.Settings> {
     return $Call.ByID(3984388480, input);
+}
+
+/**
+ * TunFallback disables TUN mode and switches to the fixed system proxy so a
+ * user whose TUN adapter cannot start stays online after restarting the proxy.
+ * The current settings are re-validated and persisted through the same path as
+ * Save, and the resulting update is broadcast like any other settings change.
+ */
+export function TunFallback(): $CancellablePromise<model$0.Settings> {
+    return $Call.ByID(4268233898);
 }

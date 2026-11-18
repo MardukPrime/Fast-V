@@ -23,3 +23,27 @@ export interface DNSProbeResult {
     "latencyMs": number;
     "error": string;
 }
+
+/**
+ * TunAuditResult is the outcome of the TUN self-check. CanFallback tells the
+ * frontend whether it should offer the one-click system-proxy fallback, and
+ * FallbackHint carries the explanation to show next to that action.
+ */
+export interface TunAuditResult {
+    "checks": TunCheckItem[] | null;
+    "canFallback": boolean;
+    "fallbackHint": string;
+    "checkedAt": string;
+}
+
+/**
+ * TunCheckItem is one step of the TUN self-check. Remedy is a user-facing
+ * instruction shown when the step failed or was skipped for a fixable reason.
+ */
+export interface TunCheckItem {
+    "id": string;
+    "status": string;
+    "title": string;
+    "detail": string;
+    "remedy": string;
+}

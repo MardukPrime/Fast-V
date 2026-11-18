@@ -53,6 +53,10 @@ type ReportStoreProvider interface {
 type ReportSources struct {
 	// Store supplies the redacted settings summary and the record counts.
 	Store ReportStoreProvider
+	// CoreInfo returns the installed core description (installed flag, version
+	// and binary path). The optional provider is used by TunAudit; when it is
+	// nil the core and wintun.dll checks are reported as skipped.
+	CoreInfo func() model.CoreInfo
 	// AppInfo overrides the build information embedded in summary.json.
 	AppInfo func() model.AppInfo
 	// Logs returns the recent proxy log entries for logs.txt. When nil, the

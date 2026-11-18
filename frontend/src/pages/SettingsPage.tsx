@@ -5,6 +5,8 @@ import { Browser, Events } from "@wailsio/runtime";
 import { AppService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/app";
 import { Service as BackupService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/backup";
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
+import { Service as EnvironmentService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/environment";
+import type { CleanupResult, EnvironmentReport } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/environment";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
 import type { BackupResult, CoreInfo, GeoDataInfo, ProxyState, Settings, SnapshotInfo, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
@@ -431,6 +433,16 @@ export default function SettingsPage(props: SettingsProps) {
   const [autostartEnabled, setAutostartEnabled] = createSignal(false);
   const [autostartBusy, setAutostartBusy] = createSignal(false);
   const [autostartError, setAutostartError] = createSignal("");
+  // Environment cleanup: Cleanup already returns the refreshed report, so the
+  // panel keeps the latest report plus the last cleanup result (and never runs
+  // two environment operations at once).
+  const [envBusy, setEnvBusy] = createSignal<"inspect" | "cleanup" | "">("");
+  const [envReport, setEnvReport] = createSignal<EnvironmentReport | null>(null);
+  const [envCleanup, setEnvCleanup] = createSignal<CleanupResult | null>(null);
+  const [envError, setEnvError] = createSignal("");
+  const envResiduals = () => envReport()?.residuals ?? [];
+  const envRemoved = () => envCleanup()?.removed ?? [];
+  const envFailed = () => envCleanup()?.failed ?? [];
   const [backupBusy, setBackupBusy] = createSignal("");
   const [backupMessage, setBackupMessage] = createSignal("");
   const [backupError, setBackupError] = createSignal("");
@@ -811,6 +823,46 @@ export default function SettingsPage(props: SettingsProps) {
       setAutostartError(t("set.autostartError", { error: errorMessage(err) }));
     } finally {
       setAutostartBusy(false);
+    }
+  };
+
+  // Environment cleanup inspects (and removes) the OS leftovers of a previous
+  // install: the fastv:// protocol registration, the autostart entry and the
+  // generated PAC file. User data is never touched, so the confirm dialog only
+  // explains what is removed and points at the data directory that stays.
+  const inspectEnvironment = async () => {
+    if (envBusy()) return;
+    setEnvBusy("inspect");
+    setEnvError("");
+    setEnvCleanup(null);
+    try {
+      setEnvReport(await EnvironmentService.Inspect());
+    } catch (err) {
+      setEnvError(t("set.env.inspectError", { error: errorMessage(err) }));
+    } finally {
+      setEnvBusy("");
+    }
+  };
+
+  const cleanupEnvironment = async () => {
+    if (envBusy()) return;
+    const dataDir = envReport()?.dataDir;
+    const lines = [t("set.env.cleanupConfirm"), "", t("set.env.cleanupConfirmData")];
+    if (dataDir) lines.push("", t("set.env.cleanupConfirmDir", { dataDir }));
+    if (!window.confirm(lines.join("\n"))) return;
+    setEnvBusy("cleanup");
+    setEnvError("");
+    setEnvCleanup(null);
+    try {
+      const result = await EnvironmentService.Cleanup();
+      setEnvCleanup(result);
+      // Cleanup returns the state after the cleanup, which keeps the status
+      // card in sync without a second Inspect round-trip.
+      setEnvReport(result.report);
+    } catch (err) {
+      setEnvError(t("set.env.cleanupError", { error: errorMessage(err) }));
+    } finally {
+      setEnvBusy("");
     }
   };
 
@@ -2443,6 +2495,156 @@ export default function SettingsPage(props: SettingsProps) {
                 <p class="settings-note">
                   <Icon name="refresh" size={13} />
                   <span>{t("set.updateEmpty")}</span>
+                </p>
+              </Show>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>{t("set.env.title")}</strong>
+                <small>{t("set.env.hint")}</small>
+              </div>
+
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>{t("set.env.description")}</span>
+              </p>
+              <p class="settings-note">
+                <Icon name="check" size={13} />
+                <span>{t("set.env.keepData")}</span>
+              </p>
+
+              <div class="core-actions">
+                <button
+                  class="btn secondary"
+                  type="button"
+                  onClick={() => { void inspectEnvironment(); }}
+                  disabled={envBusy() !== ""}
+                >
+                  <Icon name="search" size={14} /> {envBusy() === "inspect" ? t("set.env.checking") : t("set.env.check")}
+                </button>
+                <button
+                  class="btn secondary"
+                  type="button"
+                  onClick={() => { void cleanupEnvironment(); }}
+                  disabled={envBusy() !== ""}
+                >
+                  <Icon name="trash" size={14} /> {envBusy() === "cleanup" ? t("set.env.cleaning") : t("set.env.cleanup")}
+                </button>
+              </div>
+
+              <Show when={envError()}>
+                <div class="alert error settings-inline-alert">
+                  <span class="alert-message"><Icon name="alert" size={15} /> {envError()}</span>
+                </div>
+              </Show>
+
+              <Show when={envReport()}>
+                {(report) => (
+                  <div class="backup-result">
+                    <div class="backup-result-grid">
+                      <div>
+                        <span>{t("set.env.protocol")}</span>
+                        <span classList={{ "tag": true, success: report().protocolRegistered, neutral: !report().protocolRegistered }}>
+                          {report().protocolRegistered ? t("set.env.yes") : t("set.env.no")}
+                        </span>
+                      </div>
+                      <div>
+                        <span>{t("set.env.autostart")}</span>
+                        <span classList={{ "tag": true, success: report().autostartEnabled, neutral: !report().autostartEnabled }}>
+                          {report().autostartEnabled ? t("set.env.yes") : t("set.env.no")}
+                        </span>
+                      </div>
+                      <div>
+                        <span>{t("set.env.pac")}</span>
+                        <span classList={{ "tag": true, success: report().pacFilePresent, neutral: !report().pacFilePresent }}>
+                          {report().pacFilePresent ? t("set.env.yes") : t("set.env.no")}
+                        </span>
+                      </div>
+                    </div>
+
+                    <Show
+                      when={envResiduals().length > 0}
+                      fallback={
+                        <p class="settings-note">
+                          <Icon name="check" size={13} />
+                          <span>{t("set.env.residualsEmpty")}</span>
+                        </p>
+                      }
+                    >
+                      <div class="selfcheck-list" role="list" aria-label={t("set.env.residuals")}>
+                        <For each={envResiduals()}>
+                          {(item) => (
+                            <div class="selfcheck-item warn" role="listitem">
+                              <span class="selfcheck-badge warn"><Icon name="alert" size={12} /> {t("set.env.residual")}</span>
+                              <div class="selfcheck-body"><strong class="selfcheck-name">{item}</strong></div>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+
+                    <div class="core-path-row">
+                      <span>{t("set.env.dataDir")}</span>
+                      <code
+                        style="white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip;"
+                        title={report().dataDir}
+                      >
+                        {report().dataDir || t("set.unknown")}
+                      </code>
+                    </div>
+                    <p class="backup-result-hint">{t("set.env.dataDirHint")}</p>
+                    <p class="backup-result-hint">{t("set.env.checkedAt", { time: formatCheckedAt(report().checkedAt) })}</p>
+                  </div>
+                )}
+              </Show>
+
+              <Show when={envCleanup()}>
+                {(result) => (
+                  <>
+                    <div classList={{ "alert": true, success: envFailed().length === 0, error: envFailed().length > 0, "settings-inline-alert": true }}>
+                      <span class="alert-message">
+                        <Icon name={envFailed().length === 0 ? "check" : "alert"} size={15} /> {result().message || t("set.env.cleanupDone")}
+                      </span>
+                    </div>
+
+                    <Show when={envRemoved().length > 0}>
+                      <div class="selfcheck-list" role="list" aria-label={t("set.env.removed")}>
+                        <For each={envRemoved()}>
+                          {(item) => (
+                            <div class="selfcheck-item ok" role="listitem">
+                              <span class="selfcheck-badge ok"><Icon name="check" size={12} /> {t("set.env.removed")}</span>
+                              <div class="selfcheck-body"><strong class="selfcheck-name">{item}</strong></div>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+
+                    <Show when={envFailed().length > 0}>
+                      <div class="selfcheck-list" role="list" aria-label={t("set.env.failed")}>
+                        <For each={envFailed()}>
+                          {(item) => (
+                            <div class="selfcheck-item error" role="listitem">
+                              <span class="selfcheck-badge error"><Icon name="alert" size={12} /> {t("set.env.failed")}</span>
+                              <div class="selfcheck-body"><strong class="selfcheck-name">{item}</strong></div>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                      <p class="settings-note">
+                        <Icon name="alert" size={13} />
+                        <span>{t("set.env.cleanupFailedHint")}</span>
+                      </p>
+                    </Show>
+                  </>
+                )}
+              </Show>
+
+              <Show when={!envReport() && !envCleanup() && !envBusy()}>
+                <p class="settings-note">
+                  <Icon name="search" size={13} />
+                  <span>{t("set.env.empty")}</span>
                 </p>
               </Show>
             </div>

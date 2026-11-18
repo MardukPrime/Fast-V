@@ -2,11 +2,13 @@ import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 
 
 import { DiagnosticsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
-import type { DNSAuditResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
+import type { DNSAuditResult, TunAuditResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
 import { Service as HistoryService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/history";
+import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { Service as RescueService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
 import type { RescueReport, RescueResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
 import { Service as SelfCheckService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/selfcheck";
+import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
 import type { CheckResult, LatencySample, NetworkProbe, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import { t } from "../i18n";
@@ -73,6 +75,31 @@ function rescueSeverityLabel(severity: string) {
   if (tone === "ok") return t("net.rescue.severityOk");
   if (tone === "warn") return t("net.rescue.severityWarning");
   return t("net.rescue.severityError");
+}
+
+// The TUN audit has four states: ok | warning | error | skip. "skip" means the
+// check does not apply on this host (non-Windows platform, unwired provider), so
+// it must look neutral instead of failing the whole panel.
+type TunTone = "ok" | "warn" | "error" | "skip";
+
+function tunTone(status: string): TunTone {
+  if (status === "ok") return "ok";
+  if (status === "warning") return "warn";
+  if (status === "skip") return "skip";
+  return "error";
+}
+
+function tunStatusLabel(tone: TunTone) {
+  if (tone === "ok") return t("net.tun.statusOk");
+  if (tone === "warn") return t("net.tun.statusWarning");
+  if (tone === "skip") return t("net.tun.statusSkip");
+  return t("net.tun.statusError");
+}
+
+function tunStatusIcon(tone: TunTone): "check" | "alert" | "minimize" {
+  if (tone === "ok") return "check";
+  if (tone === "skip") return "minimize";
+  return "alert";
 }
 
 // Inspect degrades unsupported platform capabilities into an "ok" skip issue
@@ -185,6 +212,13 @@ export default function NetworkPage(props: NetworkPageProps) {
   const [dnsAudit, setDnsAudit] = createSignal<DNSAuditResult | null>(null);
   const [dnsBusy, setDnsBusy] = createSignal(false);
   const [dnsError, setDnsError] = createSignal("");
+  const [tunAudit, setTunAudit] = createSignal<TunAuditResult | null>(null);
+  const [tunBusy, setTunBusy] = createSignal(false);
+  const [tunError, setTunError] = createSignal("");
+  const [fallbackBusy, setFallbackBusy] = createSignal(false);
+  const [fallbackNotice, setFallbackNotice] = createSignal("");
+  const [fallbackError, setFallbackError] = createSignal("");
+  const [restarting, setRestarting] = createSignal(false);
 
   const loadLatencies = async () => {
     setLatencyLoading(true);
@@ -347,6 +381,91 @@ export default function NetworkPage(props: NetworkPageProps) {
 
   const proxyAvailable = () => props.proxyState.status === "running";
 
+  // TUN mode depends on the platform, permissions, the core, wintun.dll and the
+  // running proxy. The backend represents every prerequisite as a check item
+  // (including "skip"), so an RPC error is the only failure state here and it
+  // must never block the other diagnostics panels.
+  const runTunAudit = async () => {
+    if (tunBusy()) return;
+    setTunBusy(true);
+    setTunError("");
+    try {
+      const audit = await DiagnosticsService.TunAudit();
+      setTunAudit(audit);
+    } catch (err) {
+      setTunError(t("net.tun.error", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setTunBusy(false);
+    }
+  };
+
+  const tunSummary = createMemo(() => {
+    let ok = 0;
+    let warning = 0;
+    let error = 0;
+    let skip = 0;
+    for (const check of tunAudit()?.checks ?? []) {
+      const tone = tunTone(check.status);
+      if (tone === "ok") ok += 1;
+      else if (tone === "warn") warning += 1;
+      else if (tone === "skip") skip += 1;
+      else error += 1;
+    }
+    return { total: ok + warning + error + skip, ok, warning, error, skip };
+  });
+
+  const tunVerdict = () => {
+    const { total, warning, error } = tunSummary();
+    if (total === 0) return t("net.tun.verdictEmpty");
+    if (error > 0) return t("net.tun.verdictErrors", { count: error });
+    if (warning > 0) return t("net.tun.verdictWarnings", { count: warning });
+    return t("net.tun.verdictOk");
+  };
+
+  // The proxy state passed down from the app shell can be a little stale by the
+  // time the fallback is confirmed, so ask the backend first and only fall back
+  // to the prop when that RPC fails.
+  const proxyNeedsRestart = async () => {
+    try {
+      const state = await ProxyService.State();
+      return state.status === "running" || state.status === "starting";
+    } catch {
+      return proxyAvailable();
+    }
+  };
+
+  // TunFallback persists "TUN off + system proxy on"; a running proxy only picks
+  // the new mode up after a restart, so it is restarted right away. The audit is
+  // re-run afterwards so the checklist reflects the post-fallback state.
+  const applyTunFallback = async () => {
+    if (fallbackBusy() || tunBusy()) return;
+    const confirmed = window.confirm(t("net.tun.fallbackConfirm"));
+    if (!confirmed) return;
+    setFallbackBusy(true);
+    setFallbackError("");
+    setFallbackNotice("");
+    try {
+      await SettingsService.TunFallback();
+      setFallbackNotice(t("net.tun.fallbackSuccess"));
+      if (await proxyNeedsRestart()) {
+        setRestarting(true);
+        try {
+          await ProxyService.Restart();
+          setFallbackNotice(t("net.tun.restartDone"));
+        } catch (err) {
+          setFallbackError(t("net.tun.restartError", { error: err instanceof Error ? err.message : String(err) }));
+        } finally {
+          setRestarting(false);
+        }
+      }
+    } catch (err) {
+      setFallbackError(t("net.tun.fallbackError", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setFallbackBusy(false);
+    }
+    await runTunAudit();
+  };
+
   const checkMode = async (mode: "direct" | "proxy") => {
     if (mode === "proxy" && !proxyAvailable()) {
       setError(t("net.error.proxyOffline"));
@@ -388,6 +507,12 @@ export default function NetworkPage(props: NetworkPageProps) {
   // populated without an extra click; the button re-runs it on demand.
   onMount(() => {
     void runDnsAudit();
+  });
+
+  // The TUN prerequisites are local and cheap to inspect, so the wizard panel is
+  // populated once on load; the button re-runs the audit on demand.
+  onMount(() => {
+    void runTunAudit();
   });
 
   const sameExit = () => Boolean(direct()?.ip && proxied()?.ip && direct()!.ip === proxied()!.ip);
@@ -753,6 +878,150 @@ export default function NetworkPage(props: NetworkPageProps) {
             <span class="network-pulse" />
             <strong>{t("net.dns.loading")}</strong>
             <span>{t("net.dns.loadingHint")}</span>
+          </div>
+        </Show>
+      </section>
+
+      <section class="glass-panel selfcheck-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>{t("net.tun.title")}</h3>
+            <span>{t("net.tun.subtitle")}</span>
+          </div>
+          <div class="selfcheck-actions">
+            <Show when={tunAudit()}>
+              <span class="selfcheck-timestamp">{t("net.tun.lastAt", { time: formatSampleTime(tunAudit()!.checkedAt) })}</span>
+            </Show>
+            <button class="btn glass" onClick={() => { void runTunAudit(); }} disabled={tunBusy() || fallbackBusy()}>
+              <Icon name={tunBusy() ? "refresh" : "search"} size={14} />
+              {tunBusy() ? t("net.tun.busy") : tunAudit() ? t("net.tun.rerun") : t("net.tun.check")}
+            </button>
+          </div>
+        </div>
+
+        <Show when={tunError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> {tunError()}</span>
+            <button class="btn ghost" onClick={() => { void runTunAudit(); }}>{t("net.retry")}</button>
+          </div>
+        </Show>
+
+        <Show
+          when={tunBusy() && !tunAudit()}
+          fallback={
+            <Show
+              when={tunAudit()}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="search" size={22} /></div>
+                  <strong>{t("net.tun.emptyTitle")}</strong>
+                  <span>{t("net.tun.emptyBody")}</span>
+                </div>
+              }
+            >
+              {(audit) => (
+                <>
+                  <div class="selfcheck-summary">
+                    <span class="selfcheck-chip ok"><strong>{tunSummary().ok}</strong> {t("net.tun.okSuffix")}</span>
+                    <span class="selfcheck-chip warn"><strong>{tunSummary().warning}</strong> {t("net.tun.warningSuffix")}</span>
+                    <span class="selfcheck-chip error"><strong>{tunSummary().error}</strong> {t("net.tun.errorSuffix")}</span>
+                    <Show when={tunSummary().skip > 0}>
+                      <span class="selfcheck-chip"><strong>{tunSummary().skip}</strong> {t("net.tun.skipSuffix")}</span>
+                    </Show>
+                    <span class="selfcheck-verdict">{tunVerdict()}</span>
+                  </div>
+
+                  <Show when={(audit().checks ?? []).length > 0}>
+                    <div class="selfcheck-list" role="list">
+                      <For each={audit().checks ?? []}>
+                        {(check) => {
+                          const tone = tunTone(check.status);
+                          return (
+                            <div
+                              classList={{
+                                "selfcheck-item": true,
+                                ok: tone === "ok",
+                                warn: tone === "warn",
+                                error: tone === "error",
+                              }}
+                              role="listitem"
+                            >
+                              <span
+                                classList={{
+                                  "selfcheck-badge": true,
+                                  ok: tone === "ok",
+                                  warn: tone === "warn",
+                                  error: tone === "error",
+                                  // Skipped checks have no dedicated palette; they
+                                  // reuse the neutral tag colours for a grey pill
+                                  // instead of adding new CSS.
+                                  tag: tone === "skip",
+                                  neutral: tone === "skip",
+                                }}
+                              >
+                                <Icon name={tunStatusIcon(tone)} size={12} />
+                                {tunStatusLabel(tone)}
+                              </span>
+                              <div class="selfcheck-body">
+                                <strong class="selfcheck-name">{check.title || check.id}</strong>
+                                <Show when={check.detail}>
+                                  <p class="selfcheck-detail">{check.detail}</p>
+                                </Show>
+                                <Show when={check.remedy}>
+                                  <p class="selfcheck-hint">
+                                    <Icon name="alert" size={11} />
+                                    <span><strong>{t("net.tun.remedyLabel")}</strong> {check.remedy}</span>
+                                  </p>
+                                </Show>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
+
+                  <Show when={audit().fallbackHint}>
+                    <p class="settings-note"><Icon name="alert" size={13} /><span>{audit().fallbackHint}</span></p>
+                  </Show>
+
+                  <Show when={audit().canFallback && proxyAvailable() && !restarting()}>
+                    <p class="settings-note"><Icon name="refresh" size={13} /><span>{t("net.tun.restartHint")}</span></p>
+                  </Show>
+
+                  <Show when={restarting()}>
+                    <p class="settings-note"><Icon name="refresh" size={13} /><span>{t("net.tun.restarting")}</span></p>
+                  </Show>
+
+                  <Show when={fallbackError()}>
+                    <div class="alert error selfcheck-alert">
+                      <span class="alert-message"><Icon name="alert" size={15} /> {fallbackError()}</span>
+                    </div>
+                  </Show>
+
+                  <Show when={fallbackNotice()}>
+                    <div class="alert success selfcheck-alert">
+                      <span class="alert-message"><Icon name="check" size={15} /> {fallbackNotice()}</span>
+                    </div>
+                  </Show>
+
+                  <Show when={audit().canFallback}>
+                    <div class="core-actions">
+                      <button class="btn primary" type="button" onClick={() => { void applyTunFallback(); }} disabled={fallbackBusy() || tunBusy()}>
+                        <Icon name={fallbackBusy() ? "refresh" : "route"} size={14} />
+                        {fallbackBusy() ? t("net.tun.fallbackBusy") : t("net.tun.fallback")}
+                      </button>
+                    </div>
+                  </Show>
+                </>
+              )}
+            </Show>
+          }
+        >
+          <div class="selfcheck-loading">
+            <span class="network-pulse" />
+            <strong>{t("net.tun.loading")}</strong>
+            <span>{t("net.tun.loadingHint")}</span>
           </div>
         </Show>
       </section>
