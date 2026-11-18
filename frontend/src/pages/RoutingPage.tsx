@@ -4,8 +4,10 @@ import { Events } from "@wailsio/runtime";
 
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { Service as RoutingService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/routing";
+import { Service as RuleDebugService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/ruledebug";
 import { Service as RuleSetService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/ruleset";
 import type { ProxyState, RoutingPreset, RoutingRule, RuleSet } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { Result as RuleDebugResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/ruledebug";
 import Icon from "../components/Icon";
 import { language, t } from "../i18n";
 
@@ -57,6 +59,44 @@ function actionLabel(action: string) {
   return item ? t(item.labelKey) : action;
 }
 
+// Rule debugger: destination kinds mirror the RuleDebugService binding. Label
+// keys live in the i18n dictionary; the maps below only translate the backend
+// values (outbound tag and rule source) so no diagnostic copy is hard coded.
+const DEBUG_KINDS = [
+  { value: "auto", labelKey: "route.debug.kind.auto" },
+  { value: "domain", labelKey: "route.debug.kind.domain" },
+  { value: "ip", labelKey: "route.debug.kind.ip" },
+  { value: "process", labelKey: "route.debug.kind.process" },
+  { value: "port", labelKey: "route.debug.kind.port" },
+  { value: "network", labelKey: "route.debug.kind.network" },
+];
+
+const DEBUG_OUTBOUND_LABELS: Record<string, string> = {
+  proxy: "route.debug.outbound.proxy",
+  direct: "route.debug.outbound.direct",
+  block: "route.debug.outbound.block",
+};
+
+const DEBUG_SOURCE_LABELS: Record<string, string> = {
+  user: "route.debug.source.user",
+  ruleset: "route.debug.source.ruleset",
+  default: "route.debug.source.default",
+};
+
+function debugKinds() {
+  return DEBUG_KINDS.map((item) => ({ value: item.value, label: t(item.labelKey) }));
+}
+
+function debugOutboundLabel(tag: string) {
+  const key = DEBUG_OUTBOUND_LABELS[tag];
+  return key ? t(key) : tag;
+}
+
+function debugSourceLabel(source: string) {
+  const key = DEBUG_SOURCE_LABELS[source];
+  return key ? t(key) : source;
+}
+
 // Rule set subscriptions: remote lists that expand into routing rules once they
 // download successfully. Values mirror the backend validation and the interval
 // options offered by the service binding (0 = default interval).
@@ -83,6 +123,12 @@ const DEFAULT_RULE_SET_INTERVAL_MINUTES = 360;
 // existing border, hover and narrow-width scroll behavior are preserved.
 const RULE_SET_TABLE_STYLE = {
   "grid-template-columns": "minmax(120px, 1.4fr) 44px 58px 66px 52px minmax(88px, 1fr) 78px 88px 88px",
+};
+
+// The debug candidate table reuses .routing-table/.routing-row but only needs
+// four compact columns: name, type, value and source.
+const DEBUG_CANDIDATE_GRID_STYLE = {
+  "grid-template-columns": "minmax(120px, 1.3fr) 92px minmax(120px, 1.6fr) 88px",
 };
 
 function ruleSetKinds() {
@@ -253,6 +299,12 @@ export default function RoutingPage(props: RoutingPageProps) {
   const [ruleSetBusy, setRuleSetBusy] = createSignal(false);
   const [updatingRuleSetId, setUpdatingRuleSetId] = createSignal("");
   const [updatingAllRuleSets, setUpdatingAllRuleSets] = createSignal(false);
+  const [debugInput, setDebugInput] = createSignal("");
+  const [debugKind, setDebugKind] = createSignal("auto");
+  const [debugBusy, setDebugBusy] = createSignal(false);
+  const [debugError, setDebugError] = createSignal("");
+  const [debugResult, setDebugResult] = createSignal<RuleDebugResult | null>(null);
+  const [debugCandidatesOpen, setDebugCandidatesOpen] = createSignal(false);
   let importInput: HTMLInputElement | undefined;
 
   const load = async () => {
@@ -669,12 +721,151 @@ export default function RoutingPage(props: RoutingPageProps) {
     }
   };
 
+  // Rule debugger: asks the backend which rule decides one destination. The
+  // backend normalizes the input and returns a Chinese validation error for
+  // invalid values, which is shown as-is inside the localized error prefix.
+  const runRuleDebug = async (event: Event) => {
+    event.preventDefault();
+    if (debugBusy()) return;
+    setDebugBusy(true);
+    setDebugError("");
+    try {
+      const result = await RuleDebugService.Debug(debugInput().trim(), debugKind());
+      setDebugResult(result);
+      setDebugCandidatesOpen(false);
+    } catch (err) {
+      setDebugResult(null);
+      setDebugError(t("route.debug.err.failed", { error: errorMessage(err) }));
+    } finally {
+      setDebugBusy(false);
+    }
+  };
+
   return (
     <div class="page-stack">
       <section class="mini-stats">
         <div class="mini-stat"><span>{t("route.stats.customRules")}</span><strong>{rules().length}</strong><small>{t("route.stats.customRulesHint")}</small></div>
         <div class="mini-stat"><span>{t("route.stats.enabled")}</span><strong>{rules().filter((rule) => rule.enabled).length}</strong><small>{t("route.stats.enabledHint")}</small></div>
         <div class="mini-stat"><span>{t("route.stats.mode")}</span><strong class="routing-mode-value">{modeLabel()}</strong><small>{t("route.stats.modeHint")}</small></div>
+      </section>
+
+      {/* Rule debugger: explain which rule decides one destination without
+          starting the core. It sits above the rule tables because it is the
+          query tool users reach for when traffic takes the wrong outbound. */}
+      <section class="panel routing-panel">
+        <div class="panel-heading node-heading">
+          <div class="heading-with-icon">
+            <span class="heading-icon cyan"><Icon name="search" size={17} /></span>
+            <div>
+              <h3>{t("route.debug.panel.title")}</h3>
+              <span>{t("route.debug.panel.subtitle")}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="routing-note">
+          <Icon name="search" size={13} />
+          <span>{t("route.debug.note.hint")}</span>
+        </div>
+
+        <form class="routing-io-bar" onSubmit={runRuleDebug}>
+          <input
+            value={debugInput()}
+            onInput={(event) => setDebugInput(event.currentTarget.value)}
+            placeholder={t("route.debug.input.placeholder")}
+            aria-label={t("route.debug.input.label")}
+            autocomplete="off"
+            spellcheck={false}
+            style={{ flex: "1 1 220px", "min-width": "0" }}
+          />
+          <div class="routing-io-group">
+            <select
+              value={debugKind()}
+              onChange={(event) => setDebugKind(event.currentTarget.value)}
+              aria-label={t("route.debug.kind.label")}
+              style={{ width: "auto", "min-width": "112px" }}
+            >
+              <For each={debugKinds()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+            </select>
+            <button class="btn primary" type="submit" disabled={debugBusy()}>
+              <Icon name="search" size={13} /> {debugBusy() ? t("route.debug.submitting") : t("route.debug.submit")}
+            </button>
+          </div>
+        </form>
+
+        <Show when={debugError()}>
+          <div class="alert error" style={{ "margin-top": "10px" }}><span class="alert-message"><Icon name="alert" size={15} /> {debugError()}</span></div>
+        </Show>
+
+        <Show when={debugResult()}>
+          {(result) => (
+            <article class="routing-preset-card" style={{ "margin-top": "12px" }}>
+              <div class="routing-preset-info">
+                <div class="routing-preset-title">
+                  <span classList={{ "routing-action": true, direct: result().outboundTag === "direct", block: result().outboundTag === "block" }}>
+                    {debugOutboundLabel(result().outboundTag)}
+                  </span>
+                  <Show when={result().matched} fallback={<strong>{t("route.debug.result.unmatchedTitle")}</strong>}>
+                    <span class="tag success">{t("route.debug.result.matched")}</span>
+                    <strong>{result().ruleName}</strong>
+                    <span class="tag neutral">{typeLabel(result().ruleType)}</span>
+                  </Show>
+                  <span class="tag neutral">{debugSourceLabel(result().source)}</span>
+                </div>
+                <Show when={result().matched} fallback={<p>{t("route.debug.result.unmatchedBody")}</p>}>
+                  <Show when={result().ruleValue}>
+                    <div class="routing-preset-preview">
+                      <span class="routing-preset-chip" title={result().ruleValue}>{t("route.debug.field.value")}: {result().ruleValue}</span>
+                    </div>
+                  </Show>
+                </Show>
+                <p>{result().reason}</p>
+                <For each={result().notes ?? []}>
+                  {(note) => (
+                    <div class="routing-editor-hint" style={{ "margin-top": "8px" }}>
+                      <Icon name="alert" size={13} />
+                      <span>{note}</span>
+                    </div>
+                  )}
+                </For>
+                <Show when={(result().candidates ?? []).length > 0}>
+                  <button
+                    class="btn ghost compact"
+                    type="button"
+                    style={{ "margin-top": "10px" }}
+                    aria-expanded={debugCandidatesOpen() ? "true" : "false"}
+                    onClick={() => setDebugCandidatesOpen(!debugCandidatesOpen())}
+                  >
+                    <span style={{ display: "inline-flex", transform: debugCandidatesOpen() ? "rotate(90deg)" : "none" }}>
+                      <Icon name="chevron" size={13} />
+                    </span>
+                    {t("route.debug.candidates.toggle", { count: (result().candidates ?? []).length })}
+                  </button>
+                  <Show when={debugCandidatesOpen()}>
+                    <div class="routing-table" style={{ "margin-top": "8px" }}>
+                      <div class="routing-table-head" style={DEBUG_CANDIDATE_GRID_STYLE}>
+                        <span>{t("route.debug.candidates.name")}</span>
+                        <span>{t("route.debug.candidates.type")}</span>
+                        <span>{t("route.debug.candidates.value")}</span>
+                        <span>{t("route.debug.candidates.source")}</span>
+                      </div>
+                      <For each={result().candidates ?? []}>
+                        {(candidate) => (
+                          <div class="routing-row" style={DEBUG_CANDIDATE_GRID_STYLE}>
+                            <div class="routing-name" title={candidate.reason}><strong>{candidate.ruleName}</strong><small>{t("route.debug.candidates.skipped")}</small></div>
+                            <span class="tag neutral">{typeLabel(candidate.ruleType)}</span>
+                            <span class="routing-value" title={candidate.ruleValue}>{candidate.ruleValue}</span>
+                            <span class="tag neutral">{debugSourceLabel(candidate.source)}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </Show>
+              </div>
+            </article>
+          )}
+        </Show>
       </section>
 
       <section class="panel routing-panel">

@@ -5,10 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image/png"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -459,5 +462,255 @@ func TestDueSubscriptions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// --- Proxy retry tests -----------------------------------------------------
+
+// fakeSubscriptionProxyState is a stand-in for *proxyservice.ProxyService.
+type fakeSubscriptionProxyState struct {
+	state model.ProxyState
+}
+
+func (f fakeSubscriptionProxyState) State() model.ProxyState {
+	return f.state
+}
+
+// newProxyRetryStore creates a temporary store for the proxy retry tests.
+func newProxyRetryStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.NewStoreAt(filepath.Join(t.TempDir(), "data.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+// configureProxyRetrySettings persists the proxy retry switch and local port.
+func configureProxyRetrySettings(t *testing.T, st *store.Store, viaProxy bool, localPort int) {
+	t.Helper()
+	settings := st.Settings()
+	settings.SubscriptionUpdateViaProxy = viaProxy
+	settings.XrayLocalPort = localPort
+	if err := st.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// proxyRetrySubscriptionContent is a minimal valid subscription body: one
+// base64-encoded vless link.
+func proxyRetrySubscriptionContent() string {
+	link := "vless://00000000-0000-0000-0000-000000000009@example.com:443?security=tls#ProxyNode"
+	return base64.StdEncoding.EncodeToString([]byte(link))
+}
+
+// subscriptionTestProxyServer is a fixed-response HTTP proxy: the subscription
+// endpoint itself is unreachable in the retry tests, so any body the client
+// receives can only have come from this proxy. It counts the requests it sees.
+func subscriptionTestProxyServer(t *testing.T) (*httptest.Server, *int32) {
+	t.Helper()
+	hits := new(int32)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(hits, 1)
+		w.Header().Set("Subscription-Userinfo", "upload=11; download=22; total=33; expire=1893456000")
+		_, _ = fmt.Fprint(w, proxyRetrySubscriptionContent())
+	}))
+	t.Cleanup(server.Close)
+	return server, hits
+}
+
+// subscriptionTestFailingProxy is a proxy that rejects every request, used to
+// exercise the "both attempts failed" branch.
+func subscriptionTestFailingProxy(t *testing.T) (*httptest.Server, *int32) {
+	t.Helper()
+	hits := new(int32)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(hits, 1)
+		http.Error(w, "proxy failure", http.StatusBadGateway)
+	}))
+	t.Cleanup(server.Close)
+	return server, hits
+}
+
+// closedSubscriptionURL returns an http URL on a loopback port that is known to
+// be closed, so the direct download fails immediately and deterministically.
+func closedSubscriptionURL(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return "http://" + address + "/api/v1/client/subscribe?token=secret-token"
+}
+
+func httptestPort(t *testing.T, server *httptest.Server) int {
+	t.Helper()
+	_, portText, err := net.SplitHostPort(server.Listener.Addr().String())
+	if err != nil {
+		t.Fatalf("unexpected test server address %q: %v", server.Listener.Addr(), err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatalf("unexpected test server port %q: %v", portText, err)
+	}
+	return port
+}
+
+func runningSubscriptionProxy(port int) fakeSubscriptionProxyState {
+	return fakeSubscriptionProxyState{state: model.ProxyState{
+		Status:    "running",
+		LocalAddr: net.JoinHostPort("127.0.0.1", strconv.Itoa(port)),
+	}}
+}
+
+func TestServiceUpdateDoesNotRetryWhenDirectSucceeds(t *testing.T) {
+	direct := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, proxyRetrySubscriptionContent())
+	}))
+	defer direct.Close()
+	proxyServer, proxyHits := subscriptionTestProxyServer(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, true, port)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-direct", Name: "Direct", URL: direct.URL, Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, runningSubscriptionProxy(port))
+	view, err := service.Update("sub-direct")
+	if err != nil {
+		t.Fatalf("direct update failed: %v", err)
+	}
+	if view.NodeCount != 1 || view.LastError != "" {
+		t.Fatalf("unexpected update result: %+v", view)
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 0 {
+		t.Fatalf("proxy must not be used when the direct download succeeds, saw %d request(s)", got)
+	}
+}
+
+func TestServiceUpdateRetriesThroughProxyWhenDirectFails(t *testing.T) {
+	proxyServer, proxyHits := subscriptionTestProxyServer(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, true, port)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-retry", Name: "Retry", URL: closedSubscriptionURL(t), Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, runningSubscriptionProxy(port))
+	view, err := service.Update("sub-retry")
+	if err != nil {
+		t.Fatalf("expected the proxy retry to succeed, got %v", err)
+	}
+	if view.NodeCount != 1 || view.LastError != "" {
+		t.Fatalf("unexpected update result: %+v", view)
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 1 {
+		t.Fatalf("expected exactly one proxy retry, saw %d", got)
+	}
+	if view.TotalBytes != 33 {
+		t.Fatalf("expected the proxied response user info to be applied, got %+v", view)
+	}
+}
+
+func TestServiceAddRetriesThroughProxyWhenDirectFails(t *testing.T) {
+	proxyServer, proxyHits := subscriptionTestProxyServer(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, true, port)
+
+	service := New(st, runningSubscriptionProxy(port))
+	added, err := service.Add(model.SubscriptionInput{Name: "Imported", URL: closedSubscriptionURL(t)})
+	if err != nil {
+		t.Fatalf("expected the proxy retry to import the subscription, got %v", err)
+	}
+	if added.NodeCount != 1 || len(service.List()) != 1 {
+		t.Fatalf("unexpected import result: %+v", added)
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 1 {
+		t.Fatalf("expected exactly one proxy retry, saw %d", got)
+	}
+}
+
+func TestServiceUpdateDoesNotRetryWhenSwitchIsOff(t *testing.T) {
+	proxyServer, proxyHits := subscriptionTestProxyServer(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, false, port)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-no-retry", Name: "NoRetry", URL: closedSubscriptionURL(t), Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, runningSubscriptionProxy(port))
+	view, err := service.Update("sub-no-retry")
+	if err == nil {
+		t.Fatal("expected the direct update to fail")
+	}
+	if view.LastError == "" || !strings.Contains(view.LastError, "failed to fetch subscription") {
+		t.Fatalf("expected the direct fetch error to be recorded, got %q", view.LastError)
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 0 {
+		t.Fatalf("proxy retry must stay off when the setting is disabled, saw %d request(s)", got)
+	}
+}
+
+func TestServiceUpdateDoesNotRetryWhenProxyIsStopped(t *testing.T) {
+	proxyServer, proxyHits := subscriptionTestProxyServer(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, true, port)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-stopped", Name: "Stopped", URL: closedSubscriptionURL(t), Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, fakeSubscriptionProxyState{state: model.ProxyState{Status: "stopped"}})
+	view, err := service.Update("sub-stopped")
+	if err == nil {
+		t.Fatal("expected the direct update to fail")
+	}
+	if view.LastError == "" {
+		t.Fatal("expected the direct fetch error to be recorded")
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 0 {
+		t.Fatalf("proxy retry must not run while the proxy is stopped, saw %d request(s)", got)
+	}
+}
+
+func TestServiceUpdateReportsBothAttemptsFailed(t *testing.T) {
+	proxyServer, proxyHits := subscriptionTestFailingProxy(t)
+	port := httptestPort(t, proxyServer)
+
+	st := newProxyRetryStore(t)
+	configureProxyRetrySettings(t, st, true, port)
+	if err := st.AddSubscription(model.Subscription{ID: "sub-both-fail", Name: "BothFail", URL: closedSubscriptionURL(t), Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(st, runningSubscriptionProxy(port))
+	view, err := service.Update("sub-both-fail")
+	if err == nil {
+		t.Fatal("expected both download attempts to fail")
+	}
+	if !strings.Contains(err.Error(), "直连与代理重试均失败") {
+		t.Fatalf("expected the Chinese both-attempts-failed explanation, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "failed to fetch subscription") {
+		t.Fatalf("expected the original direct error to be preserved, got %v", err)
+	}
+	if !strings.Contains(view.LastError, "直连与代理重试均失败") {
+		t.Fatalf("expected the recorded error to carry the Chinese explanation, got %q", view.LastError)
+	}
+	if got := atomic.LoadInt32(proxyHits); got != 1 {
+		t.Fatalf("expected exactly one proxy retry, saw %d", got)
 	}
 }

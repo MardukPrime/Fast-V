@@ -161,6 +161,20 @@
 | 方法 | 输入 | 输出 | 说明 |
 |---|---|---|---|
 | Check | mode, includeSpeed | NetworkProbe | 检测直连或本地代理出口的 IP、归属地和网络质量 |
+| ExportReport | - | string | 在数据目录生成脱敏诊断报告 ZIP，返回文件路径 |
+
+## RescueService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Inspect | - | RescueReport | 检测系统代理残留、地址不一致、WinHTTP 残留、端口占用与核心异常 |
+| Repair | - | RescueResult | 一键修复：代理未运行则重置系统代理并刷新 DNS；运行中则刷新 DNS 并重启内核 |
+
+## RuleDebugService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Debug | input, kind | Result | 离线预演域名/IP/进程/端口/协议命中的规则、动作与出站（kind: auto/domain/ip/process/port/network） |
 
 `mode` 取值为 `direct` 或 `proxy`。`proxy` 模式要求本地代理处于运行状态。
 ## 当前设置字段
@@ -213,6 +227,8 @@
 | closeToTray | 关闭窗口时隐藏到托盘（而非退出） |
 | minimizeToTray | 最小化时隐藏到托盘（best effort） |
 | autoCheckUpdate | 启动时自动检查应用更新 |
+| autoRestartCore | 核心异常退出时自动重启（看门狗） |
+| subscriptionUpdateViaProxy | 订阅直连更新失败时通过本地代理重试一次 |
 | hotkeysEnabled | 启用全局快捷键 |
 | hotkeyToggleProxy / hotkeyCycleMode / hotkeyNextNode | 三个全局快捷键组合（如 Ctrl+Shift+F；空串表示禁用；保存时规范化并校验重复） |
 | webdavUrl / webdavUsername / webdavPassword | WebDAV 服务器地址与 Basic Auth 凭据（本地保存） |

@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.4.0--pre.1-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.5.0--pre.1-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -301,6 +301,11 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 节点分组：手动分组快速切换，或自动测速分组按间隔测速并自动选择延迟最低节点
 - 规则集订阅：远程域名/IP 列表定时下载并展开为路由规则（兼容 hosts / Adblock / Clash 列表格式，失败保留上次规则）
 - 深链接导入：注册 `fastv://` 协议（Windows），支持通过链接导入订阅或分享链接；命令行参数同样生效
+- 网络救援：检测系统代理残留、系统代理地址不一致、WinHTTP 代理残留、本地端口占用与核心异常，并一键安全修复
+- 核心看门狗：核心异常退出后按退避策略自动重启（用户主动停止优先，连续失败有上限），日志与状态可见
+- 规则调试器：离线查询域名 / IP / 进程 / 端口 / 协议命中的路由规则、动作与出站，GeoIP/GeoSite 规则会注明需运行时判定
+- 诊断报告导出：一键生成脱敏 ZIP（设置摘要、脱敏日志、自检结果），便于反馈问题
+- 订阅更新失败时自动通过本地代理重试一次（可关闭）
 - 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
 
 - 多平台构建：Windows x64、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用
@@ -332,6 +337,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - [GeoData](docs/cores/xray/geodata.md)
 - [液态玻璃底栏](docs/ui/LIQUID_GLASS.md)
 - [UI 覆盖与文字布局审查](docs/ui/UI_AUDIT.md)
+- [同类产品社区调研与改进方向](docs/product/COMMUNITY_RESEARCH.md)
 - [更新日志](CHANGELOG.md)
 - [完整文档索引](docs/README.md)
 

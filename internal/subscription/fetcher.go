@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,23 @@ func FetchWithMeta(ctx context.Context, rawURL string) (FetchResult, error) {
 // userAgent as the User-Agent header when it is non-empty. An empty userAgent
 // falls back to DefaultUserAgent so providers still see a stable client name.
 func FetchWithMetaOptions(ctx context.Context, rawURL, userAgent string) (FetchResult, error) {
+	return fetchWithMeta(ctx, rawURL, userAgent, "")
+}
+
+// FetchWithMetaProxy downloads a subscription through proxyURL. A non-empty
+// proxyURL is used as the HTTP(S) proxy for this request (the local Xray inbound
+// listens as both SOCKS5 and HTTP, so "http://127.0.0.1:<port>" is enough).
+// When proxyURL is empty the call behaves exactly like FetchWithMetaOptions.
+// Every other part of the download (20s timeout, 5 MB limit, User-Agent and
+// Subscription-Userinfo parsing) is shared with FetchWithMetaOptions.
+func FetchWithMetaProxy(ctx context.Context, rawURL, userAgent, proxyURL string) (FetchResult, error) {
+	return fetchWithMeta(ctx, rawURL, userAgent, strings.TrimSpace(proxyURL))
+}
+
+// fetchWithMeta performs a subscription download. When proxyURL is empty the
+// request uses the default transport (which honors the HTTP(S)_PROXY
+// environment, as before); otherwise it is routed through the given proxy.
+func fetchWithMeta(ctx context.Context, rawURL, userAgent, proxyURL string) (FetchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
@@ -77,6 +95,20 @@ func FetchWithMetaOptions(ctx context.Context, rawURL, userAgent string) (FetchR
 	req.Header.Set("Accept", "*/*")
 
 	client := &http.Client{Timeout: 20 * time.Second}
+	if proxyURL != "" {
+		parsedProxy, err := url.Parse(proxyURL)
+		if err != nil || parsedProxy.Host == "" {
+			return FetchResult{}, fmt.Errorf("invalid subscription proxy URL %q", proxyURL)
+		}
+		if parsedProxy.Scheme != "http" && parsedProxy.Scheme != "https" {
+			return FetchResult{}, fmt.Errorf("unsupported subscription proxy scheme %q", parsedProxy.Scheme)
+		}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(parsedProxy)
+		defer transport.CloseIdleConnections()
+		client.Transport = transport
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return FetchResult{}, fmt.Errorf("failed to fetch subscription: %w", err)

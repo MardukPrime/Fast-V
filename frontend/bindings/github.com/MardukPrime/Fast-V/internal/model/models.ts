@@ -396,6 +396,8 @@ export interface Settings {
     "inboundUsername": string;
     "inboundPassword": string;
     "closeToTray": boolean;
+    "autoRestartCore": boolean;
+    "subscriptionUpdateViaProxy": boolean;
     "minimizeToTray": boolean;
     "hotkeysEnabled": boolean;
     "hotkeyToggleProxy": string;

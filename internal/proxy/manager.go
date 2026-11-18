@@ -49,6 +49,24 @@ type Manager struct {
 	// (for example the rules expanded from remote rule sets). It is invoked
 	// when a configuration is generated and may be nil.
 	extraRulesProvider func() []model.RoutingRule
+
+	// Core watchdog state. All fields are guarded by mu.
+	//
+	// userRequestedStop records that Stop was called, so the monitor can tell an
+	// intentional exit from a crash. A manual Start clears it again.
+	userRequestedStop bool
+	// startInProgress serializes concurrent starts, including automatic restarts
+	// triggered by the core watchdog.
+	startInProgress bool
+	// restartAttempts counts the consecutive automatic restarts performed since
+	// the core last ran stably. A manual Start resets it; the watchdog also resets
+	// it once the core ran for coreStableRunThreshold without exiting.
+	restartAttempts int
+	// runningSince is when the current (or most recently running) core reached
+	// the running state.
+	runningSince time.Time
+	// pendingRestart is the scheduled or in-flight automatic restart, if any.
+	pendingRestart *coreRestartPlan
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -258,17 +276,157 @@ func logLevel(line string) string {
 		return "info"
 	}
 }
+
+// Core watchdog policy. The watchdog reacts only to an unexpected exit of a core
+// that had reached the running state: it never fights a user-requested Stop and
+// gives up after a bounded number of consecutive restart attempts.
+const (
+	// coreRestartBaseDelay is the backoff before the first automatic restart;
+	// every further consecutive attempt doubles it (1s, 2s, 4s, 8s).
+	coreRestartBaseDelay = time.Second
+	// coreRestartMaxDelay caps the exponential backoff ladder.
+	coreRestartMaxDelay = 8 * time.Second
+	// coreMaxConsecutiveRestarts is how many automatic restarts are attempted in
+	// one crash chain before the watchdog gives up and reports an error state.
+	coreMaxConsecutiveRestarts = 3
+	// coreStableRunThreshold resets the consecutive restart counter once the core
+	// has been running for this long.
+	coreStableRunThreshold = 60 * time.Second
+	// coreRestartStartTimeout bounds one automatic restart so a wedged core can
+	// never keep the watchdog busy forever.
+	coreRestartStartTimeout = 45 * time.Second
+	// coreRestartCancelWait bounds how long Start/Stop wait for a cancelled
+	// automatic restart to unwind.
+	coreRestartCancelWait = 6 * time.Second
+)
+
+// coreRestartPlan identifies one scheduled automatic restart. cancel aborts the
+// backoff wait or the in-flight start, and done is closed once the watchdog
+// goroutine has finished with it.
+type coreRestartPlan struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// errCoreRestartCanceled reports that an automatic core restart was abandoned
+// because the user stopped the proxy while the restart was starting.
+var errCoreRestartCanceled = errors.New("automatic core restart canceled")
+
+// restartBackoffDelay returns the exponential backoff before the given one-based
+// restart attempt (1s, 2s, 4s, 8s, ...), capped at coreRestartMaxDelay.
+func restartBackoffDelay(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	delay := coreRestartBaseDelay
+	for i := 1; i < attempt && delay < coreRestartMaxDelay; i++ {
+		delay *= 2
+	}
+	if delay > coreRestartMaxDelay {
+		delay = coreRestartMaxDelay
+	}
+	return delay
+}
+
+// nextRestartDelay returns the delay before the given one-based automatic
+// restart attempt and whether such an attempt is allowed at all.
+func nextRestartDelay(attempt int) (time.Duration, bool) {
+	if attempt < 1 || attempt > coreMaxConsecutiveRestarts {
+		return 0, false
+	}
+	return restartBackoffDelay(attempt), true
+}
+
+// shouldAutoRestartCore decides whether an observed core exit is a crash the
+// watchdog must handle. A user-requested stop is never restarted, and neither is
+// an exit that happened before the proxy reached the running state (the initial
+// start reports those through its normal error path).
+func shouldAutoRestartCore(autoRestartEnabled bool, userRequestedStop bool, previousStatus string) bool {
+	if !autoRestartEnabled || userRequestedStop {
+		return false
+	}
+	return previousStatus == "running"
+}
+
+// planCoreRestart decides how the watchdog reacts to an unexpected core exit. It
+// returns the one-based restart attempt, the backoff delay before it and whether
+// a restart is allowed at all. The consecutive restart chain is reset when the
+// exited core had been running stably for at least coreStableRunThreshold, so
+// only quick crash loops are limited.
+func planCoreRestart(autoRestartEnabled bool, userRequestedStop bool, previousStatus string, consecutiveRestarts int, ranFor time.Duration) (attempt int, delay time.Duration, ok bool) {
+	if !shouldAutoRestartCore(autoRestartEnabled, userRequestedStop, previousStatus) {
+		return 0, 0, false
+	}
+	if consecutiveRestarts < 0 {
+		consecutiveRestarts = 0
+	}
+	if ranFor >= coreStableRunThreshold {
+		consecutiveRestarts = 0
+	}
+	attempt = consecutiveRestarts + 1
+	delay, ok = nextRestartDelay(attempt)
+	if !ok {
+		return 0, 0, false
+	}
+	return attempt, delay, true
+}
+
 func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
+	// A manual start supersedes a scheduled watchdog restart. Flag the pending
+	// restart as user-cancelled while it unwinds so an in-flight restart reports
+	// "cancelled" instead of leaving an error state behind, then start normally.
+	m.mu.Lock()
+	restartPending := m.pendingRestart != nil
+	if restartPending {
+		m.userRequestedStop = true
+	}
+	m.mu.Unlock()
+	m.cancelPendingRestart()
+	m.mu.Lock()
+	m.userRequestedStop = false
+	if m.cmd == nil {
+		m.restartAttempts = 0
+		m.runningSince = time.Time{}
+	}
+	m.mu.Unlock()
+	return m.startCore(ctx, false)
+}
+
+// startCore implements Start. autoRestart is true when the call comes from the
+// core watchdog: in that mode a user Stop that races with the start cancels the
+// start instead of leaving an error state behind.
+func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyState, error) {
 	// Snapshot the extra rule provider before taking the manager lock: the
 	// provider is invoked without holding the lock so it can never deadlock
 	// against code that reads manager state.
 	extraRules := m.extraRules()
 	m.mu.Lock()
+	if m.startInProgress {
+		// Another Start (manual or watchdog-driven) is already running; report the
+		// current state instead of launching a second core.
+		state := m.enrichNodeState(m.state)
+		m.mu.Unlock()
+		return state, nil
+	}
 	if m.cmd != nil {
 		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
 		return state, nil
 	}
+	if autoRestart && (m.userRequestedStop || ctx.Err() != nil) {
+		m.state = model.ProxyState{Status: "stopped"}
+		m.runningSince = time.Time{}
+		state := m.enrichNodeState(m.state)
+		m.mu.Unlock()
+		m.emit(state)
+		return state, errCoreRestartCanceled
+	}
+	m.startInProgress = true
+	defer func() {
+		m.mu.Lock()
+		m.startInProgress = false
+		m.mu.Unlock()
+	}()
 	settings := m.store.Settings()
 	if settings.CoreType != "xray" {
 		m.mu.Unlock()
@@ -412,9 +570,15 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	hideWindow(testCmd)
 	testCmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
 	if output, err := testCmd.CombinedOutput(); err != nil {
+		if autoRestart && m.userStopRequested() {
+			return m.abortAutoRestart(nil, nil, nil)
+		}
 		return m.fail(fmt.Sprintf("Xray config validation failed: %s", strings.TrimSpace(string(output))))
 	}
 	m.appendLog("info", "core", "Xray 配置校验通过")
+	if autoRestart && m.userStopRequested() {
+		return m.abortAutoRestart(nil, nil, nil)
+	}
 
 	cmd := exec.Command(coreInfo.Path, "run", "-config", configPath)
 	hideWindow(cmd)
@@ -456,6 +620,9 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	go m.monitor(cmd, done, job)
 
 	if err := waitForPort(ctx, state.LocalAddr, 12*time.Second); err != nil {
+		if autoRestart && m.userStopRequested() {
+			return m.abortAutoRestart(cmd, done, job)
+		}
 		_ = cmd.Process.Kill()
 		<-done
 		_ = job.Close()
@@ -463,6 +630,9 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	}
 
 	m.appendLog("info", "core", "本地入站已就绪: "+state.LocalAddr)
+	if autoRestart && m.userStopRequested() {
+		return m.abortAutoRestart(cmd, done, job)
+	}
 	if settings.SystemProxyMode == "system" && !settings.TunMode {
 		cleanup, proxyErr := platform.EnableSystemProxy(state.LocalAddr)
 		if proxyErr != nil {
@@ -482,6 +652,9 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 			_ = cmd.Process.Kill()
 			<-done
 			_ = job.Close()
+			if autoRestart && m.userStopRequested() {
+				return m.abortAutoRestart(cmd, done, job)
+			}
 			return m.fail(fmt.Sprintf("TUN 路由配置失败: %v", routeErr))
 		}
 		m.mu.Lock()
@@ -491,9 +664,16 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	}
 
 	m.mu.Lock()
-	m.state.Status = "running"
+	stoppedDuringStart := autoRestart && m.userRequestedStop
+	if !stoppedDuringStart {
+		m.state.Status = "running"
+		m.runningSince = time.Now()
+	}
 	state = m.state
 	m.mu.Unlock()
+	if stoppedDuringStart {
+		return m.abortAutoRestart(cmd, done, job)
+	}
 	m.appendLog("info", "core", "代理已进入运行状态")
 	m.emit(state)
 	if settings.StatsEnabled || settings.XrayAPIEnabled {
@@ -503,10 +683,18 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 	return state, nil
 }
 func (m *Manager) Stop() (model.ProxyState, error) {
+	m.mu.Lock()
+	m.userRequestedStop = true
+	m.mu.Unlock()
+	// Cancel a scheduled automatic restart before tearing the proxy down. This is
+	// what makes an intentional stop win over the watchdog; the wait is bounded so
+	// a stop can never hang on a wedged restart.
+	m.cancelPendingRestart()
 	defer m.stopSystemProxy()
 	m.mu.Lock()
 	if m.cmd == nil {
 		m.state = model.ProxyState{Status: "stopped"}
+		m.runningSince = time.Time{}
 		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
 		m.stopTrafficSampler()
@@ -544,6 +732,7 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	m.done = nil
 	m.job = nil
 	m.state = model.ProxyState{Status: "stopped"}
+	m.runningSince = time.Time{}
 	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
 	m.emit(state)
@@ -589,6 +778,9 @@ func (m *Manager) Test(settings model.Settings) (model.ProxyTestResult, error) {
 	return result, nil
 }
 
+// monitor waits for one core process and decides what happens after it exited.
+// A user-requested stop ends in the stopped state as before; an unexpected exit
+// of a running core is handed to the watchdog when auto restart is enabled.
 func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	err := cmd.Wait()
 	close(done)
@@ -598,6 +790,9 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	} else {
 		m.appendLog("info", "core", "Xray-core 已退出")
 	}
+	// Release every resource the exited core may own before deciding about a
+	// restart: a restarted core configures the system proxy, TUN routes and the
+	// traffic sampler again from scratch.
 	m.stopSystemProxy()
 	if cleanup := m.takeTunCleanup(); cleanup != nil {
 		_ = cleanup()
@@ -605,22 +800,165 @@ func (m *Manager) monitor(cmd *exec.Cmd, done chan struct{}, job *processJob) {
 	m.stopTrafficSampler()
 
 	m.mu.Lock()
+	if m.cmd != cmd {
+		m.mu.Unlock()
+		return
+	}
+	previousStatus := m.state.Status
+	ranFor := time.Duration(0)
+	if !m.runningSince.IsZero() {
+		ranFor = time.Since(m.runningSince)
+	}
+	m.cmd = nil
+	m.done = nil
+	m.job = nil
+	settings := m.store.Settings()
+	attempt, delay, restart := planCoreRestart(settings.AutoRestartCore, m.userRequestedStop, previousStatus, m.restartAttempts, ranFor)
+	if restart {
+		restartCtx, cancel := context.WithTimeout(context.Background(), coreRestartStartTimeout)
+		plan := &coreRestartPlan{cancel: cancel, done: make(chan struct{})}
+		m.pendingRestart = plan
+		m.restartAttempts = attempt
+		m.runningSince = time.Time{}
+		m.state.Status = "starting"
+		m.state.Error = ""
+		m.state.PID = 0
+		m.state.StartedAt = ""
+		state := m.enrichNodeState(m.state)
+		m.mu.Unlock()
+		m.appendLog("warning", "core", fmt.Sprintf("核心异常退出，正在自动重启（第 %d 次）", attempt))
+		m.emit(state)
+		go m.runCoreRestart(restartCtx, plan, attempt, delay)
+		return
+	}
+	exhausted := shouldAutoRestartCore(settings.AutoRestartCore, m.userRequestedStop, previousStatus)
+	if previousStatus != "stopping" {
+		if err != nil {
+			m.state.Status = "error"
+			m.state.Error = err.Error()
+		} else {
+			m.state.Status = "stopped"
+		}
+	}
+	m.runningSince = time.Time{}
+	state := m.enrichNodeState(m.state)
+	m.mu.Unlock()
+	m.emit(state)
+	if exhausted {
+		m.appendLog("error", "core", fmt.Sprintf("核心连续异常退出 %d 次，自动重启已达上限，已停止自动重启", coreMaxConsecutiveRestarts))
+	}
+}
+
+// userStopRequested reports whether Stop was called and no manual Start has run
+// since.
+func (m *Manager) userStopRequested() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.userRequestedStop
+}
+
+// cancelPendingRestart cancels a scheduled or in-flight automatic restart and
+// waits (bounded) until the watchdog goroutine has unwound, so a manual Start or
+// Stop never races the watchdog for the core process.
+func (m *Manager) cancelPendingRestart() {
+	m.mu.Lock()
+	plan := m.pendingRestart
+	m.pendingRestart = nil
+	m.mu.Unlock()
+	if plan == nil {
+		return
+	}
+	plan.cancel()
+	select {
+	case <-plan.done:
+	case <-time.After(coreRestartCancelWait):
+	}
+}
+
+// runCoreRestart performs one watchdog restart: it waits for the backoff delay
+// and then starts a new core. Only one of these goroutines exists at a time.
+func (m *Manager) runCoreRestart(ctx context.Context, plan *coreRestartPlan, attempt int, delay time.Duration) {
+	defer func() {
+		m.mu.Lock()
+		if m.pendingRestart == plan {
+			m.pendingRestart = nil
+		}
+		m.mu.Unlock()
+		plan.cancel()
+		close(plan.done)
+	}()
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		// A user Stop or Start cancelled the pending restart during the backoff.
+		m.appendLog("info", "core", "核心自动重启已取消")
+		return
+	}
+
+	m.mu.Lock()
+	stale := m.pendingRestart != plan || m.userRequestedStop || m.cmd != nil
+	m.mu.Unlock()
+	if stale {
+		return
+	}
+
+	// The crashed core's system proxy, TUN routes and traffic sampler were already
+	// released by the monitor; repeat the cleanup defensively so a new process can
+	// never inherit resources of the previous one.
+	m.stopSystemProxy()
+	if cleanup := m.takeTunCleanup(); cleanup != nil {
+		_ = cleanup()
+	}
+	m.stopTrafficSampler()
+
+	state, err := m.startCore(ctx, true)
+	switch {
+	case errors.Is(err, errCoreRestartCanceled):
+		m.appendLog("info", "core", "核心自动重启已取消")
+	case err != nil:
+		m.appendLog("error", "core", fmt.Sprintf("核心自动重启失败（第 %d 次），已停止自动重启: %v", attempt, err))
+	case state.Status == "running":
+		m.appendLog("info", "core", fmt.Sprintf("核心自动重启成功（第 %d 次）", attempt))
+	}
+}
+
+// abortAutoRestart rolls back an automatic restart start that a user Stop
+// interrupted: the freshly started process (if it was already launched) is
+// killed and every resource it may have configured is released again so the
+// stopped state wins.
+func (m *Manager) abortAutoRestart(cmd *exec.Cmd, done chan struct{}, job *processJob) (model.ProxyState, error) {
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	if job != nil {
+		_ = job.Close()
+	}
+	m.stopSystemProxy()
+	if cleanup := m.takeTunCleanup(); cleanup != nil {
+		_ = cleanup()
+	}
+	m.stopTrafficSampler()
+	m.mu.Lock()
 	if m.cmd == cmd {
 		m.cmd = nil
 		m.done = nil
 		m.job = nil
-		if m.state.Status != "stopping" {
-			if err != nil {
-				m.state.Status = "error"
-				m.state.Error = err.Error()
-			} else {
-				m.state.Status = "stopped"
-			}
-		}
 	}
+	m.state = model.ProxyState{Status: "stopped"}
+	m.runningSince = time.Time{}
 	state := m.enrichNodeState(m.state)
 	m.mu.Unlock()
 	m.emit(state)
+	return state, errCoreRestartCanceled
 }
 
 func (m *Manager) stopSystemProxy() {

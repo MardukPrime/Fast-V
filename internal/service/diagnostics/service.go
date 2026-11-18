@@ -18,13 +18,24 @@ type ProxyStateProvider interface {
 type DiagnosticsService struct {
 	checker *diag.Checker
 	proxy   ProxyStateProvider
+	// report holds the optional providers used by ExportReport. Only the local
+	// proxy state is required; store, logs, app info and self-check providers
+	// enrich the exported archive when they are wired in.
+	report ReportSources
 }
 
-func New(proxyProvider ProxyStateProvider) *DiagnosticsService {
-	return &DiagnosticsService{
+// New creates the diagnostics service. The network probe only needs the proxy
+// state; reportSources (at most one is used) optionally enables and enriches
+// ExportReport without changing the existing constructor call site.
+func New(proxyProvider ProxyStateProvider, reportSources ...ReportSources) *DiagnosticsService {
+	service := &DiagnosticsService{
 		checker: diag.NewChecker(),
 		proxy:   proxyProvider,
 	}
+	if len(reportSources) > 0 {
+		service.report = reportSources[0]
+	}
+	return service
 }
 
 func (s *DiagnosticsService) ServiceName() string {

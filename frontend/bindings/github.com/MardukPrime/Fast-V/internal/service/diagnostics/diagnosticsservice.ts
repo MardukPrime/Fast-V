@@ -17,3 +17,18 @@ import * as model$0 from "../../model/models.js";
 export function Check(mode: string, includeSpeed: boolean): $CancellablePromise<model$0.NetworkProbe> {
     return $Call.ByID(2073455101, mode, includeSpeed);
 }
+
+/**
+ * ExportReport builds a redacted diagnostics archive in the application data
+ * directory and returns the path of the created ZIP file. The archive contains:
+ * 
+ *   - summary.json: build/platform information, a redacted settings summary,
+ *     record counts, the proxy state and a compact self-check summary;
+ *   - logs.txt: the most recent proxy log lines with URLs, credentials and
+ *     UUIDs redacted;
+ *   - selfcheck.json: the full self-check results (also redacted), written only
+ *     when a self-check provider was wired in.
+ */
+export function ExportReport(): $CancellablePromise<string> {
+    return $Call.ByID(1726484655);
+}

@@ -19,15 +19,80 @@ import (
 	subdomain "github.com/MardukPrime/Fast-V/internal/subscription"
 )
 
+// ProxyStateProvider reports the local proxy runtime state. *proxyservice.ProxyService
+// implements it; it is optional so the service still works without a proxy.
+type ProxyStateProvider interface {
+	State() model.ProxyState
+}
+
 // Service manages remote subscription sources and their parsed nodes.
 type Service struct {
-	store  *store.Store
+	store *store.Store
+	// proxy is optional. When set and the local proxy is running, a failed
+	// subscription download is retried once through the local inbound.
+	proxy  ProxyStateProvider
 	mu     sync.Mutex
 	cancel context.CancelFunc
 }
 
-func New(store *store.Store) *Service {
-	return &Service{store: store}
+// New creates the subscription service. The optional proxyProvider enables the
+// "retry subscription downloads through the local proxy" fallback; without it
+// downloads stay direct-only.
+func New(store *store.Store, proxyProviders ...ProxyStateProvider) *Service {
+	service := &Service{store: store}
+	for _, provider := range proxyProviders {
+		if provider != nil {
+			service.proxy = provider
+			break
+		}
+	}
+	return service
+}
+
+// fetchSubscription downloads one subscription body. It first tries a direct
+// request (exactly the behaviour from before proxy support) and, when that
+// fails, retries once through the local proxy if Settings.SubscriptionUpdateViaProxy
+// is on and the proxy is running. The direct error is preserved when the retry
+// also fails so callers and the UI keep seeing the original reason.
+func (s *Service) fetchSubscription(rawURL, userAgent string) (subdomain.FetchResult, error) {
+	result, err := subdomain.FetchWithMetaOptions(context.Background(), rawURL, userAgent)
+	if err == nil {
+		return result, nil
+	}
+	directErr := err
+	proxyURL, ok := s.subscriptionProxyURL()
+	if !ok {
+		return subdomain.FetchResult{}, directErr
+	}
+	retried, retryErr := subdomain.FetchWithMetaProxy(context.Background(), rawURL, userAgent, proxyURL)
+	if retryErr == nil {
+		return retried, nil
+	}
+	return subdomain.FetchResult{}, fmt.Errorf("直连与代理重试均失败: %w", errors.Join(directErr, retryErr))
+}
+
+// subscriptionProxyURL returns the local proxy endpoint used to retry a failed
+// subscription download. The settings switch and the running proxy are both
+// required; an unusable port or address means no retry.
+func (s *Service) subscriptionProxyURL() (string, bool) {
+	if s.proxy == nil {
+		return "", false
+	}
+	settings := s.store.Settings()
+	if !settings.SubscriptionUpdateViaProxy {
+		return "", false
+	}
+	state := s.proxy.State()
+	if state.Status != "running" {
+		return "", false
+	}
+	if settings.XrayLocalPort > 0 && settings.XrayLocalPort <= 65535 {
+		return fmt.Sprintf("http://127.0.0.1:%d", settings.XrayLocalPort), true
+	}
+	if strings.TrimSpace(state.LocalAddr) != "" {
+		return "http://" + strings.TrimSpace(state.LocalAddr), true
+	}
+	return "", false
 }
 
 func (s *Service) ServiceName() string {
@@ -175,7 +240,7 @@ func (s *Service) Add(input model.SubscriptionInput) (model.SubscriptionView, er
 		return model.SubscriptionView{}, errors.New("subscription URL must use http or https")
 	}
 
-	fetched, err := subdomain.FetchWithMeta(context.Background(), rawURL)
+	fetched, err := s.fetchSubscription(rawURL, "")
 	if err != nil {
 		return model.SubscriptionView{}, err
 	}
@@ -246,7 +311,7 @@ func (s *Service) Update(id string) (model.SubscriptionView, error) {
 		return model.SubscriptionView{}, err
 	}
 
-	fetched, fetchErr := subdomain.FetchWithMetaOptions(context.Background(), sub.URL, sub.UserAgent)
+	fetched, fetchErr := s.fetchSubscription(sub.URL, sub.UserAgent)
 	if fetchErr != nil {
 		_ = s.store.SetSubscriptionError(id, fetchErr.Error())
 		sub.LastError = fetchErr.Error()

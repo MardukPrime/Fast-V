@@ -103,6 +103,8 @@ export const zh: Record<string, string> = {
   "set.updateIntervalHint": "允许范围 15-1440 分钟。",
   "set.autoUpdateSubscriptions": "自动更新订阅",
   "set.autoUpdateSubscriptionsHint": "应用启动后按更新间隔检查订阅。",
+  "set.subscriptionViaProxy": "订阅更新失败时通过本地代理重试",
+  "set.subscriptionViaProxyHint": "直连拉取订阅失败且本地代理正在运行时，自动通过本地代理重试一次。",
 
   // Core settings.
   "set.coreSection": "内核设置",
@@ -265,6 +267,11 @@ export const zh: Record<string, string> = {
   "set.autostartDisabledMessage": "已关闭开机自启。",
   "set.autostartError": "设置开机自启失败：{error}",
   "set.autostartReadError": "读取开机自启状态失败：{error}",
+  "set.reliability": "可靠性",
+  "set.reliabilityHint": "异常恢复行为，保存后生效。",
+  "set.autoRestartCore": "核心异常时自动重启",
+  "set.autoRestartCoreOnHint": "核心进程意外退出时，FastV 会自动重启内核以恢复代理（有次数与退避限制）。",
+  "set.autoRestartCoreOffHint": "已关闭：核心崩溃后不会自动恢复，需要手动重启代理。",
   "set.hotkeys": "全局快捷键",
   "set.hotkeysHint": "在任意应用中都能触发代理操作；点击「录制」后按下组合键，修改开关或组合后需要保存设置才会生效。",
   "set.enableHotkeys": "启用全局快捷键",
@@ -510,6 +517,8 @@ export const en: Record<string, string> = {
   "set.updateIntervalHint": "Allowed range: 15-1440 minutes.",
   "set.autoUpdateSubscriptions": "Update subscriptions automatically",
   "set.autoUpdateSubscriptionsHint": "Checks subscriptions at the configured interval after launch.",
+  "set.subscriptionViaProxy": "Retry failed subscription updates via the local proxy",
+  "set.subscriptionViaProxyHint": "When a direct subscription fetch fails and the local proxy is running, retry once through the local proxy.",
 
   // Core settings.
   "set.coreSection": "Core settings",
@@ -672,6 +681,11 @@ export const en: Record<string, string> = {
   "set.autostartDisabledMessage": "Autostart disabled.",
   "set.autostartError": "Failed to update autostart: {error}",
   "set.autostartReadError": "Failed to read autostart state: {error}",
+  "set.reliability": "Reliability",
+  "set.reliabilityHint": "Failure-recovery behavior; takes effect after saving.",
+  "set.autoRestartCore": "Restart the core automatically after a crash",
+  "set.autoRestartCoreOnHint": "If the core process exits unexpectedly, FastV restarts it automatically to restore the proxy (attempts and backoff are limited).",
+  "set.autoRestartCoreOffHint": "Off: a crashed core is not recovered automatically; restart the proxy manually.",
   "set.hotkeys": "Global hotkeys",
   "set.hotkeysHint": "Trigger proxy actions from any app; click 'Record' and press a combination. Toggling or changing combinations takes effect after saving.",
   "set.enableHotkeys": "Enable global hotkeys",

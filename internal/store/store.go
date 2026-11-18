@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 9
+const storeVersion = 10
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -98,43 +98,45 @@ type Store struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		Theme:                 "light",
-		Language:              "zh-CN",
-		AccentColor:           "sky",
-		LayoutMode:            "dock",
-		DockTransparency:      28,
-		AutoUpdate:            false,
-		UpdateIntervalMinutes: 360,
-		ProxyMode:             "rule",
-		CoreAutoUpdate:        true,
-		CoreType:              "xray",
-		XrayLocalPort:         10808,
-		XrayLogLevel:          "warning",
-		XrayMuxEnabled:        false,
-		XrayMuxConcurrency:    8,
-		XraySniffing:          true,
-		XrayDNSStrategy:       "UseIP",
-		XrayDNSServers:        "1.1.1.1,8.8.8.8",
-		XrayDomainStrategy:    "IPIfNonMatch",
-		ConfigOverride:        "",
-		XrayTunMTU:            1500,
-		TestURL:               "https://www.gstatic.com/generate_204",
-		XrayAPIEnabled:        false,
-		XrayAPIPort:           10085,
-		SystemProxyMode:       "system",
-		TunMode:               false,
-		AllowLan:              false,
-		InboundAuthEnabled:    false,
-		InboundUsername:       "",
-		InboundPassword:       "",
-		CloseToTray:           false,
-		MinimizeToTray:        false,
-		HotkeysEnabled:        true,
-		HotkeyToggleProxy:     "Ctrl+Shift+F",
-		HotkeyCycleMode:       "Ctrl+Shift+M",
-		HotkeyNextNode:        "Ctrl+Shift+N",
-		AutoCheckUpdate:       true,
-		StatsEnabled:          true,
+		Theme:                      "light",
+		Language:                   "zh-CN",
+		AccentColor:                "sky",
+		LayoutMode:                 "dock",
+		DockTransparency:           28,
+		AutoUpdate:                 false,
+		UpdateIntervalMinutes:      360,
+		ProxyMode:                  "rule",
+		CoreAutoUpdate:             true,
+		CoreType:                   "xray",
+		XrayLocalPort:              10808,
+		XrayLogLevel:               "warning",
+		XrayMuxEnabled:             false,
+		XrayMuxConcurrency:         8,
+		XraySniffing:               true,
+		XrayDNSStrategy:            "UseIP",
+		XrayDNSServers:             "1.1.1.1,8.8.8.8",
+		XrayDomainStrategy:         "IPIfNonMatch",
+		ConfigOverride:             "",
+		XrayTunMTU:                 1500,
+		TestURL:                    "https://www.gstatic.com/generate_204",
+		XrayAPIEnabled:             false,
+		XrayAPIPort:                10085,
+		SystemProxyMode:            "system",
+		TunMode:                    false,
+		AllowLan:                   false,
+		InboundAuthEnabled:         false,
+		InboundUsername:            "",
+		InboundPassword:            "",
+		CloseToTray:                false,
+		AutoRestartCore:            true,
+		SubscriptionUpdateViaProxy: true,
+		MinimizeToTray:             false,
+		HotkeysEnabled:             true,
+		HotkeyToggleProxy:          "Ctrl+Shift+F",
+		HotkeyCycleMode:            "Ctrl+Shift+M",
+		HotkeyNextNode:             "Ctrl+Shift+N",
+		AutoCheckUpdate:            true,
+		StatsEnabled:               true,
 
 		AutoSelectEnabled:         false,
 		AutoSelectIntervalMinutes: 10,
@@ -260,6 +262,11 @@ func mergeStoreData(loaded storeData) storeData {
 		for i := range loaded.Subscriptions {
 			loaded.Subscriptions[i].AutoUpdate = true
 		}
+	}
+	// v10 added the core watchdog and proxy-based subscription refresh toggles.
+	if loaded.Version < 10 {
+		loaded.Settings.AutoRestartCore = true
+		loaded.Settings.SubscriptionUpdateViaProxy = true
 	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion

@@ -3,6 +3,8 @@ import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 
 import { DiagnosticsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
 import { Service as HistoryService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/history";
+import { Service as RescueService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
+import type { RescueReport, RescueResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
 import { Service as SelfCheckService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/selfcheck";
 import type { CheckResult, LatencySample, NetworkProbe, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
@@ -55,6 +57,33 @@ function checkStatusLabel(status: string) {
   if (status === "ok") return t("net.status.ok");
   if (status === "warn") return t("net.status.warn");
   return t("net.status.error");
+}
+
+// The rescue service reports ok | warning | error; the self-check styling uses
+// ok | warn | error, so both share the same badge/item classes.
+function rescueTone(severity: string) {
+  if (severity === "ok") return "ok";
+  if (severity === "warning") return "warn";
+  return "error";
+}
+
+function rescueSeverityLabel(severity: string) {
+  const tone = rescueTone(severity);
+  if (tone === "ok") return t("net.rescue.severityOk");
+  if (tone === "warn") return t("net.rescue.severityWarning");
+  return t("net.rescue.severityError");
+}
+
+// Inspect degrades unsupported platform capabilities into an "ok" skip issue
+// (stable id "system-proxy-skipped") instead of failing; surface that state in
+// the summary so a skipped check never looks like "system proxy is off".
+function rescueSystemProxyText(report: RescueReport) {
+  const skipped = (report.issues ?? []).some((issue) => issue.id === "system-proxy-skipped");
+  if (skipped) return t("net.rescue.systemProxyUnavailable");
+  if (!report.systemProxyEnabled) return t("net.rescue.systemProxyOff");
+  return report.systemProxyServer
+    ? t("net.rescue.systemProxyOn", { server: report.systemProxyServer })
+    : t("net.rescue.systemProxyOnNoServer");
 }
 
 function ProbeCard(props: {
@@ -142,6 +171,16 @@ export default function NetworkPage(props: NetworkPageProps) {
   const [selfCheckBusy, setSelfCheckBusy] = createSignal(false);
   const [selfCheckError, setSelfCheckError] = createSignal("");
   const [selfCheckAt, setSelfCheckAt] = createSignal("");
+  const [rescueReport, setRescueReport] = createSignal<RescueReport | null>(null);
+  const [rescueLoading, setRescueLoading] = createSignal(false);
+  const [rescueError, setRescueError] = createSignal("");
+  const [rescueCheckedAt, setRescueCheckedAt] = createSignal("");
+  const [repairing, setRepairing] = createSignal(false);
+  const [repairResult, setRepairResult] = createSignal<RescueResult | null>(null);
+  const [repairError, setRepairError] = createSignal("");
+  const [reportBusy, setReportBusy] = createSignal(false);
+  const [reportPath, setReportPath] = createSignal("");
+  const [reportError, setReportError] = createSignal("");
 
   const loadLatencies = async () => {
     setLatencyLoading(true);
@@ -213,6 +252,77 @@ export default function NetworkPage(props: NetworkPageProps) {
     return t("net.selfCheck.verdictOk");
   };
 
+  const rescueSummary = createMemo(() => {
+    let ok = 0;
+    let warning = 0;
+    let error = 0;
+    for (const issue of rescueReport()?.issues ?? []) {
+      const tone = rescueTone(issue.severity);
+      if (tone === "ok") ok += 1;
+      else if (tone === "warn") warning += 1;
+      else error += 1;
+    }
+    return { total: ok + warning + error, ok, warning, error };
+  });
+
+  const rescueVerdict = () => {
+    const { total, warning, error } = rescueSummary();
+    if (total === 0) return t("net.rescue.verdictEmpty");
+    if (error > 0) return t("net.rescue.verdictErrors", { count: error });
+    if (warning > 0) return t("net.rescue.verdictWarnings", { count: warning });
+    return t("net.rescue.verdictOk");
+  };
+
+  // Inspect is best-effort on the backend: unsupported platform capabilities
+  // become "ok" skip issues instead of failing, so an error here only means the
+  // RPC itself failed. It must never block the existing diagnostics features.
+  const inspectRescue = async () => {
+    if (rescueLoading() || repairing()) return;
+    setRescueLoading(true);
+    setRescueError("");
+    try {
+      const report = await RescueService.Inspect();
+      setRescueReport(report);
+      setRescueCheckedAt(new Date().toLocaleTimeString());
+    } catch (err) {
+      setRescueError(t("net.rescue.error", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setRescueLoading(false);
+    }
+  };
+
+  const repairNetwork = async () => {
+    if (repairing() || rescueLoading()) return;
+    setRepairing(true);
+    setRepairError("");
+    setRepairResult(null);
+    try {
+      const result = await RescueService.Repair();
+      setRepairResult(result);
+      setRescueReport(result.report);
+      setRescueCheckedAt(new Date().toLocaleTimeString());
+    } catch (err) {
+      setRepairError(t("net.rescue.repairError", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setRepairing(false);
+    }
+  };
+
+  const exportDiagnosticReport = async () => {
+    if (reportBusy()) return;
+    setReportBusy(true);
+    setReportError("");
+    setReportPath("");
+    try {
+      const path = await DiagnosticsService.ExportReport();
+      setReportPath(path);
+    } catch (err) {
+      setReportError(t("net.report.error", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
   const proxyAvailable = () => props.proxyState.status === "running";
 
   const checkMode = async (mode: "direct" | "proxy") => {
@@ -243,6 +353,13 @@ export default function NetworkPage(props: NetworkPageProps) {
 
   onMount(() => {
     void loadLatencies();
+  });
+
+  // Network rescue runs one best-effort inspection on load so the panel is
+  // populated without an extra click; the result is informational and never
+  // affects the regular diagnostics probes.
+  onMount(() => {
+    void inspectRescue();
   });
 
   const sameExit = () => Boolean(direct()?.ip && proxied()?.ip && direct()!.ip === proxied()!.ip);
@@ -303,6 +420,166 @@ export default function NetworkPage(props: NetworkPageProps) {
           </Show>
         </section>
       </Show>
+
+      <section class="glass-panel selfcheck-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>{t("net.rescue.title")}</h3>
+            <span>{t("net.rescue.subtitle")}</span>
+          </div>
+          <div class="selfcheck-actions">
+            <Show when={rescueCheckedAt()}>
+              <span class="selfcheck-timestamp">{t("net.rescue.lastAt", { time: rescueCheckedAt() })}</span>
+            </Show>
+            <button class="btn glass" onClick={() => { void inspectRescue(); }} disabled={rescueLoading() || repairing()}>
+              <Icon name={rescueLoading() ? "refresh" : "search"} size={14} />
+              {rescueLoading() ? t("net.rescue.checking") : t("net.rescue.check")}
+            </button>
+          </div>
+        </div>
+
+        <Show when={rescueError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> {rescueError()}</span>
+            <button class="btn ghost" onClick={() => { void inspectRescue(); }}>{t("net.retry")}</button>
+          </div>
+        </Show>
+
+        <Show
+          when={rescueLoading() && !rescueReport()}
+          fallback={
+            <Show
+              when={rescueReport()}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="search" size={22} /></div>
+                  <strong>{t("net.rescue.emptyTitle")}</strong>
+                  <span>{t("net.rescue.emptyBody")}</span>
+                </div>
+              }
+            >
+              {(report) => (
+                <>
+                  <div class="network-facts" style="grid-template-columns: repeat(2, minmax(0, 1fr));">
+                    <div><span>{t("net.rescue.systemProxy")}</span><strong>{rescueSystemProxyText(report())}</strong></div>
+                    <div><span>{t("net.rescue.proxyRunning")}</span><strong>{report().proxyRunning ? t("net.rescue.running") : t("net.rescue.notRunning")}</strong></div>
+                  </div>
+                  <div class="selfcheck-summary">
+                    <span class="selfcheck-chip ok"><strong>{rescueSummary().ok}</strong> {t("net.rescue.okSuffix")}</span>
+                    <span class="selfcheck-chip warn"><strong>{rescueSummary().warning}</strong> {t("net.rescue.warningSuffix")}</span>
+                    <span class="selfcheck-chip error"><strong>{rescueSummary().error}</strong> {t("net.rescue.errorSuffix")}</span>
+                    <span class="selfcheck-verdict">{rescueVerdict()}</span>
+                  </div>
+                  <div class="selfcheck-list" role="list">
+                    <For each={report().issues ?? []}>
+                      {(issue) => (
+                        <div
+                          classList={{
+                            "selfcheck-item": true,
+                            ok: rescueTone(issue.severity) === "ok",
+                            warn: rescueTone(issue.severity) === "warn",
+                            error: rescueTone(issue.severity) === "error",
+                          }}
+                          role="listitem"
+                        >
+                          <span
+                            classList={{
+                              "selfcheck-badge": true,
+                              ok: rescueTone(issue.severity) === "ok",
+                              warn: rescueTone(issue.severity) === "warn",
+                              error: rescueTone(issue.severity) === "error",
+                            }}
+                          >
+                            <Icon name={rescueTone(issue.severity) === "ok" ? "check" : "alert"} size={12} />
+                            {rescueSeverityLabel(issue.severity)}
+                          </span>
+                          <div class="selfcheck-body">
+                            <strong class="selfcheck-name">{issue.title}</strong>
+                            <Show when={issue.detail}>
+                              <p class="selfcheck-detail">{issue.detail}</p>
+                            </Show>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </>
+              )}
+            </Show>
+          }
+        >
+          <div class="selfcheck-loading">
+            <span class="network-pulse" />
+            <strong>{t("net.rescue.loading")}</strong>
+            <span>{t("net.rescue.loadingHint")}</span>
+          </div>
+        </Show>
+
+        <Show when={repairError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> {repairError()}</span>
+          </div>
+        </Show>
+
+        <Show when={repairResult()}>
+          {(result) => (
+            <>
+              <div classList={{ alert: true, success: (result().failed ?? []).length === 0, error: (result().failed ?? []).length > 0, "selfcheck-alert": true }}>
+                <span class="alert-message">
+                  <Icon name={(result().failed ?? []).length === 0 ? "check" : "alert"} size={15} />
+                  {result().message || t("net.rescue.repairResult")}
+                </span>
+              </div>
+              <Show when={(result().fixed ?? []).length > 0 || (result().failed ?? []).length > 0}>
+                <div class="selfcheck-list" role="list">
+                  <For each={result().fixed ?? []}>
+                    {(name) => (
+                      <div class="selfcheck-item ok" role="listitem">
+                        <span class="selfcheck-badge ok"><Icon name="check" size={12} /> {t("net.rescue.fixed")}</span>
+                        <div class="selfcheck-body"><strong class="selfcheck-name">{name}</strong></div>
+                      </div>
+                    )}
+                  </For>
+                  <For each={result().failed ?? []}>
+                    {(name) => (
+                      <div class="selfcheck-item error" role="listitem">
+                        <span class="selfcheck-badge error"><Icon name="alert" size={12} /> {t("net.rescue.failed")}</span>
+                        <div class="selfcheck-body"><strong class="selfcheck-name">{name}</strong></div>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </>
+          )}
+        </Show>
+
+        <div class="core-actions">
+          <button class="btn primary" type="button" onClick={() => { void repairNetwork(); }} disabled={repairing() || rescueLoading()}>
+            <Icon name="play" size={14} /> {repairing() ? t("net.rescue.repairing") : t("net.rescue.repair")}
+          </button>
+          <button class="btn secondary" type="button" onClick={() => { void exportDiagnosticReport(); }} disabled={reportBusy()}>
+            <Icon name="external" size={14} /> {reportBusy() ? t("net.report.exporting") : t("net.report.export")}
+          </button>
+        </div>
+
+        <Show when={reportError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> {reportError()}</span>
+          </div>
+        </Show>
+
+        <Show when={reportPath()}>
+          <div class="alert success selfcheck-alert">
+            <span class="alert-message"><Icon name="check" size={15} /> {t("net.report.success")}</span>
+          </div>
+          <div class="core-path-row">
+            <span>{t("net.report.pathLabel")}</span>
+            <code title={reportPath()}>{reportPath()}</code>
+          </div>
+          <p class="settings-note"><Icon name="check" size={13} /><span>{t("net.report.privacy")}</span></p>
+        </Show>
+      </section>
 
       <section class="glass-panel network-history-panel">
         <div class="panel-heading">

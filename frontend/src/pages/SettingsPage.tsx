@@ -27,9 +27,11 @@ const defaults: Settings = {
   systemProxyMode: "system",
   dockTransparency: 28,
   autoUpdate: false,
+  subscriptionUpdateViaProxy: true,
   updateIntervalMinutes: 360,
   proxyMode: "rule",
   coreAutoUpdate: true,
+  autoRestartCore: true,
   coreType: "xray",
   xrayLocalPort: 10808,
   xrayLogLevel: "warning",
@@ -1336,6 +1338,20 @@ export default function SettingsPage(props: SettingsProps) {
                 <span class="switch-track"><span class="switch-thumb" /></span>
               </span>
             </label>
+            <label class="switch-row">
+              <span>
+                <strong>{t("set.subscriptionViaProxy")}</strong>
+                <small>{t("set.subscriptionViaProxyHint")}</small>
+              </span>
+              <span classList={{ "switch": true, on: settings().subscriptionUpdateViaProxy }}>
+                <input
+                  type="checkbox"
+                  checked={settings().subscriptionUpdateViaProxy}
+                  onChange={(event) => update("subscriptionUpdateViaProxy", event.currentTarget.checked)}
+                />
+                <span class="switch-track"><span class="switch-thumb" /></span>
+              </span>
+            </label>
           </div>
           </div>
         </details>
@@ -1988,6 +2004,27 @@ export default function SettingsPage(props: SettingsProps) {
               <Icon name="external" size={13} />
               <span>{t("set.autostartNote")}</span>
             </p>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>{t("set.reliability")}</strong>
+                <small>{t("set.reliabilityHint")}</small>
+              </div>
+              <label class="switch-row">
+                <span>
+                  <strong>{t("set.autoRestartCore")}</strong>
+                  <small>{settings().autoRestartCore ? t("set.autoRestartCoreOnHint") : t("set.autoRestartCoreOffHint")}</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().autoRestartCore }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().autoRestartCore}
+                    onChange={(event) => update("autoRestartCore", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+            </div>
 
             <div class="setting-block">
               <div class="setting-label">

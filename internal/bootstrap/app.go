@@ -18,7 +18,9 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/service/node"
 	nodegroupservice "github.com/MardukPrime/Fast-V/internal/service/nodegroup"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
+	rescue "github.com/MardukPrime/Fast-V/internal/service/rescue"
 	routingservice "github.com/MardukPrime/Fast-V/internal/service/routing"
+	ruledebug "github.com/MardukPrime/Fast-V/internal/service/ruledebug"
 	rulesetservice "github.com/MardukPrime/Fast-V/internal/service/ruleset"
 	selfcheckservice "github.com/MardukPrime/Fast-V/internal/service/selfcheck"
 	"github.com/MardukPrime/Fast-V/internal/service/settings"
@@ -42,17 +44,23 @@ func Run(assets embed.FS) error {
 	appSvc := appservice.New(st)
 	coreSvc := core.NewCoreService(st)
 	proxySvc := proxyservice.New(st, coreSvc)
-	diagnosticsSvc := diagnosticsservice.New(proxySvc)
 	dashboardSvc := dashboard.New(st, coreSvc)
-	subSvc := subscription.New(st)
+	subSvc := subscription.New(st, proxySvc)
 	nodeSvc := node.New(st, coreSvc)
 	settingsSvc := settings.New(st)
 	routingSvc := routingservice.New(st)
 	backupSvc := backupservice.New(st)
 	historySvc := historyservice.New(st)
 	selfcheckSvc := selfcheckservice.New(selfcheck.NewChecker(st, coreSvc, proxySvc))
+	diagnosticsSvc := diagnosticsservice.New(proxySvc, diagnosticsservice.ReportSources{
+		Store:     st,
+		AppInfo:   appSvc.Info,
+		SelfCheck: diagnosticsservice.SelfCheckFunc(selfcheckSvc.Run),
+	})
 	nodeGroupSvc := nodegroupservice.New(st, proxySvc)
 	ruleSetSvc := rulesetservice.New(st)
+	rescueSvc := rescue.New(st, proxySvc)
+	ruleDebugSvc := ruledebug.New(st, ruleSetSvc.ExpandedRules)
 	// Rule-set subscriptions are expanded into routing rules at configuration
 	// build time; the provider keeps the generated config independent of which
 	// sets happened to download successfully.
@@ -81,6 +89,8 @@ func Run(assets embed.FS) error {
 			application.NewService(selfcheckSvc),
 			application.NewService(nodeGroupSvc),
 			application.NewService(ruleSetSvc),
+			application.NewService(rescueSvc),
+			application.NewService(ruleDebugSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
