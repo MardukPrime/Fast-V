@@ -75,6 +75,15 @@
   ./FastV
   ```
 
+- **AppImage（仅 x86_64）**：下载 `FastV-<version>-linux-amd64.AppImage`，赋予执行权限后直接运行：
+
+  ```bash
+  chmod +x FastV-<version>-linux-amd64.AppImage
+  ./FastV-<version>-linux-amd64.AppImage
+  ```
+
+  AppImage 同样依赖系统 GTK3 与 WebKitGTK 4.1；首次运行可在文件管理器中右键「属性 → 权限 → 允许作为程序执行」。
+
 - 依赖：GTK3 与 WebKitGTK 4.1。Debian / Ubuntu 可执行：
 
   ```bash

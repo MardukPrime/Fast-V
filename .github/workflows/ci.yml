@@ -54,7 +54,7 @@ jobs:
 
       - name: Test
         shell: pwsh
-        run: go test -count=1 ./internal/...
+        run: go test -count=2 -timeout 15m ./internal/...
 
       - name: Build executable
         shell: pwsh

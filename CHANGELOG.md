@@ -25,6 +25,7 @@ All notable changes to FastV are documented here.
 - 环境清理：检查/清理 fastv:// 协议注册、开机自启项与 PAC 文件，不删除订阅/节点/设置等用户数据，并显示数据目录。
 - 托盘状态图标：运行/启动中/异常/停止使用不同颜色，托盘图标随代理状态自动更新。
 - 安装与分发：Windows NSIS 安装包（桌面/开始菜单快捷方式、卸载程序，卸载不删除用户数据）；Linux `.deb` 包（安装到 `/opt/fastv`，含 desktop 入口与 GTK/WebKitGTK 依赖声明）；发布工作流对安装包做静默安装/卸载冒烟测试与 `dpkg-deb` 校验；macOS 暂无 DMG/公证（继续提供 zip 并注明签名限制）。
+- Linux AppImage：新增 amd64 AppImage 打包（AppDir + AppRun + desktop/图标，AppImage 运行时依赖系统 GTK3/WebKitGTK），发布资产与校验和包含 AppImage；发布前增加预期资产完整性检查；CI 单元测试改为 `-count=2` 以捕获不稳定用例。
 - 配置快照导出/导入：快照可导出为与本地备份兼容的 JSON 文件（使用系统保存对话框），也可从本地 JSON 备份文件导入为新快照（校验备份格式、8 MB 上限、保留策略）。
 - 运行日志持久化：`<数据目录>/logs/fastv.log` 记录启动/退出/崩溃（含堆栈）与内核/代理日志，5 MB 轮转、保留 3 个文件，便于问题排查。
 - 敏感配置加密：Windows 使用当前用户 DPAPI 加密 WebDAV 密码与入站认证密码后写入 `data.json`；旧版明文配置可平滑读取/迁移，解密失败时清空该字段并继续启动；备份与快照仍为明文（导出文件需妥善保管）。

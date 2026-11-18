@@ -22,6 +22,26 @@ git push origin v0.3.0-pre.1
 - `release`：汇总全部 artifact，生成合并的 `SHA256SUMS.txt` 与 `release-info.txt`，创建 GitHub Release；版本号含 `-pre`/`-beta`/`-rc` 等后缀自动标记为 **pre-release**。
 - 应用内「检查更新」按当前平台与架构选择资产（Windows zip / macOS zip / Linux tar.gz）；自动安装目前仅 Windows 可用，macOS/Linux 会提示手动下载。
 
+## 稳定版发布（v1.0.0 及以后）
+
+- **正式版**使用不带预发布后缀的语义化标签（例如 `v1.0.0`），工作流检测到版本不含 `-` 时自动发布为非 pre-release；预发布继续使用 `vX.Y.Z-pre.N`。
+- 发布前检查清单：
+  1. `main` 上 CI 全绿（含 `go test -count=2`）、发布工作流 smoke 测试通过；
+  2. CHANGELOG 完成对应版本小节；README 版本徽章与下载说明更新；
+  3. `dist` 预期资产全部存在：Windows zip/setup.exe、macOS arm64+amd64 zip、Linux tar.gz/deb（amd64+arm64）、AppImage（amd64）；
+  4. `SHA256SUMS.txt` 覆盖全部二进制/压缩资产且校验一致；
+  5. 在真实 Windows 环境安装/卸载一次，Linux 用 `dpkg -i` 与 AppImage 各启动一次；
+  6. macOS 产物在真实机器右键打开验证（未签名/未公证）。
+- macOS DMG 与签名/公证：需要 Apple Developer ID 证书与 macOS 构建机，当前 CI 使用 Linux 交叉编译并只产出 zip；正式签名流程：
+  ```bash
+  # 在 macOS 构建机上
+  codesign --force --deep --options runtime --sign "Developer ID Application: <team>" FastV.app
+  hdiutil create -volname FastV -srcfolder FastV.app -ov -format UDZO FastV-<version>-macos-<arch>.dmg
+  xcrun notarytool submit FastV-<version>-macos-<arch>.dmg --keychain-profile <profile> --wait
+  xcrun stapler staple FastV-<version>-macos-<arch>.dmg
+  ```
+  在配置证书与 macOS runner 之前，发布说明需明确标注“未签名、未公证，需右键打开”。
+
 > macOS/Linux 使用 Wails v3 的 CGO-free（purego）后端；需要 WebKitGTK/GTK 运行时库。Windows 专属能力（TUN、系统代理、自启、托盘菜单、应用内更新）在其他平台不可用。
 
 ## 手动发布步骤（备用）
