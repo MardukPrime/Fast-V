@@ -44,6 +44,11 @@ type Manager struct {
 	logs               []model.LogEntry
 	logSeq             int64
 	onLog              func(model.LogEntry)
+
+	// extraRulesProvider supplies routing rules generated outside the store
+	// (for example the rules expanded from remote rule sets). It is invoked
+	// when a configuration is generated and may be nil.
+	extraRulesProvider func() []model.RoutingRule
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -156,6 +161,42 @@ func (m *Manager) SetOnLog(callback func(model.LogEntry)) {
 	m.onLog = callback
 }
 
+// SetExtraRulesProvider registers the callback that supplies additional routing
+// rules (for example the rules expanded from remote rule sets). The rules are
+// appended after the stored user rules when a configuration is generated, so
+// user rules keep their priority. Passing nil removes the provider.
+func (m *Manager) SetExtraRulesProvider(provider func() []model.RoutingRule) {
+	m.mu.Lock()
+	m.extraRulesProvider = provider
+	m.mu.Unlock()
+}
+
+// extraRules snapshots the registered extra rules provider under the manager
+// lock and invokes it without holding the lock, so the provider may read the
+// store or take its own locks without risking a deadlock. A nil provider
+// contributes no rules.
+func (m *Manager) extraRules() []model.RoutingRule {
+	m.mu.RLock()
+	provider := m.extraRulesProvider
+	m.mu.RUnlock()
+	if provider == nil {
+		return nil
+	}
+	return provider()
+}
+
+// mergeRoutingRules appends the provider-supplied rules after the stored user
+// rules, preserving the user rule order and priority.
+func mergeRoutingRules(userRules, extraRules []model.RoutingRule) []model.RoutingRule {
+	if len(extraRules) == 0 {
+		return userRules
+	}
+	merged := make([]model.RoutingRule, 0, len(userRules)+len(extraRules))
+	merged = append(merged, userRules...)
+	merged = append(merged, extraRules...)
+	return merged
+}
+
 func (m *Manager) Logs() []model.LogEntry {
 	m.logsMu.Lock()
 	defer m.logsMu.Unlock()
@@ -218,6 +259,10 @@ func logLevel(line string) string {
 	}
 }
 func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
+	// Snapshot the extra rule provider before taking the manager lock: the
+	// provider is invoked without holding the lock so it can never deadlock
+	// against code that reads manager state.
+	extraRules := m.extraRules()
 	m.mu.Lock()
 	if m.cmd != nil {
 		state := m.enrichNodeState(m.state)
@@ -274,7 +319,7 @@ func (m *Manager) Start(ctx context.Context) (model.ProxyState, error) {
 		}
 	}
 
-	customRules := m.store.ListRoutingRules()
+	customRules := mergeRoutingRules(m.store.ListRoutingRules(), extraRules)
 	var (
 		config   []byte
 		buildErr error

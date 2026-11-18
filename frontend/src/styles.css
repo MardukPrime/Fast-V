@@ -8678,3 +8678,209 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Deep link import toasts (fastv://). The stack floats above the bottom dock,
+   never captures clicks outside the cards and stacks at most three entries. */
+.deeplink-toast-stack {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(380px, calc(100vw - 40px));
+  pointer-events: none;
+}
+
+/* The dock layout owns the bottom edge of the window; keep the cards clear of
+   the dock so neither the dock actions nor the toast buttons are covered. */
+.layout-dock .deeplink-toast-stack {
+  bottom: 104px;
+}
+
+@media (max-width: 760px) {
+  .deeplink-toast-stack {
+    right: 12px;
+    left: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+
+  .layout-dock .deeplink-toast-stack {
+    bottom: 96px;
+  }
+}
+
+.deeplink-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  pointer-events: auto;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 14px;
+  color: var(--text);
+  background:
+    radial-gradient(220px circle at 12% 0%, rgba(255, 255, 255, 0.16), transparent 70%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04) 58%, rgba(255, 255, 255, 0.07));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 18px 44px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  animation: deeplink-toast-in 180ms ease-out;
+}
+
+.deeplink-toast.is-success {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--glass-border-strong));
+}
+
+.deeplink-toast.is-error {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--glass-border-strong));
+  background:
+    radial-gradient(220px circle at 12% 0%, color-mix(in srgb, var(--danger) 16%, transparent), transparent 70%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035) 58%, rgba(255, 255, 255, 0.06));
+}
+
+:root[data-theme="light"] .deeplink-toast {
+  border-color: rgba(44, 67, 90, 0.16);
+  background:
+    radial-gradient(220px circle at 12% 0%, rgba(255, 255, 255, 0.95), transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(243, 248, 252, 0.86));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 16px 38px rgba(32, 51, 70, 0.18);
+}
+
+:root[data-theme="light"] .deeplink-toast.is-success {
+  border-color: color-mix(in srgb, var(--success) 40%, rgba(44, 67, 90, 0.12));
+}
+
+:root[data-theme="light"] .deeplink-toast.is-error {
+  border-color: color-mix(in srgb, var(--danger) 42%, rgba(44, 67, 90, 0.12));
+  background:
+    radial-gradient(220px circle at 12% 0%, rgba(255, 255, 255, 0.96), transparent 72%),
+    linear-gradient(145deg, #fff6f6, rgba(255, 249, 249, 0.9));
+}
+
+.deeplink-toast-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.deeplink-toast.is-error .deeplink-toast-icon {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.deeplink-toast-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.deeplink-toast-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+
+.deeplink-toast.is-success .deeplink-toast-title {
+  color: color-mix(in srgb, var(--success) 72%, var(--text));
+}
+
+.deeplink-toast.is-error .deeplink-toast-title {
+  color: color-mix(in srgb, var(--danger) 76%, var(--text));
+}
+
+.deeplink-toast-text {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.deeplink-toast-action {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.deeplink-toast-action:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.deeplink-toast-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.deeplink-toast-close:hover {
+  border-color: var(--glass-border);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="light"] .deeplink-toast-close:hover {
+  background: rgba(44, 67, 90, 0.08);
+}
+
+.deeplink-toast-action:focus-visible,
+.deeplink-toast-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+@keyframes deeplink-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deeplink-toast {
+    animation: none;
+  }
+
+  .deeplink-toast-action,
+  .deeplink-toast-close {
+    transition: none;
+  }
+}
+

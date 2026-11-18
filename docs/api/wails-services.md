@@ -52,6 +52,33 @@
 | Update | id | SubscriptionView | 更新单个订阅 |
 | UpdateAll | - | UpdateAllResult | 更新全部启用的订阅 |
 | SetOptions | id, autoUpdate, intervalMinutes, userAgent | SubscriptionView | 更新单个订阅的自动更新开关、独立间隔（0=跟随全局）与自定义 User-Agent |
+
+## NodeGroupService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| List | - | []NodeGroup | 节点分组列表 |
+| Save | NodeGroup | NodeGroup | 新建或更新分组（节点必须存在；urltest 间隔 0/5–1440） |
+| Delete | id | - | 删除分组 |
+| Apply | groupID, nodeID | ProxyState | 切换到分组内指定节点 |
+| TestGroup | groupID | GroupTestResult | 测速分组并切换到延迟最低节点，返回全部结果 |
+
+## RuleSetService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| List | - | []RuleSet | 规则集列表 |
+| Save | RuleSet | RuleSet | 新建或更新规则集定义（不会立即下载） |
+| Update | id | RuleSet | 下载并解析规则集，成功后刷新条目数/时间 |
+| UpdateAll | - | int | 更新全部启用的规则集，返回成功数量 |
+| Delete | id | - | 删除规则集 |
+| ExpandedRules | - | []RoutingRule | 内部使用：展开已启用规则集为路由规则 |
+
+## 订阅与规则数据模型
+
+- `Subscription`/`SubscriptionView`：新增 `autoUpdate`、`updateIntervalMinutes`、`userAgent`。
+- `NodeGroup`：`{id,name,type:"manual"|"urltest",nodeIds,testUrl,intervalMinutes,updatedAt}`。
+- `RuleSet`：`{id,name,url,kind:"domain"|"ip"|"combined",action,enabled,autoUpdate,intervalMinutes,updatedAt,ruleCount,lastError}`。
 | UpdateAll | - | UpdateAllResult | 更新全部启用订阅 |
 | Delete | id | - | 删除订阅及其节点 |
 | Nodes | id | []NodeView | 查看订阅解析出的节点 |

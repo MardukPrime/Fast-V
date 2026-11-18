@@ -16,8 +16,10 @@ import (
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
 	historyservice "github.com/MardukPrime/Fast-V/internal/service/history"
 	"github.com/MardukPrime/Fast-V/internal/service/node"
+	nodegroupservice "github.com/MardukPrime/Fast-V/internal/service/nodegroup"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
 	routingservice "github.com/MardukPrime/Fast-V/internal/service/routing"
+	rulesetservice "github.com/MardukPrime/Fast-V/internal/service/ruleset"
 	selfcheckservice "github.com/MardukPrime/Fast-V/internal/service/selfcheck"
 	"github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/service/subscription"
@@ -49,6 +51,17 @@ func Run(assets embed.FS) error {
 	backupSvc := backupservice.New(st)
 	historySvc := historyservice.New(st)
 	selfcheckSvc := selfcheckservice.New(selfcheck.NewChecker(st, coreSvc, proxySvc))
+	nodeGroupSvc := nodegroupservice.New(st, proxySvc)
+	ruleSetSvc := rulesetservice.New(st)
+	// Rule-set subscriptions are expanded into routing rules at configuration
+	// build time; the provider keeps the generated config independent of which
+	// sets happened to download successfully.
+	proxySvc.SetExtraRulesProvider(ruleSetSvc.ExpandedRules)
+
+	// Deep links arrive from the fastv:// protocol handler (first launch and
+	// second instance launches) and from share links passed on the command line.
+	deepLinks := newDeepLinkIntegration(subSvc, nodeSvc)
+	deepLinks.registerURLScheme()
 
 	app := application.New(application.Options{
 		Name:        buildinfo.ProductName,
@@ -66,12 +79,15 @@ func Run(assets embed.FS) error {
 			application.NewService(backupSvc),
 			application.NewService(historySvc),
 			application.NewService(selfcheckSvc),
+			application.NewService(nodeGroupSvc),
+			application.NewService(ruleSetSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: buildinfo.ProductID,
+			UniqueID:               buildinfo.ProductID,
+			OnSecondInstanceLaunch: deepLinks.onSecondInstanceLaunch,
 		},
 		Windows: application.WindowsOptions{
 			WebviewUserDataPath: filepath.Join(st.DataDir(), "webview2"),
@@ -91,6 +107,9 @@ func Run(assets embed.FS) error {
 		BackgroundColour: application.NewRGB(238, 242, 247),
 		URL:              "/",
 	})
+
+	deepLinks.setWindow(window)
+	deepLinks.handleStartupArgs()
 
 	// The tray and the close/minimize-to-tray behavior are wired after the
 	// window exists and before the event loop starts; Wails creates the tray

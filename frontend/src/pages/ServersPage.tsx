@@ -1,8 +1,11 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
+import { Events } from "@wailsio/runtime";
+
 import { NodeService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/node";
+import { Service as NodeGroupService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/nodegroup";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
-import type { BatchResult, NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BatchResult, NodeConfig, NodeConfigPreview, NodeGroup, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
 import { t } from "../i18n";
@@ -18,6 +21,10 @@ type EditorTab = "form" | "json";
 type SortMode = "default" | "name" | "latency" | "favorite";
 
 type BatchAction = "enable" | "disable" | "copy" | "delete" | "tag";
+
+// Mirrors the backend node group types: manual groups are switched by hand,
+// url-test groups select the fastest node on a schedule.
+type GroupType = "manual" | "urltest";
 
 const sortOptions = (): { value: SortMode; label: string }[] => [
   { value: "default", label: t("srv.sort.default") },
@@ -111,6 +118,27 @@ export default function ServersPage(props: ServersProps) {
   const [busyID, setBusyID] = createSignal("");
   const [sortMode, setSortMode] = createSignal<SortMode>("default");
 
+  // ---- Node groups --------------------------------------------------------
+  // Groups are persisted by NodeGroupService; the list is refreshed on mount
+  // and whenever the backend broadcasts "nodegroups:changed" after a scheduled
+  // url-test round.
+  const [groups, setGroups] = createSignal<NodeGroup[]>([]);
+  const [groupsError, setGroupsError] = createSignal("");
+  const [selectedGroupID, setSelectedGroupID] = createSignal("");
+  const [groupTesting, setGroupTesting] = createSignal(false);
+  const [groupManagerOpen, setGroupManagerOpen] = createSignal(false);
+  const [groupFormOpen, setGroupFormOpen] = createSignal(false);
+  const [groupFormID, setGroupFormID] = createSignal("");
+  const [groupFormName, setGroupFormName] = createSignal("");
+  const [groupFormType, setGroupFormType] = createSignal<GroupType>("manual");
+  const [groupFormInterval, setGroupFormInterval] = createSignal("0");
+  const [groupFormTestURL, setGroupFormTestURL] = createSignal("");
+  const [groupFormNodeIDs, setGroupFormNodeIDs] = createSignal<Set<string>>(new Set());
+  const [groupNodeSearch, setGroupNodeSearch] = createSignal("");
+  const [groupFormError, setGroupFormError] = createSignal("");
+  const [groupSaving, setGroupSaving] = createSignal(false);
+  const [groupDeletingID, setGroupDeletingID] = createSignal("");
+
   // Batch node selection and sharing QR dialog state.
   const [selectedIDs, setSelectedIDs] = createSignal<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = createSignal<BatchAction | "">("");
@@ -200,7 +228,18 @@ export default function ServersPage(props: ServersProps) {
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   });
 
-  const filteredNodes = createMemo(() => {
+  const selectedGroup = createMemo(() => groups().find((group) => group.id === selectedGroupID()) ?? null);
+
+  // Only url-test groups expose the "measure and pick the fastest node" action.
+  const selectedURLTestGroup = createMemo(() => {
+    const group = selectedGroup();
+    return group && group.type === "urltest" ? group : null;
+  });
+
+  // Toolbar filters (search / protocol / tag / subscription). Kept separate
+  // from the group filter so the group editor can reuse the current filters
+  // without the selected group narrowing its own node picker.
+  const filteredByFilters = createMemo(() => {
     const keyword = search().trim().toLowerCase();
     const tag = tagFilter();
     return nodes().filter((node) => {
@@ -211,6 +250,14 @@ export default function ServersPage(props: ServersProps) {
       const haystack = [node.name, node.tag, node.protocol, node.address, node.subscriptionName].join(" ").toLowerCase();
       return haystack.includes(keyword);
     });
+  });
+
+  const filteredNodes = createMemo(() => {
+    const group = selectedGroup();
+    const list = filteredByFilters();
+    if (!group) return list;
+    const ids = new Set(group.nodeIds ?? []);
+    return list.filter((node) => ids.has(node.id));
   });
 
   // NodeService.List already returns nodes in the persisted order, so keep that
@@ -376,8 +423,8 @@ export default function ServersPage(props: ServersProps) {
   };
 
   // Real URL tests start a temporary Xray-core process, so they are serialized:
-  // at most one single-node or batch test may be running at any time.
-  const urlTestBusy = () => testingID() !== "" || testingAll();
+  // at most one single-node, batch or group test may be running at any time.
+  const urlTestBusy = () => testingID() !== "" || testingAll() || groupTesting();
 
   const urlTestFailure = (nodeId: string, message: string): NodeLatency => ({
     nodeId,
@@ -447,6 +494,233 @@ export default function ServersPage(props: ServersProps) {
       setPageNotice("");
       pageNoticeTimer = undefined;
     }, 8000);
+  };
+
+  // ---- Node groups --------------------------------------------------------
+  const groupTypeLabel = (type: string) => type === "urltest"
+    ? t("srv.group.type.urltest")
+    : t("srv.group.type.manual");
+
+  const groupNodeCount = (group: NodeGroup) => (group.nodeIds ?? []).length;
+
+  const groupIntervalLabel = (group: NodeGroup) => group.intervalMinutes > 0
+    ? t("srv.group.everyMinutes", { minutes: group.intervalMinutes })
+    : t("srv.group.autoOff");
+
+  const applyGroups = (list: NodeGroup[]) => {
+    setGroups(list);
+    // A group can disappear (deleted here or in another window); fall back to
+    // "all nodes" instead of leaving the table filtered by a dead group.
+    setSelectedGroupID((current) => current && !list.some((group) => group.id === current) ? "" : current);
+  };
+
+  const refreshGroups = async () => {
+    try {
+      const list = await NodeGroupService.List();
+      if (!alive) return;
+      applyGroups(list ?? []);
+      setGroupsError("");
+    } catch (err) {
+      if (!alive) return;
+      setGroupsError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  // Reload the node list without touching the loading state; used when a
+  // scheduled group test may have switched the active node.
+  const refreshNodesQuietly = async () => {
+    try {
+      const list = await NodeService.List({ search: "", protocol: "", subscriptionId: "" });
+      if (!alive) return;
+      setNodes(list ?? []);
+    } catch {
+      // Keep the current list; the next manual refresh retries.
+    }
+  };
+
+  const handleGroupsChanged = (event: { data: unknown }) => {
+    if (!alive) return;
+    const next = event.data as NodeGroup[] | null;
+    if (Array.isArray(next)) applyGroups(next);
+    else void refreshGroups();
+    // A scheduled url-test round may have just switched the active node, so
+    // refresh the table (its active row and the quick switch) as well.
+    void refreshNodesQuietly();
+  };
+
+  onMount(() => {
+    void refreshGroups();
+    const off = Events.On("nodegroups:changed", handleGroupsChanged);
+    onCleanup(off);
+  });
+
+  const groupPickerNodes = createMemo(() => {
+    const keyword = groupNodeSearch().trim().toLowerCase();
+    if (!keyword) return nodes();
+    return nodes().filter((node) => [node.name, node.tag, node.address, node.protocol, node.subscriptionName].join(" ").toLowerCase().includes(keyword));
+  });
+
+  const testSelectedGroup = async () => {
+    const group = selectedURLTestGroup();
+    if (!group || !alive || urlTestBusy()) return;
+    setGroupTesting(true);
+    setError("");
+    try {
+      const result = await NodeGroupService.TestGroup(group.id);
+      if (!alive) return;
+      applyURLLatencyResults(group.nodeIds ?? [], result.results);
+      if (result.nodeId) updateNodeFlags(result.nodeId);
+      await refreshGroups();
+      if (!alive) return;
+      showPageNotice(t("srv.group.testDone", { name: result.nodeName || result.nodeId, ms: result.latencyMs }));
+    } catch (err) {
+      if (!alive) return;
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (alive) setGroupTesting(false);
+    }
+  };
+
+  // ---- Group manager dialog ----------------------------------------------
+  const openGroupManager = async () => {
+    setGroupFormOpen(false);
+    setGroupFormError("");
+    setGroupsError("");
+    setGroupManagerOpen(true);
+    await refreshGroups();
+  };
+
+  const closeGroupManager = () => {
+    if (groupSaving() || groupDeletingID() !== "") return;
+    setGroupManagerOpen(false);
+    setGroupFormOpen(false);
+    setGroupFormError("");
+    setGroupsError("");
+  };
+
+  const startGroupForm = (group?: NodeGroup) => {
+    const type: GroupType = group?.type === "urltest" ? "urltest" : "manual";
+    setGroupFormID(group?.id ?? "");
+    setGroupFormName(group?.name ?? "");
+    setGroupFormType(type);
+    // Manual groups never run on an interval; keep the disabled field honest.
+    setGroupFormInterval(type === "manual" ? "0" : String(group?.intervalMinutes ?? 0));
+    setGroupFormTestURL(group?.testUrl ?? "");
+    // Node ids of deleted nodes would make the backend reject the save, so
+    // drop them whenever the node list is already available.
+    const known = new Set(nodes().map((node) => node.id));
+    const ids = (group?.nodeIds ?? []).filter((id) => known.size === 0 || known.has(id));
+    setGroupFormNodeIDs(new Set(ids));
+    setGroupNodeSearch("");
+    setGroupFormError("");
+    setGroupsError("");
+    setGroupFormOpen(true);
+  };
+
+  const backToGroupList = () => {
+    if (groupSaving()) return;
+    setGroupFormOpen(false);
+    setGroupFormError("");
+  };
+
+  const changeGroupType = (type: GroupType) => {
+    setGroupFormType(type);
+    // A manual group never runs automatically, so its interval stays 0.
+    if (type === "manual") setGroupFormInterval("0");
+    setGroupFormError("");
+  };
+
+  const toggleGroupNode = (id: string) => {
+    setGroupFormNodeIDs((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllGroupNodes = () => {
+    setGroupFormNodeIDs(new Set(nodes().map((node) => node.id)));
+  };
+
+  const clearGroupNodes = () => {
+    setGroupFormNodeIDs(new Set<string>());
+  };
+
+  const addFilteredToGroup = () => {
+    const ids = filteredByFilters().map((node) => node.id);
+    if (ids.length === 0) return;
+    setGroupFormNodeIDs((current) => {
+      const next = new Set(current);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+  };
+
+  const saveGroup = async () => {
+    if (groupSaving()) return;
+    const name = groupFormName().trim();
+    if (!name) {
+      setGroupFormError(t("srv.group.error.nameRequired"));
+      return;
+    }
+    const type = groupFormType();
+    const rawInterval = groupFormInterval().trim();
+    const interval = rawInterval === "" ? 0 : Number(rawInterval);
+    // The backend accepts 0 (disabled) or 5..1440 minutes; validate before the
+    // request so the user gets an immediate hint.
+    if (!Number.isInteger(interval) || interval < 0 || interval > 1440 || (interval > 0 && interval < 5)) {
+      setGroupFormError(t("srv.group.error.interval"));
+      return;
+    }
+    const selected = groupFormNodeIDs();
+    const nodeIDs = nodes().filter((node) => selected.has(node.id)).map((node) => node.id);
+    setGroupSaving(true);
+    setGroupFormError("");
+    setError("");
+    try {
+      const saved = await NodeGroupService.Save({
+        id: groupFormID(),
+        name,
+        type,
+        nodeIds: nodeIDs,
+        testUrl: groupFormTestURL().trim(),
+        intervalMinutes: type === "manual" ? 0 : interval,
+        updatedAt: "",
+      });
+      if (!alive) return;
+      await refreshGroups();
+      if (!alive) return;
+      setGroupFormOpen(false);
+      // Select the freshly created group so its filtered table is visible.
+      setSelectedGroupID((current) => current || saved.id);
+      showPageNotice(t("srv.group.updated", { name: saved.name }));
+    } catch (err) {
+      if (!alive) return;
+      setGroupFormError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (alive) setGroupSaving(false);
+    }
+  };
+
+  const removeGroup = async (group: NodeGroup) => {
+    if (groupSaving() || groupDeletingID() !== "") return;
+    if (!window.confirm(t("srv.group.confirmDelete", { name: group.name }))) return;
+    setGroupDeletingID(group.id);
+    setGroupsError("");
+    try {
+      await NodeGroupService.Delete(group.id);
+      if (!alive) return;
+      if (selectedGroupID() === group.id) setSelectedGroupID("");
+      await refreshGroups();
+      if (!alive) return;
+      showPageNotice(t("srv.group.deleted", { name: group.name }));
+    } catch (err) {
+      if (!alive) return;
+      setGroupsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (alive) setGroupDeletingID("");
+    }
   };
 
   // ---- Batch actions ------------------------------------------------------
@@ -908,6 +1182,83 @@ export default function ServersPage(props: ServersProps) {
           </div>
         </div>
 
+        <div
+          role="group"
+          aria-label={t("srv.group.barAria")}
+          style={{
+            display: "flex",
+            "align-items": "center",
+            "flex-wrap": "wrap",
+            gap: "var(--space-2)",
+            "margin-top": "var(--space-3)",
+            padding: "6px var(--space-2)",
+            border: "1px solid var(--glass-border)",
+            "border-radius": "var(--radius-sm)",
+            background: "var(--srv-surface)",
+          }}
+        >
+          <span style={{ color: "var(--faint)", "font-size": "var(--fs-caption)", "font-weight": "600", "letter-spacing": "0.06em", "white-space": "nowrap" }}>
+            {t("srv.group.label")}
+          </span>
+          <div style={{ display: "flex", "align-items": "center", "flex-wrap": "wrap", gap: "6px", flex: "1 1 auto", "min-width": "0" }}>
+            <button
+              type="button"
+              class="srv-chip srv-chip-tag"
+              aria-pressed={selectedGroupID() === ""}
+              title={t("srv.group.all")}
+              style={selectedGroupID() === ""
+                ? { "border-color": "var(--srv-tint-border)", background: "var(--srv-tint)", color: "var(--accent)", cursor: "pointer" }
+                : { "max-width": "none", cursor: "pointer" }}
+              onClick={() => setSelectedGroupID("")}
+            >
+              {t("srv.group.all")}
+              <span style={{ "margin-left": "5px", "font-size": "9px", "font-weight": "500", opacity: "0.72" }}>{nodes().length}</span>
+            </button>
+            <For each={groups()}>
+              {(group) => (
+                <button
+                  type="button"
+                  class="srv-chip srv-chip-tag"
+                  aria-pressed={selectedGroupID() === group.id}
+                  title={t("srv.group.chipAria", { name: group.name })}
+                  style={selectedGroupID() === group.id
+                    ? { "max-width": "300px", "border-color": "var(--srv-tint-border)", background: "var(--srv-tint)", color: "var(--accent)", cursor: "pointer" }
+                    : { "max-width": "300px", cursor: "pointer" }}
+                  onClick={() => setSelectedGroupID(group.id)}
+                >
+                  <span style={{ overflow: "hidden", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{group.name}</span>
+                  <span style={{ "margin-left": "6px", "font-size": "9px", "font-weight": "500", opacity: "0.72" }}>{groupTypeLabel(group.type)}</span>
+                  <span style={{ "margin-left": "5px", "font-size": "9px", "font-weight": "500", opacity: "0.6" }}>{groupNodeCount(group)}</span>
+                </button>
+              )}
+            </For>
+          </div>
+          <div style={{ display: "flex", "align-items": "center", gap: "6px", "margin-left": "auto", "flex-wrap": "wrap" }}>
+            <Show when={selectedURLTestGroup()}>
+              {(group) => (
+                <>
+                  <Show when={group().intervalMinutes > 0}>
+                    <span class="srv-batch-count">{t("srv.group.autoInterval", { minutes: group().intervalMinutes })}</span>
+                  </Show>
+                  <button
+                    class="btn secondary"
+                    type="button"
+                    onClick={() => void testSelectedGroup()}
+                    disabled={urlTestBusy() || groupNodeCount(group()) === 0}
+                    aria-busy={groupTesting()}
+                    title={t("srv.group.testBestTitle")}
+                  >
+                    <Icon name="speed" size={14} /> {groupTesting() ? t("srv.testing") : t("srv.group.testBest")}
+                  </button>
+                </>
+              )}
+            </Show>
+            <button class="btn secondary" type="button" onClick={() => void openGroupManager()} title={t("srv.group.manage")}>
+              <Icon name="edit" size={14} /> {t("srv.group.manage")}
+            </button>
+          </div>
+        </div>
+
         <div class="srv-toolbar">
           <label class="srv-search">
             <Icon name="search" size={14} />
@@ -1020,14 +1371,29 @@ export default function ServersPage(props: ServersProps) {
         <Show when={!loading()} fallback={<div class="empty-state">{t("srv.empty.loading")}</div>}>
           <Show when={filteredNodes().length > 0} fallback={
             <div class="empty-state">
-              <div class="empty-icon"><Icon name="server" size={22} /></div>
-              <strong>{nodes().length === 0 ? t("srv.empty.noNodes") : t("srv.empty.noMatches")}</strong>
-              <span>{nodes().length === 0 ? t("srv.empty.noNodesHint") : t("srv.empty.noMatchesHint")}</span>
-              <Show when={nodes().length === 0}>
-                <div class="node-empty-actions">
-                  <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>{t("srv.empty.addSubscription")}</button>
-                  <button class="btn secondary" onClick={openImport}>{t("srv.import")}</button>
-                </div>
+              <Show when={selectedGroup()} fallback={
+                <>
+                  <div class="empty-icon"><Icon name="server" size={22} /></div>
+                  <strong>{nodes().length === 0 ? t("srv.empty.noNodes") : t("srv.empty.noMatches")}</strong>
+                  <span>{nodes().length === 0 ? t("srv.empty.noNodesHint") : t("srv.empty.noMatchesHint")}</span>
+                  <Show when={nodes().length === 0}>
+                    <div class="node-empty-actions">
+                      <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>{t("srv.empty.addSubscription")}</button>
+                      <button class="btn secondary" onClick={openImport}>{t("srv.import")}</button>
+                    </div>
+                  </Show>
+                </>
+              }>
+                {(group) => (
+                  <>
+                    <div class="empty-icon"><Icon name="server" size={22} /></div>
+                    <strong>{groupNodeCount(group()) === 0 ? t("srv.group.empty") : t("srv.group.emptyFiltered")}</strong>
+                    <span>{groupNodeCount(group()) === 0 ? t("srv.group.emptyHint") : t("srv.group.emptyFilteredHint")}</span>
+                    <div class="node-empty-actions">
+                      <button class="btn secondary" onClick={() => void openGroupManager()}>{t("srv.group.manage")}</button>
+                    </div>
+                  </>
+                )}
               </Show>
             </div>
           }>
@@ -1308,6 +1674,134 @@ export default function ServersPage(props: ServersProps) {
               <button class="btn primary" type="button" onClick={() => void submitTag()} disabled={tagBusy() || validateNodeTag(tagValue()) !== "" || (tagEditorIDs().length === 0 && !tagEditorNode())}>
                 <Icon name="check" size={14} /> {tagBusy() ? t("srv.tag.saving") : tagValue().trim() ? t("srv.tag.save") : t("srv.tag.clear")}
               </button>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={groupManagerOpen()}>
+        <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) closeGroupManager(); }}>
+          <div class="modal node-import-modal">
+            <div class="modal-heading">
+              <div>
+                <h3>{groupFormOpen() ? (groupFormID() ? t("srv.group.editTitle") : t("srv.group.newTitle")) : t("srv.group.title")}</h3>
+                <span>{groupFormOpen() ? t("srv.group.formSubtitle") : t("srv.group.subtitle")}</span>
+              </div>
+              <button class="icon-button" onClick={closeGroupManager} disabled={groupSaving() || groupDeletingID() !== ""} aria-label={t("srv.common.close")}>
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div class="node-import-body">
+              <Show when={groupsError()}>
+                <div class="alert error"><span class="alert-message"><Icon name="alert" size={14} /> {groupsError()}</span></div>
+              </Show>
+
+              <Show when={groupFormOpen()} fallback={
+                <>
+                  <Show when={groups().length > 0} fallback={<p class="node-import-hint">{t("srv.group.listEmpty")}</p>}>
+                    <div role="list" aria-label={t("srv.group.listAria")} style={{ display: "flex", "flex-direction": "column", gap: "8px" }}>
+                      <For each={groups()}>
+                        {(group) => (
+                          <div role="listitem" style={{ display: "flex", "align-items": "center", gap: "10px", padding: "8px 10px", border: "1px solid var(--glass-border)", "border-radius": "var(--radius-xs)", background: "var(--srv-surface)" }}>
+                            <div style={{ display: "flex", "flex-direction": "column", gap: "2px", flex: "1 1 auto", "min-width": "0" }}>
+                              <strong style={{ overflow: "hidden", color: "var(--text)", "font-size": "var(--fs-label)", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{group.name}</strong>
+                              <span style={{ color: "var(--faint)", "font-size": "var(--fs-caption)" }}>
+                                {groupTypeLabel(group.type)} · {t("srv.group.nodeCount", { count: groupNodeCount(group) })} · {groupIntervalLabel(group)}
+                              </span>
+                            </div>
+                            <button class="btn secondary compact" type="button" onClick={() => startGroupForm(group)} disabled={groupDeletingID() !== ""} title={t("srv.group.editAria", { name: group.name })} aria-label={t("srv.group.editAria", { name: group.name })}>
+                              <Icon name="edit" size={13} /> {t("srv.group.edit")}
+                            </button>
+                            <button class="btn danger compact" type="button" onClick={() => void removeGroup(group)} disabled={groupDeletingID() !== ""} title={t("srv.group.deleteAria", { name: group.name })} aria-label={t("srv.group.deleteAria", { name: group.name })}>
+                              <Icon name="trash" size={13} /> {groupDeletingID() === group.id ? t("srv.group.deleting") : t("srv.group.delete")}
+                            </button>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                  <p class="node-import-hint">{t("srv.group.listHint")}</p>
+                </>
+              }>
+                <div class="node-editor-grid two">
+                  <label>
+                    <span>{t("srv.group.name")}</span>
+                    <input value={groupFormName()} onInput={(event) => setGroupFormName(event.currentTarget.value)} placeholder={t("srv.group.namePlaceholder")} disabled={groupSaving()} aria-label={t("srv.group.name")} />
+                  </label>
+                  <label>
+                    <span>{t("srv.group.typeLabel")}</span>
+                    <select value={groupFormType()} onChange={(event) => changeGroupType(event.currentTarget.value === "urltest" ? "urltest" : "manual")} disabled={groupSaving()} aria-label={t("srv.group.typeLabel")}>
+                      <option value="manual">{t("srv.group.type.manual")}</option>
+                      <option value="urltest">{t("srv.group.type.urltest")}</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{t("srv.group.interval")}</span>
+                    <input type="number" min="0" max="1440" step="1" value={groupFormInterval()} onInput={(event) => setGroupFormInterval(event.currentTarget.value)} disabled={groupSaving() || groupFormType() === "manual"} aria-label={t("srv.group.interval")} />
+                  </label>
+                  <label>
+                    <span>{t("srv.group.testUrl")}</span>
+                    <input value={groupFormTestURL()} onInput={(event) => setGroupFormTestURL(event.currentTarget.value)} placeholder={t("srv.group.testUrlPlaceholder")} disabled={groupSaving()} aria-label={t("srv.group.testUrl")} />
+                  </label>
+                </div>
+                <p class="node-import-hint">{groupFormType() === "urltest" ? t("srv.group.typeUrlTestHint") : t("srv.group.typeManualHint")}</p>
+                <p class="node-import-hint">{t("srv.group.intervalHint")} {t("srv.group.testUrlHint")}</p>
+
+                <div style={{ display: "flex", "align-items": "center", "flex-wrap": "wrap", gap: "6px" }}>
+                  <span style={{ color: "var(--text-secondary)", "font-size": "var(--fs-caption)", "font-weight": "600" }}>{t("srv.group.nodes")}</span>
+                  <span class="srv-batch-count">{t("srv.group.nodesSelected", { count: groupFormNodeIDs().size })}</span>
+                  <span style={{ flex: "1 1 auto" }} />
+                  <button class="btn ghost compact" type="button" onClick={selectAllGroupNodes} disabled={groupSaving() || nodes().length === 0}>{t("srv.group.selectAll")}</button>
+                  <button class="btn ghost compact" type="button" onClick={clearGroupNodes} disabled={groupSaving() || groupFormNodeIDs().size === 0}>{t("srv.group.clear")}</button>
+                  <button class="btn ghost compact" type="button" onClick={addFilteredToGroup} disabled={groupSaving() || filteredByFilters().length === 0} title={t("srv.group.selectFilteredHint", { count: filteredByFilters().length })}>{t("srv.group.selectFiltered")}</button>
+                </div>
+                <label style={{ display: "flex", "align-items": "center", gap: "var(--space-2)", height: "32px", padding: "0 var(--space-2)", border: "1px solid var(--glass-border)", "border-radius": "var(--radius-xs)", background: "var(--srv-surface)" }}>
+                  <Icon name="search" size={14} />
+                  <input
+                    value={groupNodeSearch()}
+                    onInput={(event) => setGroupNodeSearch(event.currentTarget.value)}
+                    placeholder={t("srv.group.nodeSearchPlaceholder")}
+                    aria-label={t("srv.group.nodeSearchAria")}
+                    style={{ flex: "1 1 auto", "min-width": "0", height: "28px", "min-height": "28px", padding: "0", border: "0", background: "transparent", "box-shadow": "none", "font-size": "var(--fs-caption)" }}
+                  />
+                </label>
+                <div style={{ display: "flex", "flex-direction": "column", gap: "2px", "max-height": "220px", "overflow-y": "auto", padding: "4px", border: "1px solid var(--glass-border)", "border-radius": "var(--radius-xs)", background: "var(--srv-surface)" }}>
+                  <Show when={nodes().length > 0} fallback={<p class="node-import-hint" style={{ margin: "4px" }}>{t("srv.group.noNodes")}</p>}>
+                    <Show when={groupPickerNodes().length > 0} fallback={<p class="node-import-hint" style={{ margin: "4px" }}>{t("srv.group.noNodeMatches")}</p>}>
+                      <For each={groupPickerNodes()}>
+                        {(node) => (
+                          <label style={{ display: "flex", "align-items": "center", gap: "8px", padding: "3px 6px", "border-radius": "var(--radius-xs)", cursor: "pointer" }}>
+                            <input class="srv-check" type="checkbox" checked={groupFormNodeIDs().has(node.id)} disabled={groupSaving()} onChange={() => toggleGroupNode(node.id)} aria-label={t("srv.row.selectAria", { name: node.name })} />
+                            <span style={{ "min-width": "0", overflow: "hidden", color: "var(--text-secondary)", "font-size": "var(--fs-caption)", "text-overflow": "ellipsis", "white-space": "nowrap" }}>{node.name}</span>
+                            <span style={{ "margin-left": "auto", flex: "0 0 auto", color: "var(--faint)", "font-size": "9px" }}>{protocolLabel(node.protocol)} · {node.address}:{node.port}</span>
+                          </label>
+                        )}
+                      </For>
+                    </Show>
+                  </Show>
+                </div>
+
+                <Show when={groupFormError()}>
+                  <div class="alert error"><span class="alert-message"><Icon name="alert" size={14} /> {groupFormError()}</span></div>
+                </Show>
+              </Show>
+            </div>
+
+            <div class="modal-footer">
+              <Show when={groupFormOpen()} fallback={
+                <>
+                  <button class="btn ghost" type="button" onClick={closeGroupManager} disabled={groupDeletingID() !== ""}>{t("srv.common.close")}</button>
+                  <button class="btn primary" type="button" onClick={() => startGroupForm()} disabled={groupDeletingID() !== ""}>
+                    <Icon name="plus" size={14} /> {t("srv.group.new")}
+                  </button>
+                </>
+              }>
+                <button class="btn ghost" type="button" onClick={backToGroupList} disabled={groupSaving()}>{t("srv.group.back")}</button>
+                <button class="btn primary" type="button" onClick={() => void saveGroup()} disabled={groupSaving()}>
+                  <Icon name="check" size={14} /> {groupSaving() ? t("srv.group.saving") : t("srv.group.save")}
+                </button>
+              </Show>
             </div>
           </div>
         </div>

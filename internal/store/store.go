@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 8
+const storeVersion = 9
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -82,6 +82,8 @@ type storeData struct {
 	Nodes          []Node                `json:"nodes"`
 	ActiveNodeID   string                `json:"activeNodeId"`
 	RoutingRules   []model.RoutingRule   `json:"routingRules"`
+	NodeGroups     []model.NodeGroup     `json:"nodeGroups"`
+	RuleSets       []model.RuleSet       `json:"ruleSets"`
 	TrafficHistory []model.DailyTraffic  `json:"trafficHistory"`
 	LatencyHistory []model.LatencySample `json:"latencyHistory"`
 }
@@ -150,6 +152,8 @@ func defaultStoreData() storeData {
 		Settings:       DefaultSettings(),
 		Subscriptions:  []Subscription{},
 		Nodes:          []Node{},
+		NodeGroups:     []model.NodeGroup{},
+		RuleSets:       []model.RuleSet{},
 		TrafficHistory: []model.DailyTraffic{},
 		LatencyHistory: []model.LatencySample{},
 	}
@@ -270,6 +274,18 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Nodes == nil {
 		loaded.Nodes = []Node{}
 	}
+	if loaded.NodeGroups == nil {
+		loaded.NodeGroups = []model.NodeGroup{}
+	}
+	if loaded.RuleSets == nil {
+		loaded.RuleSets = []model.RuleSet{}
+	}
+	for i := range loaded.NodeGroups {
+		loaded.NodeGroups[i] = normalizeNodeGroup(loaded.NodeGroups[i])
+	}
+	for i := range loaded.RuleSets {
+		loaded.RuleSets[i] = normalizeRuleSet(loaded.RuleSets[i])
+	}
 	// History is optional data: repair and cap what was loaded so a hand-edited
 	// or truncated file can never break the normal store contract.
 	loaded.TrafficHistory = normalizeTrafficHistory(loaded.TrafficHistory)
@@ -308,6 +324,54 @@ func normalizeSubscription(sub Subscription) Subscription {
 		}
 	}
 	return sub
+}
+
+func normalizeNodeGroup(group model.NodeGroup) model.NodeGroup {
+	group.Name = strings.TrimSpace(group.Name)
+	group.Type = strings.TrimSpace(group.Type)
+	group.TestURL = strings.TrimSpace(group.TestURL)
+	if group.Type != "manual" && group.Type != "urltest" {
+		group.Type = "manual"
+	}
+	if group.IntervalMinutes != 0 && (group.IntervalMinutes < 5 || group.IntervalMinutes > 1440) {
+		group.IntervalMinutes = 0
+	}
+	seen := map[string]struct{}{}
+	ids := make([]string, 0, len(group.NodeIDs))
+	for _, id := range group.NodeIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	group.NodeIDs = ids
+	return group
+}
+
+func normalizeRuleSet(set model.RuleSet) model.RuleSet {
+	set.Name = strings.TrimSpace(set.Name)
+	set.URL = strings.TrimSpace(set.URL)
+	set.Kind = strings.TrimSpace(set.Kind)
+	set.Action = strings.TrimSpace(set.Action)
+	switch set.Kind {
+	case "domain", "ip", "combined":
+	default:
+		set.Kind = "combined"
+	}
+	switch set.Action {
+	case "proxy", "direct", "block":
+	default:
+		set.Action = "direct"
+	}
+	if set.IntervalMinutes != 0 && (set.IntervalMinutes < 15 || set.IntervalMinutes > 1440) {
+		set.IntervalMinutes = 0
+	}
+	return set
 }
 
 func normalizeSettings(value, fallback Settings) Settings {
@@ -391,6 +455,8 @@ func (s *Store) snapshotLocked() storeData {
 	out.Subscriptions = append([]Subscription{}, s.data.Subscriptions...)
 	out.Nodes = append([]Node{}, s.data.Nodes...)
 	out.RoutingRules = append([]model.RoutingRule{}, s.data.RoutingRules...)
+	out.NodeGroups = append([]model.NodeGroup{}, s.data.NodeGroups...)
+	out.RuleSets = append([]model.RuleSet{}, s.data.RuleSets...)
 	out.TrafficHistory = append([]model.DailyTraffic{}, s.data.TrafficHistory...)
 	out.LatencyHistory = append([]model.LatencySample{}, s.data.LatencyHistory...)
 	return out
@@ -447,6 +513,8 @@ type backupDocument struct {
 	Nodes          []Node              `json:"nodes"`
 	ActiveNodeID   string              `json:"activeNodeId"`
 	RoutingRules   []model.RoutingRule `json:"routingRules"`
+	NodeGroups     []model.NodeGroup   `json:"nodeGroups"`
+	RuleSets       []model.RuleSet     `json:"ruleSets"`
 	TrafficHistory json.RawMessage     `json:"trafficHistory"`
 	LatencyHistory json.RawMessage     `json:"latencyHistory"`
 }
@@ -471,6 +539,8 @@ func parseBackup(data []byte) (storeData, error) {
 		Nodes:          document.Nodes,
 		ActiveNodeID:   document.ActiveNodeID,
 		RoutingRules:   document.RoutingRules,
+		NodeGroups:     document.NodeGroups,
+		RuleSets:       document.RuleSets,
 		TrafficHistory: parseTrafficHistory(document.TrafficHistory),
 		LatencyHistory: parseLatencyHistory(document.LatencyHistory),
 	}
@@ -1137,6 +1207,171 @@ func (s *Store) SetNodeTag(id string, tag string) (Node, error) {
 		return errors.New("node not found")
 	})
 	return updated, err
+}
+
+// ListNodeGroups returns a copy of all node groups in user order.
+func (s *Store) ListNodeGroups() []model.NodeGroup {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]model.NodeGroup, 0, len(s.data.NodeGroups))
+	for _, group := range s.data.NodeGroups {
+		group.NodeIDs = append([]string(nil), group.NodeIDs...)
+		out = append(out, group)
+	}
+	return out
+}
+
+func (s *Store) FindNodeGroup(id string) (model.NodeGroup, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, group := range s.data.NodeGroups {
+		if group.ID == id {
+			group.NodeIDs = append([]string(nil), group.NodeIDs...)
+			return group, nil
+		}
+	}
+	return model.NodeGroup{}, errors.New("node group not found")
+}
+
+// SaveNodeGroup inserts or updates a node group. A missing ID creates a new
+// group; the normalized group is returned.
+func (s *Store) SaveNodeGroup(group model.NodeGroup) (model.NodeGroup, error) {
+	group.Name = strings.TrimSpace(group.Name)
+	if group.Name == "" {
+		return model.NodeGroup{}, errors.New("分组名称不能为空")
+	}
+	if group.ID == "" {
+		group.ID = model.NewID()
+	}
+	group = normalizeNodeGroup(group)
+	group.UpdatedAt = model.NowRFC3339()
+	err := s.update(func(data *storeData) error {
+		for i := range data.NodeGroups {
+			if data.NodeGroups[i].ID == group.ID {
+				data.NodeGroups[i] = group
+				return nil
+			}
+		}
+		if len(data.NodeGroups) >= 100 {
+			return errors.New("分组数量已达到上限（100）")
+		}
+		data.NodeGroups = append(data.NodeGroups, group)
+		return nil
+	})
+	if err != nil {
+		return model.NodeGroup{}, err
+	}
+	return group, nil
+}
+
+func (s *Store) DeleteNodeGroup(id string) error {
+	return s.update(func(data *storeData) error {
+		out := make([]model.NodeGroup, 0, len(data.NodeGroups))
+		found := false
+		for _, group := range data.NodeGroups {
+			if group.ID == id {
+				found = true
+				continue
+			}
+			out = append(out, group)
+		}
+		if !found {
+			return errors.New("node group not found")
+		}
+		data.NodeGroups = out
+		return nil
+	})
+}
+
+// ListRuleSets returns a copy of all remote rule sets.
+func (s *Store) ListRuleSets() []model.RuleSet {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]model.RuleSet(nil), s.data.RuleSets...)
+}
+
+func (s *Store) FindRuleSet(id string) (model.RuleSet, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, set := range s.data.RuleSets {
+		if set.ID == id {
+			return set, nil
+		}
+	}
+	return model.RuleSet{}, errors.New("rule set not found")
+}
+
+// SaveRuleSet inserts or updates a rule set definition (the downloaded rules
+// themselves are not stored; only the source URL and status are persisted).
+func (s *Store) SaveRuleSet(set model.RuleSet) (model.RuleSet, error) {
+	set.Name = strings.TrimSpace(set.Name)
+	if set.Name == "" {
+		return model.RuleSet{}, errors.New("规则集名称不能为空")
+	}
+	if set.URL == "" {
+		return model.RuleSet{}, errors.New("规则集地址不能为空")
+	}
+	if set.ID == "" {
+		set.ID = model.NewID()
+	}
+	set = normalizeRuleSet(set)
+	err := s.update(func(data *storeData) error {
+		for i := range data.RuleSets {
+			if data.RuleSets[i].ID == set.ID {
+				set.UpdatedAt = data.RuleSets[i].UpdatedAt
+				set.RuleCount = data.RuleSets[i].RuleCount
+				set.LastError = data.RuleSets[i].LastError
+				data.RuleSets[i] = set
+				return nil
+			}
+		}
+		if len(data.RuleSets) >= 100 {
+			return errors.New("规则集数量已达到上限（100）")
+		}
+		data.RuleSets = append(data.RuleSets, set)
+		return nil
+	})
+	if err != nil {
+		return model.RuleSet{}, err
+	}
+	return set, nil
+}
+
+func (s *Store) DeleteRuleSet(id string) error {
+	return s.update(func(data *storeData) error {
+		out := make([]model.RuleSet, 0, len(data.RuleSets))
+		found := false
+		for _, set := range data.RuleSets {
+			if set.ID == id {
+				found = true
+				continue
+			}
+			out = append(out, set)
+		}
+		if !found {
+			return errors.New("rule set not found")
+		}
+		data.RuleSets = out
+		return nil
+	})
+}
+
+// SetRuleSetStatus records the outcome of the last download of a rule set.
+func (s *Store) SetRuleSetStatus(id string, ruleCount int, updatedAt string, lastError string) error {
+	return s.update(func(data *storeData) error {
+		for i := range data.RuleSets {
+			if data.RuleSets[i].ID != id {
+				continue
+			}
+			data.RuleSets[i].RuleCount = ruleCount
+			if updatedAt != "" {
+				data.RuleSets[i].UpdatedAt = updatedAt
+			}
+			data.RuleSets[i].LastError = lastError
+			return nil
+		}
+		return errors.New("rule set not found")
+	})
 }
 
 func (s *Store) ListRoutingRules() []model.RoutingRule {

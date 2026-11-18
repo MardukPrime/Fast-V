@@ -84,6 +84,29 @@ function errorMessage(error: unknown) {
 // banner re-renders correctly after a language switch.
 type ProxyModeError = { kind: "restart" | "switch"; detail: string };
 
+// Payload shared by the deeplink:imported / deeplink:failed events the backend
+// broadcasts after handling a fastv:// link.
+type DeepLinkPayload = { kind: string; name: string; message: string };
+
+// One entry of the deep link toast stack. The tone selects the success/error
+// styling and the auto-dismiss delay.
+type DeepLinkToast = { id: number; tone: "success" | "error"; kind: string; name: string; message: string };
+
+// readDeepLinkPayload keeps the toast render resilient to malformed payloads by
+// keeping only the string fields of the event data.
+function readDeepLinkPayload(data: unknown): DeepLinkPayload {
+  if (!data || typeof data !== "object") return { kind: "", name: "", message: "" };
+  const record = data as Record<string, unknown>;
+  const text = (key: string) => (typeof record[key] === "string" ? (record[key] as string) : "");
+  return { kind: text("kind"), name: text("name"), message: text("message") };
+}
+
+// The backend message already names the imported item, so it is shown on its
+// own; the name is only a fallback when a message is missing.
+function deepLinkToastDetail(toast: DeepLinkToast): string {
+  return (toast.message || toast.name).trim();
+}
+
 export default function App() {
   const [active, setActive] = createSignal<PageKey>("dashboard");
   const [info, setInfo] = createSignal<AppInfo | null>(null);
@@ -95,6 +118,10 @@ export default function App() {
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
   const [proxyModeBusy, setProxyModeBusy] = createSignal(false);
   const [proxyModeError, setProxyModeError] = createSignal<ProxyModeError | null>(null);
+  // Deep link feedback is a capped stack: at most three toasts, newest last.
+  const [deeplinkToasts, setDeeplinkToasts] = createSignal<DeepLinkToast[]>([]);
+  let deeplinkToastId = 0;
+  const deeplinkToastTimers = new Map<number, number>();
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
   const activeMeta = () => pageMeta()[active()];
@@ -123,6 +150,31 @@ export default function App() {
     language();
     requestAnimationFrame(updateDockIndicator);
   });
+
+  // Deep link toast helpers. Success notices disappear after 6s, failures
+  // linger for 8s; both can be dismissed early with the close button.
+  const clearDeeplinkToastTimer = (id: number) => {
+    const timer = deeplinkToastTimers.get(id);
+    if (timer === undefined) return;
+    window.clearTimeout(timer);
+    deeplinkToastTimers.delete(id);
+  };
+
+  const dismissDeeplinkToast = (id: number) => {
+    clearDeeplinkToastTimer(id);
+    setDeeplinkToasts((current) => current.filter((toast) => toast.id !== id));
+  };
+
+  const pushDeeplinkToast = (toast: Omit<DeepLinkToast, "id">) => {
+    const id = ++deeplinkToastId;
+    const next = [...deeplinkToasts(), { ...toast, id }];
+    // Cap the stack at three entries: the oldest toast yields to the newest.
+    const dropped = next.length > 3 ? next.splice(0, next.length - 3) : [];
+    dropped.forEach((item) => clearDeeplinkToastTimer(item.id));
+    setDeeplinkToasts(next);
+    const timer = window.setTimeout(() => dismissDeeplinkToast(id), toast.tone === "error" ? 8000 : 6000);
+    deeplinkToastTimers.set(id, timer);
+  };
 
   onMount(() => {
     const handleResize = () => updateDockIndicator();
@@ -194,6 +246,17 @@ export default function App() {
       applyAccent(next.accentColor);
       setLanguage(next.language);
     });
+    // fastv:// deep links are imported by the backend, which broadcasts the
+    // result here. The subscriptions page reloads itself from
+    // subscriptions:changed, so the toast only has to offer the shortcut.
+    const offDeepLinkImported = Events.On("deeplink:imported", (event) => {
+      const payload = readDeepLinkPayload(event.data);
+      pushDeeplinkToast({ tone: "success", kind: payload.kind, name: payload.name, message: payload.message });
+    });
+    const offDeepLinkFailed = Events.On("deeplink:failed", (event) => {
+      const payload = readDeepLinkPayload(event.data);
+      pushDeeplinkToast({ tone: "error", kind: payload.kind, name: payload.name, message: payload.message });
+    });
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const handleSystemTheme = () => {
       if (settings()?.theme === "system") applyTheme("system");
@@ -203,6 +266,11 @@ export default function App() {
       offCore();
       offProxy();
       offSettings();
+      offDeepLinkImported();
+      offDeepLinkFailed();
+      for (const timer of deeplinkToastTimers.values()) window.clearTimeout(timer);
+      deeplinkToastTimers.clear();
+      setDeeplinkToasts([]);
       systemTheme.removeEventListener("change", handleSystemTheme);
     });
   });
@@ -525,6 +593,46 @@ export default function App() {
           </nav>
           </Show>
       </div>
+
+      <Show when={deeplinkToasts().length > 0}>
+        <div class="deeplink-toast-stack" role="region" aria-live="polite" aria-label={t("shell.deeplink.region")}>
+          <For each={deeplinkToasts()}>
+            {(toast) => (
+              <div
+                classList={{ "deeplink-toast": true, "is-success": toast.tone === "success", "is-error": toast.tone === "error" }}
+                role={toast.tone === "error" ? "alert" : "status"}
+              >
+                <span class="deeplink-toast-icon" aria-hidden="true">
+                  <Icon name={toast.tone === "error" ? "alert" : "check"} size={15} />
+                </span>
+                <div class="deeplink-toast-body">
+                  <strong class="deeplink-toast-title">
+                    {toast.tone === "error" ? t("shell.deeplink.failedTitle") : t("shell.deeplink.importedTitle")}
+                  </strong>
+                  <Show when={deepLinkToastDetail(toast)}>
+                    {(detail) => <span class="deeplink-toast-text">{detail()}</span>}
+                  </Show>
+                  <Show when={toast.tone === "success" && toast.kind === "subscription"}>
+                    <button
+                      type="button"
+                      class="deeplink-toast-action"
+                      onClick={() => {
+                        setActive("subscriptions");
+                        dismissDeeplinkToast(toast.id);
+                      }}
+                    >
+                      {t("shell.deeplink.viewSubscription")}
+                    </button>
+                  </Show>
+                </div>
+                <button type="button" class="deeplink-toast-close" aria-label={t("shell.deeplink.close")} onClick={() => dismissDeeplinkToast(toast.id)}>
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }

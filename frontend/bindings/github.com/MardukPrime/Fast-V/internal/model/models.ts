@@ -212,6 +212,24 @@ export interface NodeFilter {
 }
 
 /**
+ * NodeGroup is a user-defined collection of nodes used for quick switching and
+ * latency-based automatic selection.
+ */
+export interface NodeGroup {
+    "id": string;
+    "name": string;
+
+    /**
+     * manual | urltest
+     */
+    "type": string;
+    "nodeIds": string[] | null;
+    "testUrl": string;
+    "intervalMinutes": number;
+    "updatedAt": string;
+}
+
+/**
  * NodeImportResult summarizes a paste/import of share links.
  */
 export interface NodeImportResult {
@@ -310,6 +328,32 @@ export interface RoutingRule {
     "value": string;
     "action": string;
     "enabled": boolean;
+}
+
+/**
+ * RuleSet is a remote list of domain/IP rules downloaded on a schedule and
+ * expanded into routing rules when the core configuration is generated.
+ */
+export interface RuleSet {
+    "id": string;
+    "name": string;
+    "url": string;
+
+    /**
+     * domain | ip | combined
+     */
+    "kind": string;
+
+    /**
+     * proxy | direct | block
+     */
+    "action": string;
+    "enabled": boolean;
+    "autoUpdate": boolean;
+    "intervalMinutes": number;
+    "updatedAt": string;
+    "ruleCount": number;
+    "lastError": string;
 }
 
 /**

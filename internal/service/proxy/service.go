@@ -84,6 +84,16 @@ func (s *ProxyService) ServiceName() string {
 	return "ProxyService"
 }
 
+// SetExtraRulesProvider registers a callback that supplies additional routing
+// rules (for example enabled rule-set subscriptions) at configuration build
+// time. The provider is called without holding manager locks.
+func (s *ProxyService) SetExtraRulesProvider(provider func() []model.RoutingRule) {
+	if s == nil || s.manager == nil {
+		return
+	}
+	s.manager.SetExtraRulesProvider(provider)
+}
+
 // ServiceStartup starts the automatic routing scheduler. The scheduler exits when
 // the lifecycle context is cancelled (ServiceShutdown) and never outlives it.
 func (s *ProxyService) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {

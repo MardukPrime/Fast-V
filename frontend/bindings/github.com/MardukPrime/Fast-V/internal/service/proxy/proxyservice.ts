@@ -26,6 +26,15 @@ export function Restart(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(108640834);
 }
 
+/**
+ * SetExtraRulesProvider registers a callback that supplies additional routing
+ * rules (for example enabled rule-set subscriptions) at configuration build
+ * time. The provider is called without holding manager locks.
+ */
+export function SetExtraRulesProvider(provider: any): $CancellablePromise<void> {
+    return $Call.ByID(990097213, provider);
+}
+
 export function Start(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(813748713);
 }

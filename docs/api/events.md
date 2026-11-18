@@ -12,6 +12,10 @@
 | proxy:traffic | TrafficStats | 每 2 秒（代理运行中） | 上下行窗口增量、会话累计与实时速率 |
 | app:update | UpdateInfo | 启动自动检查 / 手动检查后 | 应用更新检查结果 |
 | settings:changed | Settings | 设置保存 / 备份恢复后 | 托盘模式勾选、全局快捷键与顶栏同步 |
+| nodegroups:changed | NodeGroup[] | 自动测速分组更新后 | 节点分组列表刷新 |
+| rulesets:changed | 无 | 规则集自动更新后 | 规则集订阅列表刷新 |
+| deeplink:imported | {kind,name,message} | 深链接导入成功后 | 前端 Toast 提示，订阅场景附带刷新 |
+| deeplink:failed | {kind,message} | 深链接导入失败后 | 前端错误 Toast 提示 |
 | subscriptions:changed | 无 | 自动更新后 | 订阅自动更新完成 |
 
 ## 计划事件

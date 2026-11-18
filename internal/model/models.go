@@ -326,6 +326,34 @@ func SubscriptionViewFrom(sub Subscription) SubscriptionView {
 	}
 }
 
+// NodeGroup is a user-defined collection of nodes used for quick switching and
+// latency-based automatic selection.
+type NodeGroup struct {
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Type            string   `json:"type"` // manual | urltest
+	NodeIDs         []string `json:"nodeIds"`
+	TestURL         string   `json:"testUrl"`
+	IntervalMinutes int      `json:"intervalMinutes"`
+	UpdatedAt       string   `json:"updatedAt"`
+}
+
+// RuleSet is a remote list of domain/IP rules downloaded on a schedule and
+// expanded into routing rules when the core configuration is generated.
+type RuleSet struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	URL             string `json:"url"`
+	Kind            string `json:"kind"`   // domain | ip | combined
+	Action          string `json:"action"` // proxy | direct | block
+	Enabled         bool   `json:"enabled"`
+	AutoUpdate      bool   `json:"autoUpdate"`
+	IntervalMinutes int    `json:"intervalMinutes"`
+	UpdatedAt       string `json:"updatedAt"`
+	RuleCount       int    `json:"ruleCount"`
+	LastError       string `json:"lastError"`
+}
+
 // NodeViewFrom converts an internal node to a frontend-safe view.
 func NodeViewFrom(node Node, subscriptionName string, activeID string) NodeView {
 	return NodeView{

@@ -1,10 +1,13 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+
+import { Events } from "@wailsio/runtime";
 
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { Service as RoutingService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/routing";
-import type { ProxyState, RoutingPreset, RoutingRule } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import { Service as RuleSetService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/ruleset";
+import type { ProxyState, RoutingPreset, RoutingRule, RuleSet } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
-import { t } from "../i18n";
+import { language, t } from "../i18n";
 
 type RoutingPageProps = {
   proxyState: ProxyState;
@@ -52,6 +55,119 @@ function typeHint(type: string): string {
 function actionLabel(action: string) {
   const item = ACTIONS.find((entry) => entry.value === action);
   return item ? t(item.labelKey) : action;
+}
+
+// Rule set subscriptions: remote lists that expand into routing rules once they
+// download successfully. Values mirror the backend validation and the interval
+// options offered by the service binding (0 = default interval).
+const RULE_SET_KINDS = [
+  { value: "domain", labelKey: "route.ruleset.kind.domain" },
+  { value: "ip", labelKey: "route.ruleset.kind.ip" },
+  { value: "combined", labelKey: "route.ruleset.kind.combined" },
+];
+
+const RULE_SET_ACTIONS = [
+  { value: "proxy", labelKey: "route.ruleset.action.proxy" },
+  { value: "direct", labelKey: "route.ruleset.action.direct" },
+  { value: "block", labelKey: "route.ruleset.action.block" },
+];
+
+const RULE_SET_INTERVAL_OPTIONS = [0, 15, 30, 60, 120, 360, 720, 1440];
+// Mirrors the backend default interval applied when a rule set enables automatic
+// updates without an interval of its own.
+const DEFAULT_RULE_SET_INTERVAL_MINUTES = 360;
+
+// The user rule table fixes seven columns, but the rule set table needs nine (it
+// adds the enable switch and the auto-update column). Its header and rows reuse
+// .routing-table-head/.routing-row and override only the grid template, so the
+// existing border, hover and narrow-width scroll behavior are preserved.
+const RULE_SET_TABLE_STYLE = {
+  "grid-template-columns": "minmax(120px, 1.4fr) 44px 58px 66px 52px minmax(88px, 1fr) 78px 88px 88px",
+};
+
+function ruleSetKinds() {
+  return RULE_SET_KINDS.map((item) => ({ value: item.value, label: t(item.labelKey) }));
+}
+
+function ruleSetActions() {
+  return RULE_SET_ACTIONS.map((item) => ({ value: item.value, label: t(item.labelKey) }));
+}
+
+// The dropdown offers the documented intervals plus the stored value when a hand
+// edited or future data file contains one that is not in the list, so editing
+// never silently changes the configured interval to the first option.
+function ruleSetIntervalOptions(current: number): number[] {
+  if (current <= 0 || RULE_SET_INTERVAL_OPTIONS.includes(current)) return RULE_SET_INTERVAL_OPTIONS;
+  return [...RULE_SET_INTERVAL_OPTIONS, current].sort((a, b) => a - b);
+}
+
+function ruleSetKindLabel(kind: string) {
+  const item = RULE_SET_KINDS.find((entry) => entry.value === kind);
+  return item ? t(item.labelKey) : kind;
+}
+
+function ruleSetActionLabel(action: string) {
+  const item = RULE_SET_ACTIONS.find((entry) => entry.value === action);
+  return item ? t(item.labelKey) : action;
+}
+
+function emptyRuleSet(): RuleSet {
+  return {
+    id: "",
+    name: "",
+    url: "",
+    kind: "combined",
+    action: "direct",
+    enabled: true,
+    autoUpdate: true,
+    intervalMinutes: 0,
+    updatedAt: "",
+    ruleCount: 0,
+    lastError: "",
+  };
+}
+
+function ruleSetAutoUpdateLabel(set: RuleSet) {
+  if (!set.autoUpdate) return t("route.ruleset.auto.off");
+  if (set.intervalMinutes > 0) return t("route.ruleset.auto.every", { minutes: set.intervalMinutes });
+  return t("route.ruleset.auto.default");
+}
+
+function ruleSetAutoUpdateHint(set: RuleSet) {
+  if (!set.autoUpdate) return t("route.ruleset.auto.off");
+  if (set.intervalMinutes > 0) return t("route.ruleset.auto.every", { minutes: set.intervalMinutes });
+  return t("route.ruleset.auto.defaultHint", { minutes: DEFAULT_RULE_SET_INTERVAL_MINUTES });
+}
+
+// Compact "11/18 19:20" stamp for the last successful download; the raw RFC3339
+// value stays available as the cell tooltip.
+function formatRuleSetUpdated(value: string, locale: string): string {
+  if (!value) return t("route.ruleset.never");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function formatRuleSetCount(count: number, locale: string): string {
+  return Math.max(0, Math.trunc(count)).toLocaleString(locale);
+}
+
+// A rule set is "ok" only after a successful download, "error" when the last
+// download failed (the tooltip carries the backend message), "pending" when it
+// was never downloaded and "updating" while a manual refresh is in flight.
+function ruleSetStatusLabel(set: RuleSet, updating: boolean): string {
+  if (updating) return t("route.ruleset.status.updating");
+  if (set.lastError) return t("route.ruleset.status.error");
+  if (set.updatedAt) return t("route.ruleset.status.ok");
+  return t("route.ruleset.status.pending");
+}
+
+function ruleSetStatusClass(set: RuleSet, updating: boolean) {
+  return {
+    "status-label": true,
+    ok: !updating && !set.lastError && Boolean(set.updatedAt),
+    error: !updating && Boolean(set.lastError),
+  };
 }
 
 function emptyRule(): RoutingRule {
@@ -128,6 +244,15 @@ export default function RoutingPage(props: RoutingPageProps) {
   const [presetError, setPresetError] = createSignal("");
   const [applyingPreset, setApplyingPreset] = createSignal("");
   const [ioBusy, setIoBusy] = createSignal<"export" | "import" | "">("");
+  const [ruleSets, setRuleSets] = createSignal<RuleSet[]>([]);
+  const [ruleSetLoading, setRuleSetLoading] = createSignal(true);
+  const [ruleSetError, setRuleSetError] = createSignal("");
+  const [ruleSetMessage, setRuleSetMessage] = createSignal("");
+  const [editingRuleSet, setEditingRuleSet] = createSignal<RuleSet | null>(null);
+  const [ruleSetFormError, setRuleSetFormError] = createSignal("");
+  const [ruleSetBusy, setRuleSetBusy] = createSignal(false);
+  const [updatingRuleSetId, setUpdatingRuleSetId] = createSignal("");
+  const [updatingAllRuleSets, setUpdatingAllRuleSets] = createSignal(false);
   let importInput: HTMLInputElement | undefined;
 
   const load = async () => {
@@ -141,18 +266,42 @@ export default function RoutingPage(props: RoutingPageProps) {
     }
   };
 
-  onMount(load);
+  const loadRuleSets = async () => {
+    setRuleSetLoading(true);
+    setRuleSetError("");
+    try {
+      setRuleSets((await RuleSetService.List()) ?? []);
+    } catch (err) {
+      setRuleSetError(t("route.ruleset.err.load", { error: errorMessage(err) }));
+    } finally {
+      setRuleSetLoading(false);
+    }
+  };
 
+  onMount(() => {
+    void load();
+    void loadRuleSets();
+    // Automatic downloads refresh rule sets in the background; reload so entry
+    // counts, timestamps and error states never go stale.
+    const off = Events.On("rulesets:changed", () => { void loadRuleSets(); });
+    onCleanup(off);
+  });
+
+  // Rules and rule sets only reach the generated config through a proxy start,
+  // so a successful mutation restarts a running proxy to apply it immediately.
+  // `report` lets the rule set panel keep its own status line instead of writing
+  // into the user-rule panel above it.
   const restartIfRunning = async (
     appliedMessage = t("route.msg.savedApplied"),
     pendingMessage = t("route.msg.savedPending"),
+    report: (text: string) => void = setMessage,
   ) => {
     if (props.proxyState.status === "running" || props.proxyState.status === "starting") {
-      setMessage(t("route.msg.restarting"));
+      report(t("route.msg.restarting"));
       await ProxyService.Restart();
-      setMessage(appliedMessage);
+      report(appliedMessage);
     } else {
-      setMessage(pendingMessage);
+      report(pendingMessage);
     }
   };
 
@@ -364,6 +513,154 @@ export default function RoutingPage(props: RoutingPageProps) {
     }
   };
 
+  const enabledRuleSets = () => ruleSets().filter((set) => set.enabled);
+
+  const openNewRuleSet = () => {
+    setRuleSetError("");
+    setRuleSetMessage("");
+    setRuleSetFormError("");
+    setEditingRuleSet(emptyRuleSet());
+  };
+
+  const openEditRuleSet = (set: RuleSet) => {
+    setRuleSetError("");
+    setRuleSetMessage("");
+    setRuleSetFormError("");
+    setEditingRuleSet({ ...set });
+  };
+
+  const updateEditingRuleSet = <K extends keyof RuleSet>(key: K, value: RuleSet[K]) => {
+    const current = editingRuleSet();
+    if (!current) return;
+    setEditingRuleSet({ ...current, [key]: value });
+  };
+
+  const saveRuleSet = async (event: Event) => {
+    event.preventDefault();
+    const current = editingRuleSet();
+    if (!current) return;
+    const name = current.name.trim();
+    const url = current.url.trim();
+    if (!name) {
+      setRuleSetFormError(t("route.ruleset.editor.nameRequired"));
+      return;
+    }
+    if (!url) {
+      setRuleSetFormError(t("route.ruleset.editor.urlRequired"));
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      setRuleSetFormError(t("route.ruleset.editor.urlScheme"));
+      return;
+    }
+    setRuleSetFormError("");
+    setRuleSetBusy(true);
+    setRuleSetError("");
+    setRuleSetMessage("");
+    try {
+      await RuleSetService.Save({ ...current, name, url });
+      setEditingRuleSet(null);
+      await loadRuleSets();
+      await restartIfRunning(
+        t("route.ruleset.msg.savedRestarted"),
+        t("route.ruleset.msg.savedPending"),
+        setRuleSetMessage,
+      );
+    } catch (err) {
+      setRuleSetFormError(t("route.ruleset.editor.saveFailed", { error: errorMessage(err) }));
+    } finally {
+      setRuleSetBusy(false);
+    }
+  };
+
+  const toggleRuleSet = async (set: RuleSet) => {
+    if (ruleSetBusy()) return;
+    setRuleSetBusy(true);
+    setRuleSetError("");
+    setRuleSetMessage("");
+    try {
+      await RuleSetService.Save({ ...set, enabled: !set.enabled });
+      await loadRuleSets();
+      await restartIfRunning(
+        t("route.ruleset.msg.savedRestarted"),
+        t("route.ruleset.msg.savedPending"),
+        setRuleSetMessage,
+      );
+    } catch (err) {
+      setRuleSetError(errorMessage(err));
+    } finally {
+      setRuleSetBusy(false);
+    }
+  };
+
+  const updateRuleSet = async (set: RuleSet) => {
+    if (ruleSetBusy()) return;
+    setRuleSetBusy(true);
+    setUpdatingRuleSetId(set.id);
+    setRuleSetError("");
+    setRuleSetMessage("");
+    try {
+      const updated = await RuleSetService.Update(set.id);
+      await loadRuleSets();
+      await restartIfRunning(
+        t("route.ruleset.msg.updatedRestarted", { name: set.name, count: updated.ruleCount }),
+        t("route.ruleset.msg.updatedPending", { name: set.name, count: updated.ruleCount }),
+        setRuleSetMessage,
+      );
+    } catch (err) {
+      // The backend records the failure on the rule set, so refresh to show the
+      // error status and keep the last successful entry count visible.
+      await loadRuleSets();
+      setRuleSetError(t("route.ruleset.err.update", { name: set.name, error: errorMessage(err) }));
+    } finally {
+      setUpdatingRuleSetId("");
+      setRuleSetBusy(false);
+    }
+  };
+
+  const updateAllRuleSets = async () => {
+    if (ruleSetBusy() || enabledRuleSets().length === 0) return;
+    setRuleSetBusy(true);
+    setUpdatingAllRuleSets(true);
+    setRuleSetError("");
+    setRuleSetMessage("");
+    try {
+      const updated = await RuleSetService.UpdateAll();
+      await loadRuleSets();
+      await restartIfRunning(
+        t("route.ruleset.msg.updateAllRestarted", { updated }),
+        t("route.ruleset.msg.updateAllPending", { updated }),
+        setRuleSetMessage,
+      );
+    } catch (err) {
+      await loadRuleSets();
+      setRuleSetError(t("route.ruleset.err.updateAll", { error: errorMessage(err) }));
+    } finally {
+      setUpdatingAllRuleSets(false);
+      setRuleSetBusy(false);
+    }
+  };
+
+  const deleteRuleSet = async (set: RuleSet) => {
+    if (!window.confirm(t("route.ruleset.confirm.delete", { name: set.name }))) return;
+    setRuleSetBusy(true);
+    setRuleSetError("");
+    setRuleSetMessage("");
+    try {
+      await RuleSetService.Delete(set.id);
+      await loadRuleSets();
+      await restartIfRunning(
+        t("route.ruleset.msg.deletedRestarted", { name: set.name }),
+        t("route.ruleset.msg.deletedPending", { name: set.name }),
+        setRuleSetMessage,
+      );
+    } catch (err) {
+      setRuleSetError(t("route.ruleset.err.delete", { error: errorMessage(err) }));
+    } finally {
+      setRuleSetBusy(false);
+    }
+  };
+
   const modeLabel = () => {
     switch (props.proxyMode) {
       case "global": return t("route.mode.global");
@@ -478,6 +775,103 @@ export default function RoutingPage(props: RoutingPageProps) {
         </Show>
       </section>
 
+      <section class="panel routing-panel">
+        <div class="panel-heading node-heading">
+          <div class="heading-with-icon">
+            <span class="heading-icon cyan"><Icon name="subscription" size={17} /></span>
+            <div>
+              <h3>{t("route.ruleset.panel.title")}</h3>
+              <span>{t("route.ruleset.panel.subtitle")}</span>
+            </div>
+          </div>
+          <div class="routing-heading-actions">
+            <button
+              class="btn ghost"
+              type="button"
+              onClick={() => void updateAllRuleSets()}
+              disabled={ruleSetBusy() || enabledRuleSets().length === 0}
+              title={enabledRuleSets().length === 0 ? t("route.ruleset.noEnabled") : undefined}
+            >
+              <Icon name="refresh" size={13} /> {updatingAllRuleSets() ? t("route.ruleset.buttons.updatingAll") : t("route.ruleset.buttons.updateAll")}
+            </button>
+            <button class="btn primary" type="button" onClick={openNewRuleSet} disabled={ruleSetBusy()}><Icon name="plus" size={14} /> {t("route.ruleset.buttons.add")}</button>
+          </div>
+        </div>
+
+        <div class="routing-note">
+          <Icon name="alert" size={13} />
+          <span>{t("route.ruleset.note.hint")}</span>
+        </div>
+
+        <Show when={ruleSetError() || ruleSetMessage()}>
+          <div style={{ display: "grid", gap: "8px", "margin-top": "10px" }}>
+            <Show when={ruleSetError()}>
+              <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {ruleSetError()}</span></div>
+            </Show>
+            <Show when={ruleSetMessage()}>
+              <div class="alert success"><span class="alert-message"><Icon name="check" size={15} /> {ruleSetMessage()}</span></div>
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={!ruleSetLoading()} fallback={<div class="empty-state">{t("route.ruleset.loading")}</div>}>
+          <Show when={ruleSets().length > 0} fallback={
+            <div class="empty-state">
+              <div class="empty-icon"><Icon name="subscription" size={22} /></div>
+              <strong>{t("route.ruleset.empty.title")}</strong>
+              <span>{t("route.ruleset.empty.body")}</span>
+              <div class="routing-empty-actions">
+                <button class="btn primary" type="button" onClick={openNewRuleSet} disabled={ruleSetBusy()}><Icon name="plus" size={14} /> {t("route.ruleset.buttons.add")}</button>
+              </div>
+            </div>
+          }>
+            <div class="routing-table">
+              <div class="routing-table-head" style={RULE_SET_TABLE_STYLE}>
+                <span>{t("route.ruleset.table.name")}</span>
+                <span>{t("route.ruleset.table.enabled")}</span>
+                <span>{t("route.ruleset.table.kind")}</span>
+                <span>{t("route.ruleset.table.action")}</span>
+                <span>{t("route.ruleset.table.count")}</span>
+                <span>{t("route.ruleset.table.updated")}</span>
+                <span>{t("route.ruleset.table.status")}</span>
+                <span>{t("route.ruleset.table.autoUpdate")}</span>
+                <span>{t("route.ruleset.table.actions")}</span>
+              </div>
+              <For each={ruleSets()}>
+                {(set) => (
+                  <div classList={{ "routing-row": true, disabled: !set.enabled }} style={RULE_SET_TABLE_STYLE}>
+                    <div class="routing-name" title={set.url}><strong>{set.name}</strong><small>{set.url}</small></div>
+                    <label classList={{ switch: true, on: set.enabled }}>
+                      <input
+                        type="checkbox"
+                        checked={set.enabled}
+                        disabled={ruleSetBusy()}
+                        aria-label={t("route.ruleset.row.toggle", { name: set.name })}
+                        onChange={() => void toggleRuleSet(set)}
+                      />
+                      <span class="switch-track"><span class="switch-thumb" /></span>
+                    </label>
+                    <span class="tag neutral">{ruleSetKindLabel(set.kind)}</span>
+                    <span classList={{ "routing-action": true, direct: set.action === "direct", block: set.action === "block" }}>{ruleSetActionLabel(set.action)}</span>
+                    <span class="routing-value" title={t("route.ruleset.countTitle", { count: set.ruleCount })}>{formatRuleSetCount(set.ruleCount, language())}</span>
+                    <span class="routing-value" title={set.updatedAt || undefined}>{formatRuleSetUpdated(set.updatedAt, language())}</span>
+                    <span classList={ruleSetStatusClass(set, updatingRuleSetId() === set.id)} title={set.lastError || undefined}>
+                      <span class="status-dot" /> {ruleSetStatusLabel(set, updatingRuleSetId() === set.id)}
+                    </span>
+                    <span class="routing-value" title={ruleSetAutoUpdateHint(set)}>{ruleSetAutoUpdateLabel(set)}</span>
+                    <div class="routing-actions">
+                      <button class="icon-button" type="button" onClick={() => void updateRuleSet(set)} disabled={ruleSetBusy()} aria-label={t("route.ruleset.row.update", { name: set.name })} title={t("route.ruleset.row.update", { name: set.name })}><Icon name="refresh" size={14} /></button>
+                      <button class="icon-button" type="button" onClick={() => openEditRuleSet(set)} disabled={ruleSetBusy()} aria-label={t("route.ruleset.row.edit", { name: set.name })} title={t("route.ruleset.row.edit", { name: set.name })}><Icon name="edit" size={14} /></button>
+                      <button class="icon-button danger" type="button" onClick={() => void deleteRuleSet(set)} disabled={ruleSetBusy()} aria-label={t("route.ruleset.row.delete", { name: set.name })} title={t("route.ruleset.row.delete", { name: set.name })}><Icon name="trash" size={14} /></button>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </Show>
+      </section>
+
       <Show when={presetOpen()}>
         <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !busy()) setPresetOpen(false); }}>
           <div class="modal routing-preset-modal">
@@ -567,6 +961,63 @@ export default function RoutingPage(props: RoutingPageProps) {
               <div class="modal-footer">
                 <button class="btn ghost" type="button" onClick={() => setEditing(null)} disabled={busy()}>{t("route.common.cancel")}</button>
                 <button class="btn primary" type="submit" disabled={busy()}><Icon name="check" size={14} /> {busy() ? t("route.editor.saving") : t("route.editor.save")}</button>
+              </div>
+            </form>
+          </div>
+        )}
+      </Show>
+
+      <Show when={editingRuleSet()}>
+        {(set) => (
+          <div class="modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget && !ruleSetBusy()) setEditingRuleSet(null); }}>
+            <form class="modal routing-editor-modal" onSubmit={saveRuleSet}>
+              <div class="modal-heading">
+                <div><h3>{set().id ? t("route.ruleset.editor.editTitle") : t("route.ruleset.editor.addTitle")}</h3><span>{t("route.ruleset.editor.subtitle")}</span></div>
+                <button class="icon-button" type="button" onClick={() => setEditingRuleSet(null)} disabled={ruleSetBusy()} aria-label={t("route.common.close")}><Icon name="close" size={18} /></button>
+              </div>
+              <div class="routing-editor-body">
+                <Show when={ruleSetFormError()}>
+                  <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {ruleSetFormError()}</span></div>
+                </Show>
+                <label><span>{t("route.ruleset.editor.name")}</span><input value={set().name} onInput={(event) => updateEditingRuleSet("name", event.currentTarget.value)} placeholder={t("route.ruleset.editor.namePlaceholder")} /></label>
+                <label><span>{t("route.ruleset.editor.url")}</span><input value={set().url} onInput={(event) => updateEditingRuleSet("url", event.currentTarget.value)} placeholder={t("route.ruleset.editor.urlPlaceholder")} spellcheck={false} /></label>
+                <div class="routing-editor-hint">
+                  <Icon name="external" size={13} /> {t("route.ruleset.editor.urlHint")}
+                </div>
+                <div class="routing-editor-grid">
+                  <label><span>{t("route.ruleset.editor.kind")}</span><select value={set().kind} onChange={(event) => updateEditingRuleSet("kind", event.currentTarget.value)}>
+                    <For each={ruleSetKinds()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+                  </select></label>
+                  <label><span>{t("route.ruleset.editor.action")}</span><select value={set().action} onChange={(event) => updateEditingRuleSet("action", event.currentTarget.value)}>
+                    <For each={ruleSetActions()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+                  </select></label>
+                </div>
+                <label class="switch-row">
+                  <span><strong>{t("route.ruleset.editor.autoUpdate")}</strong><small>{t("route.ruleset.editor.autoUpdateHint")}</small></span>
+                  <span classList={{ "switch": true, on: set().autoUpdate }}>
+                    <input type="checkbox" checked={set().autoUpdate} onChange={(event) => updateEditingRuleSet("autoUpdate", event.currentTarget.checked)} />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+                <label><span>{t("route.ruleset.editor.interval")}</span><select value={String(set().intervalMinutes)} onChange={(event) => updateEditingRuleSet("intervalMinutes", Number(event.currentTarget.value))}>
+                  <For each={ruleSetIntervalOptions(set().intervalMinutes)}>{(minutes) => (
+                    <option value={String(minutes)}>{minutes === 0 ? t("route.ruleset.editor.intervalDefault") : t("route.ruleset.editor.intervalOption", { minutes })}</option>
+                  )}</For>
+                </select></label>
+                <div class="routing-editor-hint">
+                  <Icon name="refresh" size={13} /> {t("route.ruleset.editor.intervalHint", { minutes: DEFAULT_RULE_SET_INTERVAL_MINUTES })}
+                </div>
+                <label class="switch-row">
+                  <span><strong>{t("route.ruleset.editor.enable")}</strong><small>{t("route.ruleset.editor.enableHint")}</small></span>
+                  <span classList={{ "switch": true, on: set().enabled }}>
+                    <input type="checkbox" checked={set().enabled} onChange={(event) => updateEditingRuleSet("enabled", event.currentTarget.checked)} />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+              </div>
+              <div class="modal-footer">
+                <button class="btn ghost" type="button" onClick={() => setEditingRuleSet(null)} disabled={ruleSetBusy()}>{t("route.common.cancel")}</button>
+                <button class="btn primary" type="submit" disabled={ruleSetBusy()}><Icon name="check" size={14} /> {ruleSetBusy() ? t("route.ruleset.editor.saving") : t("route.ruleset.editor.save")}</button>
               </div>
             </form>
           </div>
