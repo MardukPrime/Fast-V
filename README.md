@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.9.0--pre.1-5B8DEF)
+![Version](https://img.shields.io/badge/version-1.0.0-2F6FED)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -191,7 +191,7 @@ TUN 模式需要：
 
 ## 下载
 
-最新预发布版本由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
+最新稳定版 **v1.0.0** 由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime

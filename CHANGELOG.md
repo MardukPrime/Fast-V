@@ -4,6 +4,12 @@ All notable changes to FastV are documented here.
 
 ## [Unreleased]
 
+（下一版本开发中，暂无条目）
+
+## [1.0.0] - 2026-11-19
+
+首个正式稳定版。汇总自 0.2.x 以来全部功能与产品化收尾。
+
 ### Added
 
 - 多平台构建与发布：GitHub Actions 矩阵构建 Windows x64、macOS arm64/amd64（`FastV.app`）与 Linux amd64/arm64（tar.gz），统一生成 SHA-256 校验与平台说明；CI 增加跨平台编译校验（Wails purego 后端）。
