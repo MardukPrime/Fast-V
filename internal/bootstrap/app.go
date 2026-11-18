@@ -2,10 +2,15 @@ package bootstrap
 
 import (
 	"embed"
+	"fmt"
+	"log"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/MardukPrime/Fast-V/internal/applog"
 	"github.com/MardukPrime/Fast-V/internal/buildinfo"
 	"github.com/MardukPrime/Fast-V/internal/platform"
 	"github.com/MardukPrime/Fast-V/internal/selfcheck"
@@ -30,7 +35,37 @@ import (
 )
 
 // Run assembles the application, services and window, then starts the Wails event loop.
-func Run(assets embed.FS) error {
+func Run(assets embed.FS) (runErr error) {
+	// The file logger is created after the services so it can receive their log
+	// sink. Every exit path (normal return, early return, panic) runs this
+	// cleanup: the exit reason is written, the file is closed, and a recovered
+	// panic is re-raised so the crash behavior of the application is unchanged.
+	var logger *applog.Logger
+	defer func() {
+		recovered := recover()
+		if recovered != nil {
+			if logger != nil {
+				logger.WriteLine("error", "panic", fmt.Sprintf("应用崩溃: %v | 堆栈: %s", recovered, debug.Stack()))
+			} else {
+				log.Printf("应用崩溃: %v\n%s", recovered, debug.Stack())
+			}
+		} else if logger != nil {
+			if runErr != nil {
+				logger.WriteLine("error", "app", "FastV 退出，错误: "+runErr.Error())
+			} else {
+				logger.WriteLine("info", "app", "FastV 已退出")
+			}
+		}
+		if logger != nil {
+			if closeErr := logger.Close(); closeErr != nil {
+				log.Printf("applog: 关闭日志文件失败: %v", closeErr)
+			}
+		}
+		if recovered != nil {
+			panic(recovered)
+		}
+	}()
+
 	st, err := store.NewStore()
 	if err != nil {
 		return err
@@ -68,6 +103,21 @@ func Run(assets embed.FS) error {
 	// build time; the provider keeps the generated config independent of which
 	// sets happened to download successfully.
 	proxySvc.SetExtraRulesProvider(ruleSetSvc.ExpandedRules)
+
+	// Persist the runtime log next to the user data so after-sales diagnostics
+	// survive restarts; the in-memory proxy log and the diagnostics report only
+	// cover the current session. A logging failure is reported but must never
+	// block startup.
+	logger, err = applog.Open(filepath.Join(st.DataDir(), "logs"), 5<<20, 3)
+	if err != nil {
+		log.Printf("applog: 初始化文件日志失败: %v", err)
+		logger = nil
+	} else {
+		logger.WriteLine("info", "app", fmt.Sprintf(
+			"FastV 启动: 版本=%s commit=%s 构建时间=%s 平台=%s/%s 数据目录=%s",
+			buildinfo.Version, buildinfo.Commit, buildinfo.BuildDate, runtime.GOOS, runtime.GOARCH, st.DataDir()))
+		proxySvc.SetLogSink(logger.WriteEntry)
+	}
 
 	// Deep links arrive from the fastv:// protocol handler (first launch and
 	// second instance launches) and from share links passed on the command line.

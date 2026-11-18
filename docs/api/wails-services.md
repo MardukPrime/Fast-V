@@ -26,6 +26,8 @@
 | ListSnapshots | - | []SnapshotInfo | 快照列表（最新在前，损坏文件跳过） |
 | RestoreSnapshot | id | BackupResult | 回滚到指定快照（回滚前自动创建安全快照） |
 | DeleteSnapshot | id | - | 删除快照（id 做白名单校验） |
+| ExportSnapshot | id | string | 通过系统保存对话框把快照导出为 JSON 备份文件，返回路径（取消返回空串） |
+| ImportSnapshot | label | SnapshotInfo | 通过系统打开对话框选择 JSON 备份并导入为新快照（取消返回错误「已取消导入」） |
 
 ## HistoryService
 

@@ -42,12 +42,36 @@ export function Export(): $CancellablePromise<string> {
 }
 
 /**
+ * ExportSnapshot writes the backup document contained in a stored snapshot to a
+ * user chosen file. The native save dialog opens with a default name derived
+ * from the snapshot label ("FastV-snapshot-<label>.json"), filtered to JSON
+ * files. The exported file contains no snapshot metadata, so it is a normal
+ * local backup: it can be imported again through Import or the regular backup
+ * import. Cancelling the dialog returns ("", nil); a missing snapshot or a
+ * failed write is reported as a Chinese error.
+ */
+export function ExportSnapshot(id: string): $CancellablePromise<string> {
+    return $Call.ByID(1387877275, id);
+}
+
+/**
  * Import replaces the current configuration with the provided backup. Invalid
  * input is rejected with a descriptive error and the existing configuration is
  * left untouched.
  */
 export function Import(data: string): $CancellablePromise<model$0.BackupResult> {
     return $Call.ByID(2988498396, data);
+}
+
+/**
+ * ImportSnapshot asks the user to choose a local backup file and stores its
+ * content as a new local snapshot. The file is validated by the store before it
+ * appears in the snapshot list, and an empty label falls back to the store
+ * default "导入快照". Cancelling the dialog returns (SnapshotInfo{}, 已取消导入)
+ * so the frontend can distinguish a cancelled choice from a real failure.
+ */
+export function ImportSnapshot(label: string): $CancellablePromise<model$0.SnapshotInfo> {
+    return $Call.ByID(4040053304, label);
 }
 
 /**

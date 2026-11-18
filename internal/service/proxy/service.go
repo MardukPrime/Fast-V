@@ -64,6 +64,12 @@ type ProxyService struct {
 	// data file is only rewritten once per flush interval (plus proxy stop and
 	// service shutdown) instead of every sampling tick.
 	traffic *trafficRecorder
+
+	// logSinkMu guards logSink, the optional persistent log sink wired by the
+	// bootstrap layer. It is independent from the Wails event bus so the proxy
+	// pipeline keeps working (and logging) without an application instance.
+	logSinkMu sync.RWMutex
+	logSink   func(model.LogEntry)
 }
 
 func New(st *store.Store, coreProvider proxyruntime.CoreInfoProvider) *ProxyService {
@@ -92,6 +98,20 @@ func (s *ProxyService) SetExtraRulesProvider(provider func() []model.RoutingRule
 		return
 	}
 	s.manager.SetExtraRulesProvider(provider)
+}
+
+// SetLogSink registers an optional persistent sink that receives every proxy log
+// entry in addition to the live Wails event. The bootstrap layer wires it to the
+// file logger. A nil sink is ignored so the default in-memory behavior stays
+// unchanged. The sink is stored thread-safely because proxy log entries may be
+// produced from the manager's background goroutines.
+func (s *ProxyService) SetLogSink(sink func(model.LogEntry)) {
+	if s == nil || sink == nil {
+		return
+	}
+	s.logSinkMu.Lock()
+	s.logSink = sink
+	s.logSinkMu.Unlock()
 }
 
 // ServiceStartup starts the automatic routing scheduler. The scheduler exits when
@@ -511,9 +531,23 @@ func latencyForNode(results []model.NodeLatency, id string) int64 {
 }
 
 func (s *ProxyService) emitLog(entry model.LogEntry) {
+	// Broadcast first so the UI never waits for disk I/O, then persist through
+	// the optional sink.
 	if app := application.Get(); app != nil {
 		app.Event.Emit("proxy:log", entry)
 	}
+	s.logSinkMu.RLock()
+	sink := s.logSink
+	s.logSinkMu.RUnlock()
+	if sink == nil {
+		return
+	}
+	// A misbehaving sink must never break the proxy pipeline: the log fan-out is
+	// best effort by design.
+	defer func() {
+		_ = recover()
+	}()
+	sink(entry)
 }
 
 func (s *ProxyService) emit(state model.ProxyState) {

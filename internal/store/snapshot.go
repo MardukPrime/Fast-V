@@ -40,6 +40,8 @@ const (
 	snapshotManualLabel     = "手动快照"
 	snapshotAutomaticLabel  = "自动快照"
 	snapshotPreRestoreLabel = "回滚前快照"
+	// snapshotImportLabel is used when an imported backup file has no label.
+	snapshotImportLabel = "导入快照"
 
 	// snapshotIDTimeLayout is the timestamp part of a snapshot id.
 	snapshotIDTimeLayout = "20060102-150405"
@@ -89,15 +91,6 @@ func (s *Store) CreateSnapshot(label string, automatic bool) (model.SnapshotInfo
 // restores even when taking the safety snapshot pushes the file count over the
 // retention limit.
 func (s *Store) createSnapshotLocked(label string, automatic bool, protectedID string) (model.SnapshotInfo, error) {
-	label = strings.TrimSpace(label)
-	if label == "" {
-		if automatic {
-			label = snapshotAutomaticLabel
-		} else {
-			label = snapshotManualLabel
-		}
-	}
-
 	data, err := s.Export()
 	if err != nil {
 		return model.SnapshotInfo{}, fmt.Errorf("导出当前配置失败: %w", err)
@@ -105,7 +98,25 @@ func (s *Store) createSnapshotLocked(label string, automatic bool, protectedID s
 	if len(data) > maxSnapshotDataSize {
 		return model.SnapshotInfo{}, fmt.Errorf("当前配置数据超过 %d MB，无法创建快照", maxSnapshotDataSize>>20)
 	}
+	return s.writeSnapshotLocked(normalizeSnapshotLabel(label, automatic), automatic, data, protectedID)
+}
 
+// normalizeSnapshotLabel trims a snapshot label and falls back to the manual or
+// automatic default when the caller did not provide one.
+func normalizeSnapshotLabel(label string, automatic bool) string {
+	if label = strings.TrimSpace(label); label != "" {
+		return label
+	}
+	if automatic {
+		return snapshotAutomaticLabel
+	}
+	return snapshotManualLabel
+}
+
+// writeSnapshotLocked writes one snapshot file holding data and then applies the
+// retention limit. The caller must hold snapshotMu; data must already be a
+// validated, complete backup document.
+func (s *Store) writeSnapshotLocked(label string, automatic bool, data []byte, protectedID string) (model.SnapshotInfo, error) {
 	dir := s.snapshotDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return model.SnapshotInfo{}, fmt.Errorf("创建快照目录失败: %w", err)
@@ -305,6 +316,115 @@ func (s *Store) DeleteSnapshot(id string) error {
 		return fmt.Errorf("删除快照失败: %w", err)
 	}
 	return nil
+}
+
+// ExportSnapshotToPath writes the configuration document embedded in a snapshot
+// to path. Only the backup document is written (no snapshot metadata), so the
+// output uses the same format as a normal local backup export and can be
+// imported again through the regular backup import. The caller must pass an
+// absolute path whose parent directory already exists; the file is written with
+// owner-only permissions.
+func (s *Store) ExportSnapshotToPath(id string, path string) error {
+	id = strings.TrimSpace(id)
+	if !snapshotIDPattern.MatchString(id) {
+		return errors.New("快照 ID 无效")
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return errors.New("导出路径不能为空")
+	}
+	if !filepath.IsAbs(path) {
+		return errors.New("导出路径必须是绝对路径")
+	}
+
+	snapshotMu.Lock()
+	defer snapshotMu.Unlock()
+
+	raw, err := readSnapshotFile(snapshotPath(s.snapshotDir(), id))
+	if err != nil {
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			return errors.New("快照不存在")
+		case errors.Is(err, errSnapshotTooLarge):
+			return errors.New("快照文件超过大小上限，无法导出")
+		default:
+			return fmt.Errorf("读取快照失败: %w", err)
+		}
+	}
+	record, _, err := parseSnapshotFile(raw, id)
+	if err != nil {
+		if errors.Is(err, errSnapshotTooLarge) {
+			return fmt.Errorf("快照内容超过 %d MB 上限，无法导出", maxSnapshotDataSize>>20)
+		}
+		return fmt.Errorf("快照文件已损坏，无法导出: %w", err)
+	}
+	// Only a structurally valid backup document may leave the store: exporting a
+	// damaged snapshot would produce a file that cannot be imported again.
+	if _, err := parseBackup(record.Data); err != nil {
+		return fmt.Errorf("快照文件已损坏，无法导出: %w", err)
+	}
+
+	if err := os.WriteFile(path, record.Data, 0o600); err != nil {
+		return fmt.Errorf("写入导出文件失败: %w", err)
+	}
+	// WriteFile keeps the permissions of an existing file; tighten them so an
+	// export always ends up owner-only readable. Windows has no POSIX mode, so a
+	// failure here is not fatal.
+	_ = os.Chmod(path, 0o600)
+	return nil
+}
+
+// ImportSnapshotFromPath validates a backup document read from path and stores a
+// copy of it as a new snapshot using the same on-disk format as CreateSnapshot.
+// The file is bounded to maxSnapshotDataSize and fully validated by parseBackup
+// before any snapshot file is written, so a corrupt or oversized file never
+// shows up in the snapshot list. An empty label falls back to "导入快照".
+func (s *Store) ImportSnapshotFromPath(path string, label string, automatic bool) (model.SnapshotInfo, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return model.SnapshotInfo{}, errors.New("导入路径不能为空")
+	}
+	data, err := readImportFile(path)
+	if err != nil {
+		return model.SnapshotInfo{}, err
+	}
+	if _, err := parseBackup(data); err != nil {
+		return model.SnapshotInfo{}, fmt.Errorf("导入文件不是有效的备份: %w", err)
+	}
+
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = snapshotImportLabel
+	}
+
+	snapshotMu.Lock()
+	defer snapshotMu.Unlock()
+	// The imported document is kept byte for byte ("data 为原始文档"); the shared
+	// helper re-indents it into the normal snapshot file format.
+	return s.writeSnapshotLocked(label, automatic, data, "")
+}
+
+// readImportFile reads a backup document with the same hard size bound as the
+// configuration data embedded in a snapshot, so importing a crafted file can
+// never exhaust memory.
+func readImportFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errors.New("导入文件不存在")
+		}
+		return nil, fmt.Errorf("读取导入文件失败: %w", err)
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxSnapshotDataSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("读取导入文件失败: %w", err)
+	}
+	if len(data) > maxSnapshotDataSize {
+		return nil, fmt.Errorf("导入文件超过 %d MB 上限", maxSnapshotDataSize>>20)
+	}
+	return data, nil
 }
 
 // SnapshotCount returns how many valid snapshots are currently stored. It is a

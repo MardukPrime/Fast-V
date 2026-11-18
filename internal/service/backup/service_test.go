@@ -930,3 +930,84 @@ func TestBackupServiceSnapshotErrors(t *testing.T) {
 		t.Fatalf("DeleteSnapshot with a missing id = %v", err)
 	}
 }
+
+func TestBackupServiceSnapshotExportImportRequiresDialog(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+	service := New(st)
+
+	info, err := service.CreateSnapshot("发布前")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	// The Wails application instance is nil in tests, so the native file dialogs
+	// cannot be shown. The service must report that instead of touching files.
+	if _, err := service.ExportSnapshot(info.ID); err == nil || !strings.Contains(err.Error(), "文件对话框不可用") {
+		t.Fatalf("ExportSnapshot without a running app = %v, want a dialog error", err)
+	}
+	if _, err := service.ImportSnapshot(""); err == nil || !strings.Contains(err.Error(), "文件对话框不可用") {
+		t.Fatalf("ImportSnapshot without a running app = %v, want a dialog error", err)
+	}
+
+	// Unknown snapshots are rejected before the save dialog would open.
+	if _, err := service.ExportSnapshot("snap-20260101-000000-9999"); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("ExportSnapshot with a missing id = %v, want a not-found error", err)
+	}
+	if _, err := service.ExportSnapshot(""); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("ExportSnapshot with an empty id = %v, want a not-found error", err)
+	}
+
+	// None of the rejected calls may change the stored snapshots.
+	snapshots, err := service.ListSnapshots()
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0] != info {
+		t.Fatalf("snapshots changed by rejected export/import calls: %+v", snapshots)
+	}
+}
+
+func TestSnapshotExportFilename(t *testing.T) {
+	cases := []struct {
+		name string
+		info model.SnapshotInfo
+		want string
+	}{
+		{
+			name: "label",
+			info: model.SnapshotInfo{ID: "snap-20260101-000000-aaaa", Label: "发布前"},
+			want: "FastV-snapshot-发布前.json",
+		},
+		{
+			name: "empty label falls back to id",
+			info: model.SnapshotInfo{ID: "snap-20260101-000000-aaaa", Label: "   "},
+			want: "FastV-snapshot-snap-20260101-000000-aaaa.json",
+		},
+		{
+			name: "illegal characters are removed",
+			info: model.SnapshotInfo{ID: "id", Label: `a/b\c:d*e?f"g<h>i|j`},
+			want: "FastV-snapshot-abcdefghij.json",
+		},
+		{
+			name: "surrounding whitespace and dots are trimmed",
+			info: model.SnapshotInfo{ID: "id", Label: "\t 配置 . . "},
+			want: "FastV-snapshot-配置.json",
+		},
+		{
+			name: "label of only dots falls back to id",
+			info: model.SnapshotInfo{ID: "snap-20260101-000000-bbbb", Label: "..."},
+			want: "FastV-snapshot-snap-20260101-000000-bbbb.json",
+		},
+		{
+			name: "long label is truncated",
+			info: model.SnapshotInfo{ID: "id", Label: strings.Repeat("长", snapshotExportMaxLabelRunes+10)},
+			want: "FastV-snapshot-" + strings.Repeat("长", snapshotExportMaxLabelRunes) + ".json",
+		},
+	}
+	for _, tt := range cases {
+		if got := snapshotExportFilename(tt.info); got != tt.want {
+			t.Errorf("%s: snapshotExportFilename() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

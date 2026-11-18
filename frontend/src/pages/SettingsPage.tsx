@@ -357,6 +357,15 @@ function sortSnapshots(list: SnapshotInfo[]) {
   return [...list].sort((left, right) => snapshotTimeValue(right.createdAt) - snapshotTimeValue(left.createdAt));
 }
 
+// BackupService.ImportSnapshot rejects with this backend error message when the
+// user closes the native file dialog; it is a cancellation, not a failure, so the
+// UI must not render it as an error.
+const SNAPSHOT_IMPORT_CANCELLED_ERROR = "已取消导入";
+
+function isSnapshotImportCancelled(err: unknown) {
+  return errorMessage(err).includes(SNAPSHOT_IMPORT_CANCELLED_ERROR);
+}
+
 // The self-update panel reports the release asset size in MB; the backend
 // returns 0 when GitHub does not expose a size for the asset.
 function formatAssetSize(size: number) {
@@ -1061,6 +1070,48 @@ export default function SettingsPage(props: SettingsProps) {
       setSnapshotsMessage(t("set.snapshots.deleteDone"));
     } catch (err) {
       setSnapshotsError(t("set.snapshots.deleteError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  // Opening the native save dialog shares the busy flag with the other snapshot
+  // operations so two dialogs can never overlap. An empty path means the user
+  // closed the dialog: that is a cancellation, not a failed export.
+  const exportSnapshot = async (snapshot: SnapshotInfo) => {
+    if (snapshotsBusy()) return;
+    setSnapshotsBusy(`export:${snapshot.id}`);
+    setSnapshotsMessage("");
+    setSnapshotsError("");
+    try {
+      const path = await BackupService.ExportSnapshot(snapshot.id);
+      await refreshSnapshots();
+      setSnapshotsMessage(path ? t("set.snapshots.exported", { path }) : t("set.snapshots.exportCancelled"));
+    } catch (err) {
+      setSnapshotsError(t("set.snapshots.exportError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  // Importing stores a chosen backup file as a new local snapshot. The empty
+  // label lets the backend apply its default name; a closed file dialog is
+  // reported as a cancellation message instead of an error.
+  const importSnapshot = async () => {
+    if (snapshotsBusy()) return;
+    setSnapshotsBusy("import");
+    setSnapshotsMessage("");
+    setSnapshotsError("");
+    try {
+      await BackupService.ImportSnapshot("");
+      await refreshSnapshots();
+      setSnapshotsMessage(t("set.snapshots.imported"));
+    } catch (err) {
+      if (isSnapshotImportCancelled(err)) {
+        setSnapshotsMessage(t("set.snapshots.importCancelled"));
+      } else {
+        setSnapshotsError(t("set.snapshots.importFailed", { error: errorMessage(err) }));
+      }
     } finally {
       setSnapshotsBusy("");
     }
@@ -2729,6 +2780,9 @@ export default function SettingsPage(props: SettingsProps) {
                 <button class="btn secondary" type="button" onClick={() => void createSnapshot()} disabled={snapshotsBusy() !== ""}>
                   <Icon name="plus" size={14} /> {snapshotsBusy() === "create" ? t("set.snapshots.creating") : t("set.snapshots.create")}
                 </button>
+                <button class="btn secondary" type="button" onClick={() => void importSnapshot()} disabled={snapshotsBusy() !== ""}>
+                  <Icon name="logs" size={14} /> {snapshotsBusy() === "import" ? t("set.snapshots.importing") : t("set.snapshots.import")}
+                </button>
                 <button class="btn ghost compact" type="button" onClick={() => void loadSnapshots()} disabled={snapshotsBusy() !== ""}>
                   <Icon name="refresh" size={13} /> {snapshotsBusy() === "load" ? t("set.snapshots.loading") : t("set.snapshots.refresh")}
                 </button>
@@ -2774,6 +2828,9 @@ export default function SettingsPage(props: SettingsProps) {
                         <span class="hotkey-row-controls">
                           <button class="btn secondary compact" type="button" onClick={() => void restoreSnapshot(snapshot)} disabled={snapshotsBusy() !== ""}>
                             <Icon name="refresh" size={13} /> {snapshotsBusy() === `restore:${snapshot.id}` ? t("set.snapshots.restoring") : t("set.snapshots.restore")}
+                          </button>
+                          <button class="btn ghost compact" type="button" onClick={() => void exportSnapshot(snapshot)} disabled={snapshotsBusy() !== ""}>
+                            <Icon name="external" size={13} /> {snapshotsBusy() === `export:${snapshot.id}` ? t("set.snapshots.exporting") : t("set.snapshots.export")}
                           </button>
                           <button class="btn danger compact" type="button" onClick={() => void deleteSnapshot(snapshot)} disabled={snapshotsBusy() !== ""}>
                             <Icon name="trash" size={13} /> {snapshotsBusy() === `delete:${snapshot.id}` ? t("set.snapshots.deleting") : t("set.snapshots.delete")}

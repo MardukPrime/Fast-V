@@ -21,6 +21,27 @@ const (
 	webDAVTestTimeout = 30 * time.Second
 	// webDAVSyncTimeout bounds a full upload or download.
 	webDAVSyncTimeout = 120 * time.Second
+
+	// snapshotExportPrefix is the default file name prefix shown by the export
+	// snapshot dialog.
+	snapshotExportPrefix = "FastV-snapshot-"
+	// snapshotExportSuffix is the extension of an exported snapshot backup.
+	snapshotExportSuffix = ".json"
+	// snapshotExportMaxLabelRunes bounds the label part of the default file name.
+	// Labels may contain multi-byte characters, so the bound is in runes and
+	// keeps the generated name below common file system limits.
+	snapshotExportMaxLabelRunes = 64
+)
+
+var (
+	// errFileDialogUnavailable is returned when the Wails application instance is
+	// missing, so no native file dialog can be shown. This happens in unit tests
+	// and before the application has started.
+	errFileDialogUnavailable = errors.New("文件对话框不可用")
+	// errSnapshotImportCancelled is returned when the user closes the open file
+	// dialog without choosing a backup file, so the frontend can stay silent
+	// instead of showing an error.
+	errSnapshotImportCancelled = errors.New("已取消导入")
 )
 
 // Service exposes configuration export and restore to the frontend. The actual
@@ -104,6 +125,143 @@ func (s *Service) RestoreSnapshot(id string) (model.BackupResult, error) {
 // so only existing snapshot files inside the snapshot directory can be deleted.
 func (s *Service) DeleteSnapshot(id string) error {
 	return s.store.DeleteSnapshot(id)
+}
+
+// ExportSnapshot writes the backup document contained in a stored snapshot to a
+// user chosen file. The native save dialog opens with a default name derived
+// from the snapshot label ("FastV-snapshot-<label>.json"), filtered to JSON
+// files. The exported file contains no snapshot metadata, so it is a normal
+// local backup: it can be imported again through Import or the regular backup
+// import. Cancelling the dialog returns ("", nil); a missing snapshot or a
+// failed write is reported as a Chinese error.
+func (s *Service) ExportSnapshot(id string) (string, error) {
+	info, found, err := s.findSnapshot(id)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", errors.New("快照不存在")
+	}
+
+	app := application.Get()
+	if app == nil {
+		return "", errFileDialogUnavailable
+	}
+	path, err := app.Dialog.SaveFileWithOptions(&application.SaveFileDialogOptions{
+		Title:                "导出配置快照",
+		Message:              "导出后可通过配置快照导入恢复当前配置",
+		ButtonText:           "导出",
+		Filename:             snapshotExportFilename(info),
+		CanCreateDirectories: true,
+		Filters:              jsonFileFilters(),
+	}).PromptForSingleSelection()
+	if err != nil {
+		return "", fmt.Errorf("打开保存对话框失败: %w", err)
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		// The user cancelled the save dialog.
+		return "", nil
+	}
+	if err := s.store.ExportSnapshotToPath(info.ID, path); err != nil {
+		return "", fmt.Errorf("导出快照失败: %w", err)
+	}
+	return path, nil
+}
+
+// ImportSnapshot asks the user to choose a local backup file and stores its
+// content as a new local snapshot. The file is validated by the store before it
+// appears in the snapshot list, and an empty label falls back to the store
+// default "导入快照". Cancelling the dialog returns (SnapshotInfo{}, 已取消导入)
+// so the frontend can distinguish a cancelled choice from a real failure.
+func (s *Service) ImportSnapshot(label string) (model.SnapshotInfo, error) {
+	app := application.Get()
+	if app == nil {
+		return model.SnapshotInfo{}, errFileDialogUnavailable
+	}
+	path, err := app.Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{
+		Title:                "导入配置快照",
+		Message:              "选择一个 FastV 备份文件（*.json）",
+		ButtonText:           "导入",
+		CanChooseFiles:       true,
+		CanChooseDirectories: false,
+		AllowsOtherFileTypes: false,
+		Filters:              jsonFileFilters(),
+	}).PromptForSingleSelection()
+	if err != nil {
+		return model.SnapshotInfo{}, fmt.Errorf("打开文件选择对话框失败: %w", err)
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		// The user cancelled the open dialog.
+		return model.SnapshotInfo{}, errSnapshotImportCancelled
+	}
+	info, err := s.store.ImportSnapshotFromPath(path, label, false)
+	if err != nil {
+		return model.SnapshotInfo{}, fmt.Errorf("导入快照失败: %w", err)
+	}
+	return info, nil
+}
+
+// findSnapshot looks a snapshot up by id. The list is sorted and validated by
+// the store, so the service can derive the default export file name from the
+// label without reading the snapshot file format itself.
+func (s *Service) findSnapshot(id string) (model.SnapshotInfo, bool, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return model.SnapshotInfo{}, false, nil
+	}
+	snapshots, err := s.store.ListSnapshots()
+	if err != nil {
+		return model.SnapshotInfo{}, false, fmt.Errorf("读取快照列表失败: %w", err)
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.ID == id {
+			return snapshot, true, nil
+		}
+	}
+	return model.SnapshotInfo{}, false, nil
+}
+
+// snapshotExportFilename builds the default file name of an exported snapshot.
+// The label is user supplied, so characters that are invalid on Windows and
+// control characters are removed and the label part is length bounded.
+func snapshotExportFilename(info model.SnapshotInfo) string {
+	label := strings.TrimSpace(info.Label)
+	if label == "" {
+		label = info.ID
+	}
+	label = sanitizeSnapshotFileLabel(label)
+	if label == "" {
+		label = info.ID
+	}
+	return snapshotExportPrefix + label + snapshotExportSuffix
+}
+
+// sanitizeSnapshotFileLabel strips path separators, Windows reserved characters
+// and control characters from a label, trims dots and spaces from both ends and
+// truncates it to snapshotExportMaxLabelRunes runes.
+func sanitizeSnapshotFileLabel(label string) string {
+	runes := []rune(label)
+	if len(runes) > snapshotExportMaxLabelRunes {
+		runes = runes[:snapshotExportMaxLabelRunes]
+	}
+	var builder strings.Builder
+	for _, r := range runes {
+		if r < 0x20 || r == 0x7f || strings.ContainsRune(`\/:*?"<>|`, r) {
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return strings.Trim(builder.String(), " .")
+}
+
+// jsonFileFilters returns the JSON file filter used by both snapshot dialogs.
+func jsonFileFilters() []application.FileFilter {
+	return []application.FileFilter{{
+		DisplayName: "JSON 文件 (*.json)",
+		Pattern:     "*.json",
+	}}
 }
 
 // notifySettingsChanged tells the rest of the app (tray, global hotkeys, top

@@ -505,3 +505,346 @@ func TestSnapshotRejectsOversizedConfiguration(t *testing.T) {
 		t.Fatalf("SnapshotCount = %d, want 1", count)
 	}
 }
+
+// writeSnapshotBackupFile writes a complete backup document to a temporary file
+// and returns its path. It mimics a file produced by "export local backup".
+func writeSnapshotBackupFile(t *testing.T, data []byte) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "fastv-backup.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write backup file: %v", err)
+	}
+	return path
+}
+
+func TestSnapshotExportToPath(t *testing.T) {
+	st := newTestStore(t)
+	before := seedSnapshotConfiguration(t, st)
+	created := mustCreateSnapshot(t, st, "导出测试", false)
+
+	// The exported file must contain exactly the backup document embedded in the
+	// snapshot, without the snapshot metadata.
+	snapshotRaw, err := os.ReadFile(filepath.Join(st.snapshotDir(), created.ID+snapshotFileSuffix))
+	if err != nil {
+		t.Fatalf("read snapshot file: %v", err)
+	}
+	var record snapshotRecord
+	if err := json.Unmarshal(snapshotRaw, &record); err != nil {
+		t.Fatalf("decode snapshot record: %v", err)
+	}
+
+	exportPath := filepath.Join(t.TempDir(), "exported.json")
+	// Surrounding whitespace in the path is stripped before the check.
+	if err := st.ExportSnapshotToPath("  "+created.ID+"  ", "  "+exportPath+"  "); err != nil {
+		t.Fatalf("ExportSnapshotToPath: %v", err)
+	}
+	exported, err := os.ReadFile(exportPath)
+	if err != nil {
+		t.Fatalf("read exported file: %v", err)
+	}
+	if !bytes.Equal(exported, record.Data) {
+		t.Fatalf("exported file does not equal the embedded snapshot data\nexported:\n%s\nsnapshot data:\n%s", exported, record.Data)
+	}
+
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(exported, &document); err != nil {
+		t.Fatalf("exported file is not valid JSON: %v", err)
+	}
+	for _, key := range []string{"version", "settings", "subscriptions", "nodes"} {
+		if _, ok := document[key]; !ok {
+			t.Fatalf("exported file is missing the backup section %q: %s", key, exported)
+		}
+	}
+	for _, key := range []string{"id", "label", "createdAt", "automatic", "data"} {
+		if _, ok := document[key]; ok {
+			t.Fatalf("exported file must not contain snapshot metadata %q", key)
+		}
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(exportPath)
+		if err != nil {
+			t.Fatalf("stat exported file: %v", err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Fatalf("exported file permissions = %o, want 600", perm)
+		}
+	}
+
+	// The exported file is a regular backup: restoring it must bring the
+	// snapshot's configuration back byte for byte.
+	settings := st.Settings()
+	settings.Theme = "light"
+	settings.XrayLocalPort = 10808
+	settings.ConfigOverride = "// changed after the export"
+	if err := st.SaveSettings(settings); err != nil {
+		t.Fatalf("save changed settings: %v", err)
+	}
+	if err := st.DeleteNode("node-snapshot"); err != nil {
+		t.Fatalf("delete node: %v", err)
+	}
+	if _, err := st.Restore(exported); err != nil {
+		t.Fatalf("restore exported backup: %v", err)
+	}
+	after, err := st.Export()
+	if err != nil {
+		t.Fatalf("export after restore: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("restoring the exported file did not restore the snapshot configuration\nwant:\n%s\ngot:\n%s", before, after)
+	}
+}
+
+func TestSnapshotExportToPathRejectsInvalidInput(t *testing.T) {
+	st := newTestStore(t)
+	seedSnapshotConfiguration(t, st)
+	created := mustCreateSnapshot(t, st, "有效快照", false)
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "exported.json")
+
+	invalidIDs := []string{
+		"",
+		"   ",
+		"..",
+		"../data",
+		"snap-20260101-000000-zzzz",
+		"snap-20260101-000000-aaaa.json",
+		created.ID + "/../../outside",
+	}
+	for _, id := range invalidIDs {
+		if err := st.ExportSnapshotToPath(id, target); err == nil || !strings.Contains(err.Error(), "无效") {
+			t.Fatalf("ExportSnapshotToPath(%q) = %v, want an invalid id error", id, err)
+		}
+	}
+
+	// A well-formed but unknown id is reported as missing.
+	if err := st.ExportSnapshotToPath("snap-20260101-000000-9999", target); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("ExportSnapshotToPath with a missing id = %v, want a not-found error", err)
+	}
+
+	// Empty and relative export paths are rejected before anything is written.
+	if err := st.ExportSnapshotToPath(created.ID, "   "); err == nil || !strings.Contains(err.Error(), "路径") {
+		t.Fatalf("ExportSnapshotToPath with an empty path = %v, want a path error", err)
+	}
+	if err := st.ExportSnapshotToPath(created.ID, "relative-backup.json"); err == nil || !strings.Contains(err.Error(), "绝对") {
+		t.Fatalf("ExportSnapshotToPath with a relative path = %v, want an absolute path error", err)
+	}
+
+	// A missing parent directory is reported instead of being created silently.
+	missingParent := filepath.Join(dir, "missing", "exported.json")
+	if err := st.ExportSnapshotToPath(created.ID, missingParent); err == nil || !strings.Contains(err.Error(), "写入") {
+		t.Fatalf("ExportSnapshotToPath with a missing parent = %v, want a write error", err)
+	}
+
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a rejected export created %s: %v", target, err)
+	}
+}
+
+func TestSnapshotExportRejectsDamagedSnapshot(t *testing.T) {
+	st := newTestStore(t)
+	// Valid snapshot metadata, but the embedded document is not a usable backup.
+	writeSnapshotDirFile(t, st, "snap-20260101-000000-aaaa.json",
+		`{"id":"snap-20260101-000000-aaaa","label":"坏数据","createdAt":"2026-01-01T00:00:00Z","automatic":false,"data":{"version":0}}`)
+
+	target := filepath.Join(t.TempDir(), "exported.json")
+	if err := st.ExportSnapshotToPath("snap-20260101-000000-aaaa", target); err == nil || !strings.Contains(err.Error(), "损坏") {
+		t.Fatalf("ExportSnapshotToPath with damaged data = %v, want a damaged-snapshot error", err)
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a damaged snapshot produced an export file: %v", err)
+	}
+}
+
+func TestSnapshotImportFromPath(t *testing.T) {
+	st := newTestStore(t)
+	before := seedSnapshotConfiguration(t, st)
+	// A trailing newline is what a hand-saved backup file typically has; import
+	// must accept it like the regular backup import does.
+	backupPath := writeSnapshotBackupFile(t, append(append([]byte(nil), before...), '\n'))
+
+	// Move the live configuration away from the backup content so the rollback
+	// below proves the imported snapshot really carries the document.
+	settings := st.Settings()
+	settings.Theme = "light"
+	settings.XrayLocalPort = 10808
+	if err := st.SaveSettings(settings); err != nil {
+		t.Fatalf("save changed settings: %v", err)
+	}
+	if err := st.DeleteNode("node-snapshot"); err != nil {
+		t.Fatalf("delete node: %v", err)
+	}
+
+	info, err := st.ImportSnapshotFromPath("  "+backupPath+"  ", "  ", true)
+	if err != nil {
+		t.Fatalf("ImportSnapshotFromPath: %v", err)
+	}
+	if !snapshotIDPattern.MatchString(info.ID) {
+		t.Fatalf("imported snapshot id %q does not match the snapshot format", info.ID)
+	}
+	if info.Label != snapshotImportLabel {
+		t.Fatalf("imported snapshot label = %q, want %q", info.Label, snapshotImportLabel)
+	}
+	if !info.Automatic {
+		t.Fatal("imported snapshot did not keep the automatic flag")
+	}
+	if info.Size <= 0 {
+		t.Fatalf("imported snapshot size must be positive, got %d", info.Size)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, info.CreatedAt); err != nil {
+		t.Fatalf("imported createdAt %q is not RFC3339: %v", info.CreatedAt, err)
+	}
+
+	// The created file uses the normal snapshot format and metadata.
+	raw, err := os.ReadFile(filepath.Join(st.snapshotDir(), info.ID+snapshotFileSuffix))
+	if err != nil {
+		t.Fatalf("read imported snapshot file: %v", err)
+	}
+	if int64(len(raw)) != info.Size {
+		t.Fatalf("imported snapshot size = %d, file size = %d", info.Size, len(raw))
+	}
+	var record snapshotRecord
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatalf("decode imported snapshot record: %v", err)
+	}
+	if record.ID != info.ID || record.Label != info.Label || record.CreatedAt != info.CreatedAt || record.Automatic != info.Automatic {
+		t.Fatalf("imported snapshot record does not match its info: %+v vs %+v", record, info)
+	}
+	if !json.Valid(record.Data) {
+		t.Fatal("imported snapshot data is not valid JSON")
+	}
+	if _, err := parseBackup(record.Data); err != nil {
+		t.Fatalf("imported snapshot data is not a valid backup: %v", err)
+	}
+
+	// The imported snapshot is listed and can be rolled back.
+	listed := mustListSnapshots(t, st)
+	if len(listed) != 1 || listed[0] != info {
+		t.Fatalf("ListSnapshots after import = %+v, want [%+v]", listed, info)
+	}
+	if _, err := st.RestoreSnapshot(info.ID); err != nil {
+		t.Fatalf("restore imported snapshot: %v", err)
+	}
+	after, err := st.Export()
+	if err != nil {
+		t.Fatalf("export after restoring the imported snapshot: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatalf("restoring the imported snapshot did not restore the backup content\nwant:\n%s\ngot:\n%s", before, after)
+	}
+}
+
+func TestSnapshotImportUsesProvidedLabel(t *testing.T) {
+	st := newTestStore(t)
+	backupPath := writeSnapshotBackupFile(t, seedSnapshotConfiguration(t, st))
+
+	info, err := st.ImportSnapshotFromPath(backupPath, "  我的导入  ", false)
+	if err != nil {
+		t.Fatalf("ImportSnapshotFromPath: %v", err)
+	}
+	if info.Label != "我的导入" {
+		t.Fatalf("imported snapshot label = %q, want %q", info.Label, "我的导入")
+	}
+	if info.Automatic {
+		t.Fatal("a manual import must not be flagged automatic")
+	}
+	listed := mustListSnapshots(t, st)
+	if len(listed) != 1 || listed[0].Label != "我的导入" || listed[0].Automatic {
+		t.Fatalf("imported snapshot is not listed correctly: %+v", listed)
+	}
+}
+
+func TestSnapshotImportRejectsInvalidFiles(t *testing.T) {
+	st := newTestStore(t)
+	if _, err := st.ImportSnapshotFromPath("", "", false); err == nil || !strings.Contains(err.Error(), "路径") {
+		t.Fatalf("ImportSnapshotFromPath with an empty path = %v, want a path error", err)
+	}
+	dir := t.TempDir()
+	if _, err := st.ImportSnapshotFromPath(filepath.Join(dir, "missing.json"), "", false); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("ImportSnapshotFromPath with a missing file = %v, want a not-found error", err)
+	}
+
+	invalid := map[string]string{
+		"empty.json":      "",
+		"null.json":       "null",
+		"broken.json":     `{"version":`,
+		"array.json":      `[]`,
+		"not-backup.json": `{"hello":"world"}`,
+		"newer.json":      `{"version":9999}`,
+	}
+	for name, content := range invalid {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write invalid import file %s: %v", name, err)
+		}
+		if _, err := st.ImportSnapshotFromPath(path, "", false); err == nil || !strings.Contains(err.Error(), "备份") {
+			t.Fatalf("ImportSnapshotFromPath(%s) = %v, want an invalid backup error", name, err)
+		}
+	}
+
+	// A file above the snapshot data bound is rejected before it is parsed.
+	huge := filepath.Join(dir, "huge.json")
+	hugeContent := fmt.Sprintf(`{"version":%d,"settings":{"configOverride":%q}}`, storeVersion, strings.Repeat("x", maxSnapshotDataSize+1024))
+	if err := os.WriteFile(huge, []byte(hugeContent), 0o600); err != nil {
+		t.Fatalf("write oversized import file: %v", err)
+	}
+	if _, err := st.ImportSnapshotFromPath(huge, "", false); err == nil || !strings.Contains(err.Error(), "MB") {
+		t.Fatalf("ImportSnapshotFromPath with an oversized file = %v, want a size error", err)
+	}
+
+	// A directory can never be a backup file.
+	if _, err := st.ImportSnapshotFromPath(dir, "", false); err == nil || !strings.Contains(err.Error(), "读取") {
+		t.Fatalf("ImportSnapshotFromPath with a directory = %v, want a read error", err)
+	}
+
+	// None of the rejected imports may leave a snapshot behind.
+	if count := st.SnapshotCount(); count != 0 {
+		t.Fatalf("rejected imports created %d snapshots, want 0", count)
+	}
+	if files := snapshotDirFileCount(t, st); files != 0 {
+		t.Fatalf("rejected imports left %d files in the snapshot directory", files)
+	}
+}
+
+func TestSnapshotImportAppliesRetention(t *testing.T) {
+	st := newTestStore(t)
+	backupPath := writeSnapshotBackupFile(t, seedSnapshotConfiguration(t, st))
+
+	labels := make([]string, 0, maxSnapshots)
+	for i := 1; i <= maxSnapshots; i++ {
+		label := fmt.Sprintf("导入前-%02d", i)
+		mustCreateSnapshot(t, st, label, false)
+		labels = append(labels, label)
+		// Snapshot ordering uses second-precision ids and file modification
+		// times; a tiny pause keeps the creation order unambiguous.
+		time.Sleep(2 * time.Millisecond)
+	}
+	if count := st.SnapshotCount(); count != maxSnapshots {
+		t.Fatalf("SnapshotCount before import = %d, want %d", count, maxSnapshots)
+	}
+
+	info, err := st.ImportSnapshotFromPath(backupPath, "导入的最旧快照", false)
+	if err != nil {
+		t.Fatalf("ImportSnapshotFromPath: %v", err)
+	}
+	if count := st.SnapshotCount(); count != maxSnapshots {
+		t.Fatalf("SnapshotCount after import = %d, want %d", count, maxSnapshots)
+	}
+	if files := snapshotDirFileCount(t, st); files != maxSnapshots {
+		t.Fatalf("snapshot directory holds %d files after import, want %d", files, maxSnapshots)
+	}
+
+	snapshots := mustListSnapshots(t, st)
+	if len(snapshots) != maxSnapshots {
+		t.Fatalf("expected %d snapshots, got %d", maxSnapshots, len(snapshots))
+	}
+	if snapshots[0].ID != info.ID {
+		t.Fatalf("newest snapshot after import = %+v, want %+v", snapshots[0], info)
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.Label == labels[0] {
+			t.Fatalf("oldest snapshot %q was not evicted by the imported snapshot", labels[0])
+		}
+	}
+}

@@ -35,6 +35,17 @@ export function SetExtraRulesProvider(provider: any): $CancellablePromise<void> 
     return $Call.ByID(990097213, provider);
 }
 
+/**
+ * SetLogSink registers an optional persistent sink that receives every proxy log
+ * entry in addition to the live Wails event. The bootstrap layer wires it to the
+ * file logger. A nil sink is ignored so the default in-memory behavior stays
+ * unchanged. The sink is stored thread-safely because proxy log entries may be
+ * produced from the manager's background goroutines.
+ */
+export function SetLogSink(sink: any): $CancellablePromise<void> {
+    return $Call.ByID(4043536978, sink);
+}
+
 export function Start(): $CancellablePromise<model$0.ProxyState> {
     return $Call.ByID(813748713);
 }
