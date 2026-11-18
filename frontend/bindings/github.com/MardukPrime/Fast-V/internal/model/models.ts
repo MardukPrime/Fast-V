@@ -353,6 +353,9 @@ export interface Settings {
     "closeToTray": boolean;
     "minimizeToTray": boolean;
     "hotkeysEnabled": boolean;
+    "hotkeyToggleProxy": string;
+    "hotkeyCycleMode": string;
+    "hotkeyNextNode": string;
     "autoCheckUpdate": boolean;
     "statsEnabled": boolean;
     "autoSelectEnabled": boolean;
@@ -361,6 +364,10 @@ export interface Settings {
     "failoverEnabled": boolean;
     "loadBalanceEnabled": boolean;
     "loadBalanceMode": string;
+    "webdavUrl": string;
+    "webdavUsername": string;
+    "webdavPassword": string;
+    "webdavPath": string;
     "testUrl": string;
     "xrayApiEnabled": boolean;
     "xrayApiPort": number;

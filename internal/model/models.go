@@ -57,6 +57,9 @@ type Settings struct {
 	CloseToTray               bool   `json:"closeToTray"`
 	MinimizeToTray            bool   `json:"minimizeToTray"`
 	HotkeysEnabled            bool   `json:"hotkeysEnabled"`
+	HotkeyToggleProxy         string `json:"hotkeyToggleProxy"`
+	HotkeyCycleMode           string `json:"hotkeyCycleMode"`
+	HotkeyNextNode            string `json:"hotkeyNextNode"`
 	AutoCheckUpdate           bool   `json:"autoCheckUpdate"`
 	StatsEnabled              bool   `json:"statsEnabled"`
 	AutoSelectEnabled         bool   `json:"autoSelectEnabled"`
@@ -65,6 +68,10 @@ type Settings struct {
 	FailoverEnabled           bool   `json:"failoverEnabled"`
 	LoadBalanceEnabled        bool   `json:"loadBalanceEnabled"`
 	LoadBalanceMode           string `json:"loadBalanceMode"`
+	WebDavURL                 string `json:"webdavUrl"`
+	WebDavUsername            string `json:"webdavUsername"`
+	WebDavPassword            string `json:"webdavPassword"`
+	WebDavPath                string `json:"webdavPath"`
 	TestURL                   string `json:"testUrl"`
 	XrayAPIEnabled            bool   `json:"xrayApiEnabled"`
 	XrayAPIPort               int    `json:"xrayApiPort"`

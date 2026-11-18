@@ -10,18 +10,18 @@
   --srv-surface: rgba(255, 255, 255, 0.025);
   --srv-surface-strong: rgba(255, 255, 255, 0.05);
   --srv-row-border: rgba(255, 255, 255, 0.06);
-  --srv-tint: rgba(182, 216, 239, 0.06);
-  --srv-tint-strong: rgba(182, 216, 239, 0.12);
-  --srv-tint-border: rgba(182, 216, 239, 0.24);
+  --srv-tint: color-mix(in srgb, var(--accent) 6%, transparent);
+  --srv-tint-strong: color-mix(in srgb, var(--accent) 12%, transparent);
+  --srv-tint-border: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 :root[data-theme="light"] .srv-page {
   --srv-surface: rgba(255, 255, 255, 0.52);
   --srv-surface-strong: rgba(255, 255, 255, 0.78);
   --srv-row-border: rgba(42, 65, 88, 0.09);
-  --srv-tint: rgba(70, 123, 158, 0.055);
-  --srv-tint-strong: rgba(70, 123, 158, 0.12);
-  --srv-tint-border: rgba(70, 123, 158, 0.24);
+  --srv-tint: color-mix(in srgb, var(--accent) 5.5%, transparent);
+  --srv-tint-strong: color-mix(in srgb, var(--accent) 12%, transparent);
+  --srv-tint-border: color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 /* Panel + heading ------------------------------------------------ */

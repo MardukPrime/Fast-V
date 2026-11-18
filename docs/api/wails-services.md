@@ -19,6 +19,9 @@
 |---|---|---|---|
 | Export | - | string | 导出完整配置 JSON（含节点凭据，注意保管） |
 | Import | data | BackupResult | 校验并恢复配置，返回恢复数量 |
+| WebDAVTest | - | - | 测试已保存的 WebDAV 连接与写入权限 |
+| WebDAVUpload | - | string | 上传备份并返回远端 URL |
+| WebDAVDownload | - | BackupResult | 下载云端备份并恢复（Restore 校验后落盘） |
 
 ## HistoryService
 
@@ -180,6 +183,10 @@
 | closeToTray | 关闭窗口时隐藏到托盘（而非退出） |
 | minimizeToTray | 最小化时隐藏到托盘（best effort） |
 | autoCheckUpdate | 启动时自动检查应用更新 |
+| hotkeysEnabled | 启用全局快捷键 |
+| hotkeyToggleProxy / hotkeyCycleMode / hotkeyNextNode | 三个全局快捷键组合（如 Ctrl+Shift+F；空串表示禁用；保存时规范化并校验重复） |
+| webdavUrl / webdavUsername / webdavPassword | WebDAV 服务器地址与 Basic Auth 凭据（本地保存） |
+| webdavPath | 远端备份路径，默认 /FastV/fastv-backup.json |
 
 ## 契约规则
 

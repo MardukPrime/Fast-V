@@ -33,3 +33,30 @@ export function Export(): $CancellablePromise<string> {
 export function Import(data: string): $CancellablePromise<model$0.BackupResult> {
     return $Call.ByID(2988498396, data);
 }
+
+/**
+ * WebDAVDownload downloads the backup from the configured WebDAV server and
+ * restores it. The backup is validated by Restore before anything is written,
+ * so a damaged remote file never leaves the configuration partially restored.
+ */
+export function WebDAVDownload(): $CancellablePromise<model$0.BackupResult> {
+    return $Call.ByID(3686536020);
+}
+
+/**
+ * WebDAVTest verifies that the configured WebDAV server is reachable and that
+ * the account may write the backup. A temporary probe file is uploaded next to
+ * the configured backup path and removed again.
+ */
+export function WebDAVTest(): $CancellablePromise<void> {
+    return $Call.ByID(1248082920);
+}
+
+/**
+ * WebDAVUpload exports the complete configuration and stores it on the
+ * configured WebDAV server. It returns the absolute remote URL of the uploaded
+ * backup so the frontend can display where the data was written.
+ */
+export function WebDAVUpload(): $CancellablePromise<string> {
+    return $Call.ByID(3260197805);
+}

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MardukPrime/Fast-V/internal/hotkey"
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
@@ -345,5 +346,102 @@ func TestHotkeysEnabledValidation(t *testing.T) {
 	}
 	if !saved.HotkeysEnabled || !service.Get().HotkeysEnabled {
 		t.Fatal("enabling global hotkeys was not persisted")
+	}
+}
+
+func TestHotkeyCombinationValidation(t *testing.T) {
+	service := newService(t)
+
+	// The shipped defaults are valid canonical combinations and describe the
+	// same shortcuts as the package level defaults.
+	defaults := service.Get()
+	if defaults.HotkeyToggleProxy != "Ctrl+Shift+F" || defaults.HotkeyCycleMode != "Ctrl+Shift+M" || defaults.HotkeyNextNode != "Ctrl+Shift+N" {
+		t.Fatalf("unexpected default hotkey combinations: %+v", defaults)
+	}
+	bindings, err := hotkey.BindingsFromSettings(defaults)
+	if err != nil {
+		t.Fatalf("default hotkey combinations must be valid: %v", err)
+	}
+	want := hotkey.DefaultBindings()
+	if len(bindings) != len(want) {
+		t.Fatalf("expected %d bindings from the defaults, got %d", len(want), len(bindings))
+	}
+	for index := range want {
+		if bindings[index] != want[index] {
+			t.Fatalf("binding %d: expected %+v, got %+v", index, want[index], bindings[index])
+		}
+	}
+
+	// A save canonicalizes the spelling into the Ctrl+Alt+Shift+Win+Key order.
+	custom := validSettings()
+	custom.HotkeyToggleProxy = " ctrl + alt + f "
+	custom.HotkeyCycleMode = "shift+control+m"
+	custom.HotkeyNextNode = "Win+Shift+N"
+	saved, err := service.Save(custom)
+	if err != nil {
+		t.Fatalf("valid custom combinations must be accepted: %v", err)
+	}
+	if saved.HotkeyToggleProxy != "Ctrl+Alt+F" || saved.HotkeyCycleMode != "Ctrl+Shift+M" || saved.HotkeyNextNode != "Shift+Win+N" {
+		t.Fatalf("custom combinations were not canonicalized: %+v", saved)
+	}
+	if stored := service.Get(); stored.HotkeyToggleProxy != "Ctrl+Alt+F" || stored.HotkeyCycleMode != "Ctrl+Shift+M" || stored.HotkeyNextNode != "Shift+Win+N" {
+		t.Fatalf("custom combinations were not persisted: %+v", stored)
+	}
+
+	// Duplicate combinations are rejected with a Chinese error and leave the
+	// stored settings untouched.
+	duplicated := validSettings()
+	duplicated.HotkeyToggleProxy = "Ctrl+Shift+F"
+	duplicated.HotkeyCycleMode = "control + shift + f"
+	if _, err := service.Save(duplicated); err == nil || !strings.Contains(err.Error(), "快捷键不能重复") {
+		t.Fatalf("expected a duplicate combination error, got %v", err)
+	}
+	if stored := service.Get(); stored.HotkeyToggleProxy != "Ctrl+Alt+F" {
+		t.Fatalf("a rejected save changed the stored hotkeys: %+v", stored)
+	}
+
+	// Invalid combinations are rejected with a Chinese error.
+	invalidCases := []struct {
+		name   string
+		mutate func(*model.Settings)
+		want   string
+	}{
+		{"unknown key", func(settings *model.Settings) { settings.HotkeyNextNode = "Ctrl+Shift+Nope" }, "不支持的按键"},
+		{"missing main key", func(settings *model.Settings) { settings.HotkeyCycleMode = "Ctrl+Shift" }, "缺少主键"},
+		{"missing modifier", func(settings *model.Settings) { settings.HotkeyToggleProxy = "F5" }, "缺少修饰键"},
+		{"duplicated modifier", func(settings *model.Settings) { settings.HotkeyNextNode = "Ctrl+Ctrl+N" }, "修饰键重复"},
+	}
+	for _, tc := range invalidCases {
+		input := validSettings()
+		input.HotkeyToggleProxy = "Ctrl+Alt+F"
+		input.HotkeyCycleMode = "Ctrl+Shift+M"
+		input.HotkeyNextNode = "Shift+Win+N"
+		tc.mutate(&input)
+		if _, err := service.Save(input); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: expected an error containing %q, got %v", tc.name, tc.want, err)
+		}
+	}
+
+	// Every shortcut may be disabled by saving an empty combination.
+	disabledCombos := validSettings()
+	disabledCombos.HotkeyToggleProxy = "   "
+	disabledCombos.HotkeyCycleMode = ""
+	disabledCombos.HotkeyNextNode = ""
+	saved, err = service.Save(disabledCombos)
+	if err != nil {
+		t.Fatalf("empty combinations must be accepted as disabled shortcuts: %v", err)
+	}
+	if saved.HotkeyToggleProxy != "" || saved.HotkeyCycleMode != "" || saved.HotkeyNextNode != "" {
+		t.Fatalf("empty combinations were not persisted: %+v", saved)
+	}
+	if stored := service.Get(); stored.HotkeyToggleProxy != "" || stored.HotkeyCycleMode != "" || stored.HotkeyNextNode != "" {
+		t.Fatalf("empty combinations were not stored: %+v", stored)
+	}
+	bindings, err = hotkey.BindingsFromSettings(service.Get())
+	if err != nil {
+		t.Fatalf("disabled shortcuts must not fail the bindings conversion: %v", err)
+	}
+	if len(bindings) != 0 {
+		t.Fatalf("expected no bindings for disabled shortcuts, got %+v", bindings)
 	}
 }

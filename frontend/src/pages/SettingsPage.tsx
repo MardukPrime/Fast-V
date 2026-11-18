@@ -55,6 +55,9 @@ const defaults: Settings = {
   closeToTray: false,
   minimizeToTray: false,
   hotkeysEnabled: true,
+  hotkeyToggleProxy: "Ctrl+Shift+F",
+  hotkeyCycleMode: "Ctrl+Shift+M",
+  hotkeyNextNode: "Ctrl+Shift+N",
   autoCheckUpdate: true,
   statsEnabled: true,
   autoSelectEnabled: false,
@@ -63,6 +66,10 @@ const defaults: Settings = {
   failoverEnabled: false,
   loadBalanceEnabled: false,
   loadBalanceMode: "leastPing",
+  webdavUrl: "",
+  webdavUsername: "",
+  webdavPassword: "",
+  webdavPath: "/FastV/fastv-backup.json",
   testUrl: "https://www.gstatic.com/generate_204",
   xrayApiEnabled: false,
   xrayApiPort: 10085,
@@ -84,12 +91,120 @@ const accentColors = [
   { value: "rose", label: "玫瑰红", hint: "醒目" },
 ];
 
-// Read-only list of the global shortcuts registered by internal/bootstrap/hotkey.go.
-const globalHotkeys = [
-  { action: "启动 / 停止代理", keys: ["Ctrl", "Shift", "F"] },
-  { action: "切换代理模式（规则 → 全局 → 直连）", keys: ["Ctrl", "Shift", "M"] },
-  { action: "切换到下一个启用节点", keys: ["Ctrl", "Shift", "N"] },
+// Configurable global shortcuts. Keep the action order and the settings fields
+// in sync with internal/hotkey/hotkey.go (settingsHotkeys): the order decides
+// which row wins when two actions use the same combination.
+type HotkeyField = "hotkeyToggleProxy" | "hotkeyCycleMode" | "hotkeyNextNode";
+
+type HotkeyAction = {
+  action: string;
+  field: HotkeyField;
+};
+
+const globalHotkeyActions: HotkeyAction[] = [
+  { action: "启动 / 停止代理", field: "hotkeyToggleProxy" },
+  { action: "切换代理模式（规则 → 全局 → 直连）", field: "hotkeyCycleMode" },
+  { action: "切换到下一个启用节点", field: "hotkeyNextNode" },
 ];
+
+const hotkeyModifierNames = ["Ctrl", "Alt", "Shift", "Win"] as const;
+type HotkeyModifier = (typeof hotkeyModifierNames)[number];
+
+const hotkeyMissingModifierError = "快捷键缺少修饰键（至少需要 Ctrl、Alt、Shift 或 Win 中的一个）。";
+const hotkeyRecordingHint = "Esc 取消，需包含 Ctrl/Alt/Shift/Win 至少一个修饰键";
+
+const createHotkeyErrors = (): Record<HotkeyField, string> => ({
+  hotkeyToggleProxy: "",
+  hotkeyCycleMode: "",
+  hotkeyNextNode: "",
+});
+
+const parseHotkeyModifier = (part: string): HotkeyModifier | "" => {
+  switch (part.toLowerCase()) {
+    case "ctrl":
+    case "control":
+      return "Ctrl";
+    case "alt":
+      return "Alt";
+    case "shift":
+      return "Shift";
+    case "win":
+      return "Win";
+    default:
+      return "";
+  }
+};
+
+// Mirrors internal/hotkey.parseMainKey: only the keys the recorder can produce
+// are accepted (A-Z, 0-9 and F1-F24), always returned in upper case.
+const normalizeHotkeyMainKey = (part: string): string => {
+  const upper = part.trim().toUpperCase();
+  if (/^[A-Z]$/.test(upper)) return upper;
+  if (/^[0-9]$/.test(upper)) return upper;
+  if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(upper)) return upper;
+  return "";
+};
+
+const formatHotkeyCombo = (modifiers: Set<HotkeyModifier>, mainKey: string): string => {
+  const parts: string[] = [];
+  for (const name of hotkeyModifierNames) {
+    if (modifiers.has(name)) parts.push(name);
+  }
+  parts.push(mainKey);
+  return parts.join("+");
+};
+
+// Parses one combination with the same rules as internal/hotkey.ParseCombo so a
+// save can never be rejected by the backend after passing the frontend check.
+// The canonical Ctrl+Alt+Shift+Win+Key form is returned on success.
+const parseHotkeyCombo = (value: string): { combo: string; error: string } => {
+  const trimmed = value.trim();
+  if (!trimmed) return { combo: "", error: "快捷键不能为空" };
+  const modifiers = new Set<HotkeyModifier>();
+  let mainKey = "";
+  for (const rawPart of trimmed.split("+")) {
+    const part = rawPart.trim();
+    if (!part) return { combo: "", error: `快捷键格式错误：${trimmed}` };
+    const modifier = parseHotkeyModifier(part);
+    if (modifier) {
+      if (modifiers.has(modifier)) return { combo: "", error: `快捷键修饰键重复：${modifier}` };
+      modifiers.add(modifier);
+      continue;
+    }
+    if (mainKey) return { combo: "", error: `快捷键只能包含一个主键：${trimmed}` };
+    const key = normalizeHotkeyMainKey(part);
+    if (!key) return { combo: "", error: `不支持的按键：${part}` };
+    mainKey = key;
+  }
+  if (!mainKey) return { combo: "", error: "快捷键缺少主键" };
+  if (modifiers.size === 0) return { combo: "", error: "快捷键缺少修饰键（至少需要 Ctrl、Alt、Shift 或 Win 中的一个）" };
+  return { combo: formatHotkeyCombo(modifiers, mainKey), error: "" };
+};
+
+// Equivalent combinations render identically even if the stored value is not
+// canonical yet (the backend normalizes on save; old files may not be).
+const hotkeyDisplayKeys = (value: string): string[] => {
+  const parsed = parseHotkeyCombo(value);
+  const display = parsed.combo || value.trim();
+  return display ? display.split("+").filter(Boolean) : [];
+};
+
+// Maps a keydown event to a recordable main key. Physical key codes are used so
+// Shift+1 records "1" instead of "!", and Numpad keys stay unsupported because
+// the backend registration cannot distinguish them from the main row.
+const hotkeyMainKeyFromEvent = (event: KeyboardEvent): string => {
+  if (!event.code || event.code === "Unidentified") return normalizeHotkeyMainKey(event.key);
+  const letter = /^Key([A-Z])$/.exec(event.code);
+  if (letter) return letter[1];
+  const digit = /^Digit([0-9])$/.exec(event.code);
+  if (digit) return digit[1];
+  const functionKey = /^F([1-9]|1[0-9]|2[0-4])$/.exec(event.code);
+  if (functionKey) return `F${functionKey[1]}`;
+  return "";
+};
+
+const isHotkeyModifierKey = (event: KeyboardEvent): boolean =>
+  event.key === "Control" || event.key === "Alt" || event.key === "Shift" || event.key === "Meta" || event.key === "OS" || event.key === "Win";
 
 const layoutModes = [
   { value: "sidebar", label: "侧边模式", hint: "保留左侧导航，关闭底栏" },
@@ -263,6 +378,13 @@ export default function SettingsPage(props: SettingsProps) {
   const [backupMessage, setBackupMessage] = createSignal("");
   const [backupError, setBackupError] = createSignal("");
   const [importResult, setImportResult] = createSignal<BackupResult | null>(null);
+  // WebDAV cloud backup: one shared busy flag ("test" | "upload" | "download")
+  // because the operations must not overlap, plus per-operation result state.
+  const [webdavBusy, setWebdavBusy] = createSignal("");
+  const [webdavMessage, setWebdavMessage] = createSignal("");
+  const [webdavError, setWebdavError] = createSignal("");
+  const [webdavRemoteUrl, setWebdavRemoteUrl] = createSignal("");
+  const [webdavRestoreResult, setWebdavRestoreResult] = createSignal<BackupResult | null>(null);
   const [updateBusy, setUpdateBusy] = createSignal(false);
   const [updateInfo, setUpdateInfo] = createSignal<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = createSignal("");
@@ -270,6 +392,10 @@ export default function SettingsPage(props: SettingsProps) {
   const [updateInstallBusy, setUpdateInstallBusy] = createSignal(false);
   const [updateNotice, setUpdateNotice] = createSignal("");
   const [proxyRunning, setProxyRunning] = createSignal(false);
+  // Global hotkey recorder state: which row (if any) is currently recording,
+  // plus the per-row inline error shown below the action name.
+  const [recordingHotkey, setRecordingHotkey] = createSignal<HotkeyField | "">("");
+  const [hotkeyErrors, setHotkeyErrors] = createSignal<Record<HotkeyField, string>>(createHotkeyErrors());
   let backupFileInput: HTMLInputElement | undefined;
 
   // CheckUpdate never returns the downloaded package path, so a fresh check
@@ -363,6 +489,75 @@ export default function SettingsPage(props: SettingsProps) {
     setSettings({ ...settings(), [key]: value });
   };
 
+  const setHotkeyRowError = (field: HotkeyField, message: string) => {
+    setHotkeyErrors((previous) => ({ ...previous, [field]: message }));
+  };
+
+  const cancelHotkeyRecording = () => {
+    const field = recordingHotkey();
+    if (!field) return;
+    setHotkeyRowError(field, "");
+    setRecordingHotkey("");
+  };
+
+  const startHotkeyRecording = (field: HotkeyField) => {
+    if (!settings().hotkeysEnabled) return;
+    const active = recordingHotkey();
+    if (active && active !== field) setHotkeyRowError(active, "");
+    setHotkeyRowError(field, "");
+    setMessage("");
+    setRecordingHotkey(field);
+  };
+
+  const clearHotkey = (field: HotkeyField) => {
+    if (recordingHotkey() === field) setRecordingHotkey("");
+    // Removing a combination can resolve a duplicate reported for another row.
+    setHotkeyErrors(createHotkeyErrors());
+    update(field, "");
+  };
+
+  // Recording handler. It is registered once on window in the capture phase so
+  // the recorded combination cannot trigger page shortcuts (and Enter cannot
+  // submit the form) before it is consumed; preventDefault also suppresses the
+  // browser default for the pressed keys.
+  const handleHotkeyKeydown = (event: KeyboardEvent) => {
+    const field = recordingHotkey();
+    if (!field) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.repeat) return;
+    if (event.key === "Escape") {
+      cancelHotkeyRecording();
+      return;
+    }
+    const mainKey = hotkeyMainKeyFromEvent(event);
+    if (!mainKey) {
+      // Typing a bare modifier is part of building a combination, not an error.
+      if (isHotkeyModifierKey(event)) return;
+      setHotkeyRowError(field, `不支持的按键：${event.key || event.code}；仅支持 A-Z、0-9 与 F1-F24。`);
+      return;
+    }
+    const modifiers = new Set<HotkeyModifier>();
+    if (event.ctrlKey) modifiers.add("Ctrl");
+    if (event.altKey) modifiers.add("Alt");
+    if (event.shiftKey) modifiers.add("Shift");
+    if (event.metaKey) modifiers.add("Win");
+    if (modifiers.size === 0) {
+      setHotkeyRowError(field, hotkeyMissingModifierError);
+      return;
+    }
+    update(field, formatHotkeyCombo(modifiers, mainKey));
+    // Any change can resolve a duplicate reported for another row, so the
+    // per-row hints are recomputed on the next save.
+    setHotkeyErrors(createHotkeyErrors());
+    setRecordingHotkey("");
+  };
+
+  onMount(() => {
+    window.addEventListener("keydown", handleHotkeyKeydown, true);
+    onCleanup(() => window.removeEventListener("keydown", handleHotkeyKeydown, true));
+  });
+
   const validateAutoSelect = () => {
     const current = settings();
     const interval = current.autoSelectIntervalMinutes;
@@ -399,12 +594,46 @@ export default function SettingsPage(props: SettingsProps) {
     return "";
   };
 
+  // Mirrors internal/hotkey.ValidateSettingsCombos: every non-empty combination
+  // must parse and no two actions may share the same normalized combination.
+  // Empty values are allowed and simply disable that action. The per-row map is
+  // used to highlight the offending row next to the page-level alert.
+  const collectHotkeyErrors = () => {
+    const current = settings();
+    const rowErrors = createHotkeyErrors();
+    const seen = new Map<string, HotkeyField>();
+    let firstError = "";
+    for (const item of globalHotkeyActions) {
+      const raw = current[item.field].trim();
+      if (!raw) continue;
+      const parsed = parseHotkeyCombo(raw);
+      if (parsed.error) {
+        rowErrors[item.field] = parsed.error;
+        if (!firstError) firstError = `${item.action}快捷键无效：${parsed.error}。`;
+        continue;
+      }
+      const previousField = seen.get(parsed.combo);
+      if (previousField) {
+        const previousAction = globalHotkeyActions.find((candidate) => candidate.field === previousField)?.action ?? previousField;
+        rowErrors[item.field] = `与「${previousAction}」重复：${parsed.combo}`;
+        rowErrors[previousField] = rowErrors[previousField] || `与「${item.action}」重复：${parsed.combo}`;
+        if (!firstError) firstError = `快捷键不能重复：${previousAction}与${item.action}都使用了 ${parsed.combo}。`;
+        continue;
+      }
+      seen.set(parsed.combo, item.field);
+    }
+    return { firstError, rowErrors };
+  };
+
   const save = async (event: Event) => {
     event.preventDefault();
+    setRecordingHotkey("");
     const autoSelectError = validateAutoSelect();
     const inboundError = validateInboundAuth();
     const loadBalanceError = validateLoadBalance();
-    const validationError = autoSelectError || inboundError || loadBalanceError;
+    const hotkeys = collectHotkeyErrors();
+    const hotkeyError = hotkeys.firstError;
+    const validationError = autoSelectError || inboundError || loadBalanceError || hotkeyError;
     if (validationError) {
       if (inboundError) {
         setClientExpanded(true);
@@ -413,6 +642,11 @@ export default function SettingsPage(props: SettingsProps) {
       if (autoSelectError || loadBalanceError) {
         setAutoSelectExpanded(true);
         writeSectionState("fastv.settings.autoSelectOpen", true);
+      }
+      if (hotkeyError) {
+        setHotkeyErrors(hotkeys.rowErrors);
+        setIntegrationExpanded(true);
+        writeSectionState("fastv.settings.integrationOpen", true);
       }
       setMessage("");
       setError(validationError);
@@ -423,6 +657,12 @@ export default function SettingsPage(props: SettingsProps) {
     setMessage("");
     try {
       const input: Settings = { ...settings() };
+      // Persist the canonical Ctrl+Alt+Shift+Win+Key form (the backend does the
+      // same normalization); an empty value keeps the action disabled.
+      for (const item of globalHotkeyActions) {
+        const raw = input[item.field].trim();
+        input[item.field] = raw ? parseHotkeyCombo(raw).combo : "";
+      }
       if (!proxyModeDirty()) {
         // Merge the freshest proxy mode so a top-bar switch made after this page
         // mounted is not reverted by an unrelated settings save.
@@ -432,6 +672,8 @@ export default function SettingsPage(props: SettingsProps) {
       const saved = await SettingsService.Save(input);
       setSettings(saved);
       setProxyModeDirty(false);
+      setHotkeyErrors(createHotkeyErrors());
+      setRecordingHotkey("");
       props.onSaved(saved);
       setMessage("设置已保存。");
       if (saved.tunMode && !elevated()) {
@@ -453,6 +695,8 @@ export default function SettingsPage(props: SettingsProps) {
     try {
       const resetSettings = await SettingsService.Reset();
       setSettings(resetSettings);
+      setHotkeyErrors(createHotkeyErrors());
+      setRecordingHotkey("");
       props.onSaved(resetSettings);
       setMessage("已恢复默认设置。");
     } catch (err) {
@@ -524,6 +768,72 @@ export default function SettingsPage(props: SettingsProps) {
       setBackupError(`导入备份失败：${errorMessage(err)}`);
     } finally {
       setBackupBusy("");
+    }
+  };
+
+  // Clearing the cloud result before every WebDAV operation keeps a stale
+  // remote URL or restore summary from being mistaken for the new outcome.
+  const clearWebdavResult = () => {
+    setWebdavMessage("");
+    setWebdavError("");
+    setWebdavRemoteUrl("");
+    setWebdavRestoreResult(null);
+  };
+
+  const testWebdav = async () => {
+    if (webdavBusy()) return;
+    setWebdavBusy("test");
+    clearWebdavResult();
+    try {
+      await BackupService.WebDAVTest();
+      setWebdavMessage("连接测试成功：WebDAV 服务器可访问，且账号具备写入备份目录的权限。");
+    } catch (err) {
+      setWebdavError(`测试连接失败：${errorMessage(err)}`);
+    } finally {
+      setWebdavBusy("");
+    }
+  };
+
+  const uploadWebdav = async () => {
+    if (webdavBusy()) return;
+    setWebdavBusy("upload");
+    clearWebdavResult();
+    try {
+      const remoteUrl = await BackupService.WebDAVUpload();
+      setWebdavRemoteUrl(remoteUrl);
+      setWebdavMessage("备份已上传到云端 WebDAV 服务器。");
+    } catch (err) {
+      setWebdavError(`上传到云端失败：${errorMessage(err)}`);
+    } finally {
+      setWebdavBusy("");
+    }
+  };
+
+  const restoreWebdav = async () => {
+    if (webdavBusy()) return;
+    const confirmed = window.confirm(
+      "从云端恢复会使用 WebDAV 服务器上的备份覆盖当前全部配置（设置、订阅、节点与路由规则），且无法撤销。确定继续吗？",
+    );
+    if (!confirmed) return;
+    setWebdavBusy("download");
+    clearWebdavResult();
+    try {
+      const result = await BackupService.WebDAVDownload();
+      setWebdavRestoreResult(result);
+      setWebdavMessage("云端备份已恢复，请重启代理后生效。");
+      // The restore replaced the persisted settings; reload the form so it does
+      // not keep showing pre-restore values.
+      try {
+        const restored = await SettingsService.Get();
+        setSettings(restored);
+        props.onSaved(restored);
+      } catch {
+        // The restore itself succeeded; a stale form is better than a false error.
+      }
+    } catch (err) {
+      setWebdavError(`从云端恢复失败：${errorMessage(err)}`);
+    } finally {
+      setWebdavBusy("");
     }
   };
 
@@ -1578,7 +1888,7 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="setting-block">
               <div class="setting-label">
                 <strong>全局快捷键</strong>
-                <small>在任意应用中都能触发代理操作；修改开关后需要保存设置才会生效。</small>
+                <small>在任意应用中都能触发代理操作；点击「录制」后按下组合键，修改开关或组合后需要保存设置才会生效。</small>
               </div>
               <label class="switch-row">
                 <span>
@@ -1589,30 +1899,78 @@ export default function SettingsPage(props: SettingsProps) {
                   <input
                     type="checkbox"
                     checked={settings().hotkeysEnabled}
-                    onChange={(event) => update("hotkeysEnabled", event.currentTarget.checked)}
+                    onChange={(event) => {
+                      const enabled = event.currentTarget.checked;
+                      update("hotkeysEnabled", enabled);
+                      if (!enabled) {
+                        setRecordingHotkey("");
+                        setHotkeyErrors(createHotkeyErrors());
+                      }
+                    }}
                   />
                   <span class="switch-track"><span class="switch-thumb" /></span>
                 </span>
               </label>
 
               <ul classList={{ "hotkey-list": true, disabled: !settings().hotkeysEnabled }} aria-label="全局快捷键列表">
-                {globalHotkeys.map((item) => (
-                  <li class="hotkey-row">
-                    <span class="hotkey-action">{item.action}</span>
-                    <span class="hotkey-keys">
-                      <For each={item.keys}>
-                        {(key, index) => (
-                          <>
-                            <Show when={index() > 0}>
-                              <span class="hotkey-plus" aria-hidden="true">+</span>
+                <For each={globalHotkeyActions}>
+                  {(item) => {
+                    const keys = () => hotkeyDisplayKeys(settings()[item.field]);
+                    const isRecording = () => recordingHotkey() === item.field;
+                    const rowError = () => hotkeyErrors()[item.field];
+                    return (
+                      <li classList={{ "hotkey-row": true, recording: isRecording(), "has-error": !!rowError() }}>
+                        <span class="hotkey-row-main">
+                          <span class="hotkey-action">{item.action}</span>
+                          <span classList={{ "hotkey-keys": true, empty: keys().length === 0 }}>
+                            <Show when={keys().length > 0} fallback={<span class="hotkey-empty">未设置</span>}>
+                              <For each={keys()}>
+                                {(key, index) => (
+                                  <>
+                                    <Show when={index() > 0}>
+                                      <span class="hotkey-plus" aria-hidden="true">+</span>
+                                    </Show>
+                                    <kbd class="hotkey-key">{key}</kbd>
+                                  </>
+                                )}
+                              </For>
                             </Show>
-                            <kbd class="hotkey-key">{key}</kbd>
-                          </>
-                        )}
-                      </For>
-                    </span>
-                  </li>
-                ))}
+                          </span>
+                        </span>
+                        <span class="hotkey-row-controls">
+                          <button
+                            type="button"
+                            classList={{ "btn": true, "hotkey-record-btn": true, recording: isRecording() }}
+                            aria-pressed={isRecording()}
+                            aria-label={isRecording() ? `正在录制${item.action}快捷键` : `录制${item.action}快捷键`}
+                            disabled={!settings().hotkeysEnabled}
+                            onClick={() => {
+                              if (isRecording()) cancelHotkeyRecording();
+                              else startHotkeyRecording(item.field);
+                            }}
+                          >
+                            {isRecording() ? "按下快捷键…" : "录制"}
+                          </button>
+                          <button
+                            type="button"
+                            class="btn ghost compact hotkey-clear-btn"
+                            aria-label={`清除${item.action}快捷键`}
+                            disabled={!settings().hotkeysEnabled || (!settings()[item.field] && !isRecording())}
+                            onClick={() => clearHotkey(item.field)}
+                          >
+                            清除
+                          </button>
+                        </span>
+                        <Show when={isRecording()}>
+                          <span class="hotkey-row-hint" role="status" aria-live="polite">{hotkeyRecordingHint}</span>
+                        </Show>
+                        <Show when={rowError()}>
+                          <span class="hotkey-row-error" role="alert">{rowError()}</span>
+                        </Show>
+                      </li>
+                    );
+                  }}
+                </For>
               </ul>
 
               <p class="settings-note">
@@ -1826,7 +2184,7 @@ export default function SettingsPage(props: SettingsProps) {
               <span class="heading-icon"><Icon name="subscription" size={17} /></span>
               <div>
                 <h3>备份与恢复</h3>
-                <span>导出或导入完整配置（设置、订阅、节点与路由规则）</span>
+                <span>本地导出或导入完整配置，也可通过 WebDAV 备份到云端</span>
               </div>
             </div>
             <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
@@ -1879,6 +2237,110 @@ export default function SettingsPage(props: SettingsProps) {
                 </div>
               )}
             </Show>
+
+            <div class="webdav-backup">
+              <div class="webdav-heading">
+                <strong>WebDAV 云备份</strong>
+                <small>把完整配置备份到 WebDAV 服务器，或从云端备份恢复；地址、账号与路径随「保存设置」一并保存。</small>
+              </div>
+
+              <div class="settings-grid webdav-grid">
+                <label>
+                  <span>服务器地址</span>
+                  <input
+                    value={settings().webdavUrl}
+                    onInput={(event) => update("webdavUrl", event.currentTarget.value)}
+                    placeholder="https://dav.example.com/remote.php/dav/files/user/"
+                    spellcheck={false}
+                    autocomplete="off"
+                  />
+                  <small>WebDAV 根目录，必须以 http:// 或 https:// 开头。</small>
+                </label>
+                <label>
+                  <span>用户名</span>
+                  <input
+                    value={settings().webdavUsername}
+                    onInput={(event) => update("webdavUsername", event.currentTarget.value)}
+                    placeholder="WebDAV 账号"
+                    spellcheck={false}
+                    autocomplete="off"
+                  />
+                  <small>使用 Basic 认证；部分服务器允许匿名访问。</small>
+                </label>
+                <label>
+                  <span>密码 / 应用专用密码</span>
+                  <input
+                    type="password"
+                    value={settings().webdavPassword}
+                    onInput={(event) => update("webdavPassword", event.currentTarget.value)}
+                    placeholder="建议填写应用专用密码"
+                    autocomplete="new-password"
+                  />
+                  <small>凭据随设置保存在本地配置文件中，请勿使用主账号密码。</small>
+                </label>
+                <label>
+                  <span>远端备份路径</span>
+                  <input
+                    value={settings().webdavPath}
+                    onInput={(event) => update("webdavPath", event.currentTarget.value)}
+                    placeholder="/FastV/fastv-backup.json"
+                    spellcheck={false}
+                    autocomplete="off"
+                  />
+                  <small>相对服务器地址的路径，父目录不存在时会自动创建。</small>
+                </label>
+              </div>
+
+              <div class="webdav-actions">
+                <button class="btn secondary" type="button" onClick={testWebdav} disabled={webdavBusy() !== ""}>
+                  <Icon name="refresh" size={14} /> {webdavBusy() === "test" ? "测试中..." : "测试连接"}
+                </button>
+                <button class="btn secondary" type="button" onClick={uploadWebdav} disabled={webdavBusy() !== ""}>
+                  <Icon name="external" size={14} /> {webdavBusy() === "upload" ? "上传中..." : "上传到云端"}
+                </button>
+                <button class="btn secondary" type="button" onClick={restoreWebdav} disabled={webdavBusy() !== ""}>
+                  <Icon name="subscription" size={14} /> {webdavBusy() === "download" ? "恢复中..." : "从云端恢复"}
+                </button>
+              </div>
+
+              <Show when={webdavMessage()}>
+                <div class="alert success settings-inline-alert">
+                  <span class="alert-message"><Icon name="check" size={15} /> {webdavMessage()}</span>
+                </div>
+              </Show>
+              <Show when={webdavError()}>
+                <div class="alert error settings-inline-alert">
+                  <span class="alert-message"><Icon name="alert" size={15} /> {webdavError()}</span>
+                </div>
+              </Show>
+              <Show when={webdavRemoteUrl()}>
+                <div class="webdav-remote-url">
+                  <span>远端地址</span>
+                  <code>{webdavRemoteUrl()}</code>
+                </div>
+              </Show>
+              <Show when={webdavRestoreResult()}>
+                {(result) => (
+                  <div class="backup-result webdav-restore-result">
+                    <div class="backup-result-head">
+                      <Icon name="check" size={14} />
+                      <strong>云端备份已恢复</strong>
+                    </div>
+                    <div class="backup-result-grid">
+                      <div><span>订阅</span><strong>{result().restoredSubscriptions}</strong></div>
+                      <div><span>节点</span><strong>{result().restoredNodes}</strong></div>
+                      <div><span>路由规则</span><strong>{result().restoredRules}</strong></div>
+                    </div>
+                    <p class="backup-result-hint">已覆盖当前配置；代理不会自动重启，请重启代理后生效。</p>
+                  </div>
+                )}
+              </Show>
+
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>WebDAV 凭据保存在本地配置文件中，建议使用应用专用密码并优先填写 HTTPS 地址；修改服务器地址、账号或路径后，需先点击「保存设置」，再执行测试、上传或恢复。</span>
+              </p>
+            </div>
 
             <p class="settings-note">
               <Icon name="alert" size={13} />

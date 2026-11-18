@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/MardukPrime/Fast-V/internal/hotkey"
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
@@ -51,6 +52,18 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	input.TestURL = strings.TrimSpace(input.TestURL)
 	input.InboundUsername = strings.TrimSpace(input.InboundUsername)
 	input.InboundPassword = strings.TrimSpace(input.InboundPassword)
+	// Global shortcuts are optional: an empty value means the action has no
+	// shortcut (disabled). Non-empty values must be valid, unique combinations;
+	// they are rewritten into the canonical "Ctrl+Alt+Shift+Win+Key" form so the
+	// stored settings stay stable and comparable.
+	if err := hotkey.ValidateSettingsCombos(input); err != nil {
+		return model.Settings{}, err
+	}
+	normalizedHotkeys, err := hotkey.NormalizeSettingsCombos(input)
+	if err != nil {
+		return model.Settings{}, err
+	}
+	input = normalizedHotkeys
 	if input.LayoutMode != "sidebar" && input.LayoutMode != "dock" {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}

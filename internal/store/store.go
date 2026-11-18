@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 6
+const storeVersion = 7
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -127,6 +127,9 @@ func DefaultSettings() Settings {
 		CloseToTray:           false,
 		MinimizeToTray:        false,
 		HotkeysEnabled:        true,
+		HotkeyToggleProxy:     "Ctrl+Shift+F",
+		HotkeyCycleMode:       "Ctrl+Shift+M",
+		HotkeyNextNode:        "Ctrl+Shift+N",
 		AutoCheckUpdate:       true,
 		StatsEnabled:          true,
 
@@ -136,6 +139,7 @@ func DefaultSettings() Settings {
 		FailoverEnabled:           false,
 		LoadBalanceEnabled:        false,
 		LoadBalanceMode:           "leastPing",
+		WebDavPath:                "/FastV/fastv-backup.json",
 	}
 }
 
@@ -230,6 +234,21 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Version < 6 && loaded.Settings.LayoutMode == "sidebar" {
 		loaded.Settings.LayoutMode = "dock"
 	}
+	// v7 added configurable hotkey combinations and WebDAV backup fields.
+	if loaded.Version < 7 {
+		if loaded.Settings.HotkeyToggleProxy == "" {
+			loaded.Settings.HotkeyToggleProxy = defaults.Settings.HotkeyToggleProxy
+		}
+		if loaded.Settings.HotkeyCycleMode == "" {
+			loaded.Settings.HotkeyCycleMode = defaults.Settings.HotkeyCycleMode
+		}
+		if loaded.Settings.HotkeyNextNode == "" {
+			loaded.Settings.HotkeyNextNode = defaults.Settings.HotkeyNextNode
+		}
+		if loaded.Settings.WebDavPath == "" {
+			loaded.Settings.WebDavPath = defaults.Settings.WebDavPath
+		}
+	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion
 	}
@@ -297,6 +316,9 @@ func normalizeSettings(value, fallback Settings) Settings {
 	}
 	if value.LoadBalanceMode == "" {
 		value.LoadBalanceMode = fallback.LoadBalanceMode
+	}
+	if value.WebDavPath == "" {
+		value.WebDavPath = fallback.WebDavPath
 	}
 	if value.UpdateIntervalMinutes == 0 {
 		value.UpdateIntervalMinutes = fallback.UpdateIntervalMinutes

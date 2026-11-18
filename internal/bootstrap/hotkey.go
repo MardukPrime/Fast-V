@@ -4,24 +4,30 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/hotkey"
 	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/platform"
 	proxyservice "github.com/MardukPrime/Fast-V/internal/service/proxy"
 	settingsservice "github.com/MardukPrime/Fast-V/internal/service/settings"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
 
-// startGlobalHotkeys wires the global keyboard shortcuts to the proxy service.
+// startGlobalHotkeys wires the configurable global keyboard shortcuts to the
+// proxy service and keeps the Win32 registrations in sync with the settings.
 //
-// Registration is skipped when the user disabled the shortcuts in the settings;
-// after a successful registration the enabled switch is checked again on every
-// key press, so turning the hotkeys off takes effect immediately (turning them
-// back on works without a restart too, because the registration itself stays in
-// place). Registration failures, for example when another program already owns
-// the shortcut, are written to the in-app log instead of aborting the startup.
+// The three combinations live in the settings (HotkeyToggleProxy,
+// HotkeyCycleMode, HotkeyNextNode); an empty value disables that action and
+// HotkeysEnabled turns every shortcut off. Registration is skipped while the
+// shortcuts are disabled. Every successful settings save broadcasts
+// "settings:changed", and the manager re-registers the shortcuts when (and only
+// when) the effective combination table changed, so editing a shortcut works
+// without an application restart. Registration failures, for example when
+// another program already owns the shortcut, are written to the in-app log
+// instead of aborting the startup.
 func startGlobalHotkeys(
 	st *store.Store,
 	settingsSvc *settingsservice.SettingsService,
@@ -30,36 +36,231 @@ func startGlobalHotkeys(
 	if st == nil || settingsSvc == nil || proxySvc == nil {
 		return
 	}
-	if !st.Settings().HotkeysEnabled {
-		emitHotkeyLog("info", "全局快捷键已在设置中关闭，本次启动不注册（重新开启后需重启应用）")
+
+	manager := newGlobalHotkeyManager(st, settingsSvc, proxySvc)
+
+	// The event callback only queues the snapshot: the manager worker owns the
+	// Win32 registration lifecycle and never blocks the Wails event thread.
+	if app := application.Get(); app != nil {
+		app.Event.On("settings:changed", func(event *application.CustomEvent) {
+			settings, ok := event.Data.(model.Settings)
+			if !ok {
+				return
+			}
+			manager.update(settings)
+		})
+		app.OnShutdown(manager.stop)
+	}
+	manager.update(st.Settings())
+}
+
+// globalHotkeyManager owns the lifecycle of the global shortcut registration.
+//
+// A single worker goroutine performs every registration change. Wails event
+// callbacks submit settings snapshots through update; the worker coalesces them
+// and, before registering a new table, cancels the current message loop and
+// waits for it to exit so the old shortcuts are released before the
+// re-registration starts (RegisterHotKey would otherwise fail with "already in
+// use").
+type globalHotkeyManager struct {
+	st          *store.Store
+	settingsSvc *settingsservice.SettingsService
+	proxySvc    *proxyservice.ProxyService
+
+	updates  chan model.Settings
+	stopCh   chan struct{}
+	stopOnce sync.Once
+}
+
+func newGlobalHotkeyManager(
+	st *store.Store,
+	settingsSvc *settingsservice.SettingsService,
+	proxySvc *proxyservice.ProxyService,
+) *globalHotkeyManager {
+	manager := &globalHotkeyManager{
+		st:          st,
+		settingsSvc: settingsSvc,
+		proxySvc:    proxySvc,
+		updates:     make(chan model.Settings, 8),
+		stopCh:      make(chan struct{}),
+	}
+	go manager.run()
+	return manager
+}
+
+// update queues a settings snapshot without blocking the caller (the Wails
+// event thread or the startup path). Only the newest pending snapshot matters.
+func (m *globalHotkeyManager) update(settings model.Settings) {
+	if m == nil {
 		return
 	}
-
-	handler := func(id int) {
-		handleGlobalHotkey(st, settingsSvc, proxySvc, id)
+	select {
+	case m.updates <- settings:
+		return
+	default:
 	}
-	go func() {
-		// The message loop runs for the application lifetime. Cancelling the
-		// context on shutdown makes the platform layer post WM_QUIT to the hotkey
-		// thread and unregister every shortcut cleanly instead of relying on
-		// process exit; the deferred cancel covers the failure paths as well.
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		if app := application.Get(); app != nil {
-			app.OnShutdown(cancel)
+	// The queue is full: drop the stale pending snapshot and try once more.
+	select {
+	case <-m.updates:
+	default:
+	}
+	select {
+	case m.updates <- settings:
+	default:
+	}
+}
+
+// stop ends the worker and releases the current registration. It is wired to
+// the application shutdown and is safe to call more than once.
+func (m *globalHotkeyManager) stop() {
+	if m == nil {
+		return
+	}
+	m.stopOnce.Do(func() { close(m.stopCh) })
+}
+
+// run applies the requested shortcut tables until the application shuts down.
+func (m *globalHotkeyManager) run() {
+	var (
+		cancel context.CancelFunc
+		done   chan struct{}
+		// signature describes the shortcuts currently registered; an empty
+		// signature means "nothing registered".
+		signature string
+		first     = true
+	)
+
+	// stopRegistration tears the current message loop down and waits until the
+	// platform layer has unregistered its shortcuts.
+	stopRegistration := func() {
+		if cancel != nil {
+			cancel()
 		}
-		// Run blocks while the message loop is active; it returns only when the
-		// shortcuts could not be registered or the context was cancelled.
-		if err := hotkey.Run(ctx, hotkey.DefaultBindings(), handler); err != nil {
-			emitHotkeyLog("error", "注册全局快捷键失败："+err.Error())
+		if done != nil {
+			<-done
 		}
-	}()
+		cancel, done = nil, nil
+		signature = ""
+	}
+	defer stopRegistration()
+
+	for {
+		var settings model.Settings
+		select {
+		case <-m.stopCh:
+			return
+		case settings = <-m.updates:
+		}
+
+		// Collapse a burst of settings changes into the newest snapshot.
+		for coalescing := true; coalescing; {
+			select {
+			case newer := <-m.updates:
+				settings = newer
+			default:
+				coalescing = false
+			}
+		}
+
+		bindings, desired, buildErr := desiredHotkeyBindings(settings)
+		invalid := buildErr != nil
+		if invalid {
+			emitHotkeyLog("error", "全局快捷键组合无效，已停止注册："+buildErr.Error())
+			bindings, desired = nil, ""
+		}
+		// Unrelated settings changes (proxy mode, tray options, ...) keep the
+		// same shortcut table and must not interrupt the message loop.
+		if !first && desired == signature {
+			continue
+		}
+		wasFirst := first
+		first = false
+
+		stopRegistration()
+		signature = desired
+		if len(bindings) == 0 {
+			switch {
+			case invalid:
+				// The error above is the useful log entry.
+			case !settings.HotkeysEnabled:
+				emitHotkeyLog("info", "全局快捷键已在设置中关闭，已注销快捷键（可在设置中重新开启）")
+			default:
+				emitHotkeyLog("info", "没有配置任何全局快捷键，本次不注册")
+			}
+			continue
+		}
+
+		ctx, newCancel := context.WithCancel(context.Background())
+		newDone := make(chan struct{})
+		cancel, done = newCancel, newDone
+		go func(bindings []platform.HotkeyBinding, ctx context.Context, done chan struct{}) {
+			defer close(done)
+			// A non-nil error with a live context means registration failed,
+			// for example because another program owns the shortcut.
+			if err := hotkey.Run(ctx, bindings, m.handle); err != nil && ctx.Err() == nil {
+				emitHotkeyLog("error", "注册全局快捷键失败："+err.Error())
+			}
+		}(bindings, ctx, newDone)
+		if !wasFirst {
+			emitHotkeyLog("info", "全局快捷键已更新："+describeHotkeyBindings(bindings))
+		}
+	}
+}
+
+// handle dispatches one shortcut press; it runs on the platform message-loop
+// thread.
+func (m *globalHotkeyManager) handle(id int) {
+	handleGlobalHotkey(m.st, m.settingsSvc, m.proxySvc, id)
+}
+
+// desiredHotkeyBindings resolves the shortcut table requested by the settings
+// and a stable signature of it. The signature lets the manager skip
+// re-registration when an unrelated setting changed. When the shortcuts are
+// disabled, or every action has an empty combination, both results are empty.
+func desiredHotkeyBindings(settings model.Settings) ([]platform.HotkeyBinding, string, error) {
+	if !settings.HotkeysEnabled {
+		return nil, "", nil
+	}
+	bindings, err := hotkey.BindingsFromSettings(settings)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(bindings) == 0 {
+		return nil, "", nil
+	}
+	return bindings, hotkeyBindingsSignature(bindings), nil
+}
+
+// hotkeyBindingsSignature renders the binding table in canonical form.
+func hotkeyBindingsSignature(bindings []platform.HotkeyBinding) string {
+	parts := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		parts = append(parts, fmt.Sprintf("%d=%s", binding.ID, bindingCombo(binding)))
+	}
+	return strings.Join(parts, "|")
+}
+
+// describeHotkeyBindings renders a log friendly shortcut list such as
+// "切换代理启停=Ctrl+Shift+F，循环代理模式=Ctrl+Shift+M".
+func describeHotkeyBindings(bindings []platform.HotkeyBinding) string {
+	labels := hotkey.Labels()
+	parts := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		parts = append(parts, labels[binding.ID]+"="+bindingCombo(binding))
+	}
+	return strings.Join(parts, "，")
+}
+
+// bindingCombo formats the key part of a registered binding.
+func bindingCombo(binding platform.HotkeyBinding) string {
+	return hotkey.FormatCombo(platform.HotkeyBindingSpec{Modifiers: binding.Modifiers, Key: binding.Key})
 }
 
 // handleGlobalHotkey executes one shortcut action. It re-reads the settings on
-// every key press so disabling the hotkeys applies without a restart, and it
-// recovers from panics because a hotkey handler runs on the message-loop thread
-// and must never take the process down.
+// every key press because the re-registration triggered by a settings save runs
+// asynchronously, so this check keeps a just-disabled switch effective
+// immediately. It also recovers from panics because a hotkey handler runs on
+// the message-loop thread and must never take the process down.
 func handleGlobalHotkey(
 	st *store.Store,
 	settingsSvc *settingsservice.SettingsService,

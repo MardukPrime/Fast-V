@@ -11,6 +11,7 @@
 | proxy:log | LogEntry | 日志行 | Xray stdout/stderr 和运行状态日志 |
 | proxy:traffic | TrafficStats | 每 2 秒（代理运行中） | 上下行窗口增量、会话累计与实时速率 |
 | app:update | UpdateInfo | 启动自动检查 / 手动检查后 | 应用更新检查结果 |
+| settings:changed | Settings | 设置保存 / 备份恢复后 | 托盘模式勾选、全局快捷键与顶栏同步 |
 | subscriptions:changed | 无 | 自动更新后 | 订阅自动更新完成 |
 
 ## 计划事件

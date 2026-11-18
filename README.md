@@ -291,7 +291,8 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 网络诊断与 10 项一键自检
 - 运行日志（筛选、暂停、导出）
 - 配置备份与恢复、开机自启、系统托盘（代理模式切换与重启代理）、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
-- 全局快捷键（Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换代理模式、Ctrl+Shift+N 下一个启用节点）
+- 全局快捷键（设置页可录制自定义组合，默认 Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换模式、Ctrl+Shift+N 下一个节点）
+- WebDAV 云备份与恢复（兼容 Basic Auth，测试连接 / 上传 / 恢复）
 - 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
 
 当前仅支持 Xray-core。

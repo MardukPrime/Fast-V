@@ -15,12 +15,25 @@ import (
 )
 
 // Global hotkey modifier flags, matching the Win32 RegisterHotKey fsModifiers
-// values (MOD_ALT / MOD_CONTROL / MOD_SHIFT).
+// values (MOD_ALT / MOD_CONTROL / MOD_SHIFT / MOD_WIN).
 const (
 	ModAlt     uint32 = 0x0001
 	ModControl uint32 = 0x0002
 	ModShift   uint32 = 0x0004
+	ModWin     uint32 = 0x0008
 )
+
+// HotkeyBindingSpec describes the action-independent part of a shortcut: the
+// modifier flags plus the main key. The hotkey package parses the user
+// configured combinations into this type before an action ID is attached to
+// each of them.
+type HotkeyBindingSpec struct {
+	// Modifiers is a combination of the ModAlt / ModControl / ModShift / ModWin
+	// flags.
+	Modifiers uint32
+	// Key is a Windows virtual-key code such as 'F' (0x46) or VK_F1 (0x70).
+	Key uint32
+}
 
 // HotkeyBinding describes one system-wide keyboard shortcut.
 type HotkeyBinding struct {
@@ -28,7 +41,8 @@ type HotkeyBinding struct {
 	// among the registered bindings and belong to the application-defined range
 	// 1..0xBFFF.
 	ID int
-	// Modifiers is a combination of the ModAlt / ModControl / ModShift flags.
+	// Modifiers is a combination of the ModAlt / ModControl / ModShift / ModWin
+	// flags.
 	Modifiers uint32
 	// Key is a Windows virtual-key code such as 'F' (0x46) or VK_F1 (0x70).
 	Key uint32
@@ -206,6 +220,9 @@ func bindingName(binding HotkeyBinding) string {
 	}
 	if binding.Modifiers&ModShift != 0 {
 		parts = append(parts, "Shift")
+	}
+	if binding.Modifiers&ModWin != 0 {
+		parts = append(parts, "Win")
 	}
 	if key := virtualKeyName(binding.Key); key != "" {
 		parts = append(parts, key)
