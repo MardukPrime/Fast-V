@@ -164,7 +164,7 @@ jobs:
   macos:
     name: macOS (arm64 + amd64)
     needs: [meta, frontend]
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -181,20 +181,6 @@ jobs:
           name: frontend-dist
           path: frontend/dist
 
-      - name: Build macOS icon
-        env:
-          APP_VERSION: ${{ needs.meta.outputs.version }}
-        run: |
-          set -euo pipefail
-          mkdir -p "${RUNNER_TEMP}/icon.iconset"
-          for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
-            size="${spec%% *}"
-            name="${spec#* }"
-            sips -z "${size}" "${size}" assets/appicon.png --out "${RUNNER_TEMP}/icon.iconset/${name}.png" >/dev/null
-          done
-          iconutil -c icns "${RUNNER_TEMP}/icon.iconset" -o "${RUNNER_TEMP}/appicon.icns"
-          ls -la "${RUNNER_TEMP}/appicon.icns"
-
       - name: Build and package macOS apps
         env:
           APP_VERSION: ${{ needs.meta.outputs.version }}
@@ -209,7 +195,7 @@ jobs:
               -ldflags "-w -s -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=${APP_VERSION} -X github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=${GITHUB_SHA} -X github.com/MardukPrime/Fast-V/internal/buildinfo.BuildDate=${build_date}" \
               -o "stage/FastV.app/Contents/MacOS/Fast-V" .
             cp LICENSE README.md stage/
-            cp "${RUNNER_TEMP}/appicon.icns" "stage/FastV.app/Contents/Resources/appicon.icns"
+            cp assets/appicon.icns "stage/FastV.app/Contents/Resources/appicon.icns"
             cat > "stage/FastV.app/Contents/Info.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -231,7 +217,6 @@ jobs:
           </dict>
           </plist>
           PLIST
-            codesign --force --deep --sign - "stage/FastV.app" >/dev/null 2>&1 || true
             (cd stage && zip -q -r -X "../dist/FastV-${APP_VERSION}-macos-${arch}.zip" FastV.app LICENSE README.md)
             echo "packaged macos/${arch}"
           done
