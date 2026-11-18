@@ -38,6 +38,7 @@ type Settings struct {
 	XrayDNSStrategy           string `json:"xrayDnsStrategy"`
 	XrayDNSServers            string `json:"xrayDnsServers"`
 	XrayDomainStrategy        string `json:"xrayDomainStrategy"`
+	ConfigOverride            string `json:"configOverride"`
 	XrayTunMTU                int    `json:"xrayTunMtu"`
 	XraySockoptTFO            bool   `json:"xraySockoptTfo"`
 	XraySockoptMPTCP          bool   `json:"xraySockoptMptcp"`
@@ -92,23 +93,31 @@ type Subscription struct {
 	TotalBytes     int64  `json:"totalBytes"`
 	ExpireAt       int64  `json:"expireAt"`
 	UsageUpdatedAt string `json:"usageUpdatedAt"`
+	AutoUpdate     bool   `json:"autoUpdate"`
+	// UpdateIntervalMinutes is this subscription's own refresh interval. Zero
+	// means "use the global Settings.UpdateIntervalMinutes".
+	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
+	UserAgent             string `json:"userAgent"`
 }
 
 // SubscriptionView is the frontend-safe subscription representation.
 type SubscriptionView struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Host           string `json:"host"`
-	Enabled        bool   `json:"enabled"`
-	CreatedAt      string `json:"createdAt"`
-	UpdatedAt      string `json:"updatedAt"`
-	LastError      string `json:"lastError"`
-	NodeCount      int    `json:"nodeCount"`
-	UploadBytes    int64  `json:"uploadBytes"`
-	DownloadBytes  int64  `json:"downloadBytes"`
-	TotalBytes     int64  `json:"totalBytes"`
-	ExpireAt       int64  `json:"expireAt"`
-	UsageUpdatedAt string `json:"usageUpdatedAt"`
+	ID                    string `json:"id"`
+	Name                  string `json:"name"`
+	Host                  string `json:"host"`
+	Enabled               bool   `json:"enabled"`
+	CreatedAt             string `json:"createdAt"`
+	UpdatedAt             string `json:"updatedAt"`
+	LastError             string `json:"lastError"`
+	NodeCount             int    `json:"nodeCount"`
+	UploadBytes           int64  `json:"uploadBytes"`
+	DownloadBytes         int64  `json:"downloadBytes"`
+	TotalBytes            int64  `json:"totalBytes"`
+	ExpireAt              int64  `json:"expireAt"`
+	UsageUpdatedAt        string `json:"usageUpdatedAt"`
+	AutoUpdate            bool   `json:"autoUpdate"`
+	UpdateIntervalMinutes int    `json:"updateIntervalMinutes"`
+	UserAgent             string `json:"userAgent"`
 }
 
 // SubscriptionInput is the payload for adding a subscription.
@@ -306,11 +315,14 @@ func SubscriptionViewFrom(sub Subscription) SubscriptionView {
 		LastError: sub.LastError,
 		NodeCount: sub.NodeCount,
 
-		UploadBytes:    sub.UploadBytes,
-		DownloadBytes:  sub.DownloadBytes,
-		TotalBytes:     sub.TotalBytes,
-		ExpireAt:       sub.ExpireAt,
-		UsageUpdatedAt: sub.UsageUpdatedAt,
+		UploadBytes:           sub.UploadBytes,
+		DownloadBytes:         sub.DownloadBytes,
+		TotalBytes:            sub.TotalBytes,
+		ExpireAt:              sub.ExpireAt,
+		UsageUpdatedAt:        sub.UsageUpdatedAt,
+		AutoUpdate:            sub.AutoUpdate,
+		UpdateIntervalMinutes: sub.UpdateIntervalMinutes,
+		UserAgent:             sub.UserAgent,
 	}
 }
 

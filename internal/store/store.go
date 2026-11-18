@@ -18,7 +18,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 7
+const storeVersion = 8
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -114,6 +114,7 @@ func DefaultSettings() Settings {
 		XrayDNSStrategy:       "UseIP",
 		XrayDNSServers:        "1.1.1.1,8.8.8.8",
 		XrayDomainStrategy:    "IPIfNonMatch",
+		ConfigOverride:        "",
 		XrayTunMTU:            1500,
 		TestURL:               "https://www.gstatic.com/generate_204",
 		XrayAPIEnabled:        false,
@@ -249,10 +250,20 @@ func mergeStoreData(loaded storeData) storeData {
 			loaded.Settings.WebDavPath = defaults.Settings.WebDavPath
 		}
 	}
+	// v8 added per-subscription auto update options. Existing subscriptions opt
+	// in automatically; the UI can switch them off per subscription.
+	if loaded.Version < 8 {
+		for i := range loaded.Subscriptions {
+			loaded.Subscriptions[i].AutoUpdate = true
+		}
+	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion
 	}
 	loaded.Settings = normalizeSettings(loaded.Settings, defaults.Settings)
+	for i := range loaded.Subscriptions {
+		loaded.Subscriptions[i] = normalizeSubscription(loaded.Subscriptions[i])
+	}
 	if loaded.Subscriptions == nil {
 		loaded.Subscriptions = []Subscription{}
 	}
@@ -289,6 +300,16 @@ func mergeStoreData(loaded storeData) storeData {
 	}
 	return loaded
 }
+func normalizeSubscription(sub Subscription) Subscription {
+	sub.UserAgent = strings.TrimSpace(sub.UserAgent)
+	if sub.UpdateIntervalMinutes != 0 {
+		if sub.UpdateIntervalMinutes < 15 || sub.UpdateIntervalMinutes > 1440 {
+			sub.UpdateIntervalMinutes = 0
+		}
+	}
+	return sub
+}
+
 func normalizeSettings(value, fallback Settings) Settings {
 	if value.Theme == "" {
 		value.Theme = fallback.Theme
@@ -891,6 +912,31 @@ func (s *Store) SetSubscriptionError(id string, message string) error {
 		}
 		return errors.New("subscription not found")
 	})
+}
+
+// SetSubscriptionOptions updates the per-subscription auto update switch, the
+// optional per-subscription refresh interval and the custom User-Agent header.
+// An interval of zero means "use the global settings interval".
+func (s *Store) SetSubscriptionOptions(id string, autoUpdate bool, intervalMinutes int, userAgent string) (Subscription, error) {
+	var updated Subscription
+	err := s.update(func(data *storeData) error {
+		for i := range data.Subscriptions {
+			if data.Subscriptions[i].ID != id {
+				continue
+			}
+			data.Subscriptions[i].AutoUpdate = autoUpdate
+			data.Subscriptions[i].UpdateIntervalMinutes = intervalMinutes
+			data.Subscriptions[i].UserAgent = strings.TrimSpace(userAgent)
+			data.Subscriptions[i] = normalizeSubscription(data.Subscriptions[i])
+			updated = data.Subscriptions[i]
+			return nil
+		}
+		return errors.New("subscription not found")
+	})
+	if err != nil {
+		return Subscription{}, err
+	}
+	return updated, nil
 }
 
 func (s *Store) DeleteSubscription(id string) error {

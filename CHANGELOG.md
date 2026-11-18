@@ -8,6 +8,8 @@ All notable changes to FastV are documented here.
 
 - 多平台构建与发布：GitHub Actions 矩阵构建 Windows x64、macOS arm64/amd64（`FastV.app`）与 Linux amd64/arm64（tar.gz），统一生成 SHA-256 校验与平台说明；CI 增加跨平台编译校验（Wails purego 后端）。
 - 应用内更新检查按当前平台/架构选择 release 资产；自动安装仍仅限 Windows。
+- 配置覆写：设置页可编辑 JSON 对象，深合并进生成的 Xray 配置（对象递归合并、数组/标量替换、null 删除字段），保存时校验 JSON 与 128 KB 上限；已实测生成配置包含覆写字段。
+- 订阅独立自动更新：每个订阅的自动更新开关、独立更新间隔（或跟随全局）与自定义 User-Agent；调度器按各订阅到期时间逐个更新，更新请求携带订阅自己的 UA。
 - 分享链接导入 / 导出、剪贴板批量导入、手动节点、收藏、排序与批量启用/禁用/删除。
 - 节点与订阅二维码（Go 端生成 PNG data URL）。
 - 订阅格式兼容：分享链接、Base64 与 Clash / Meta YAML（vmess / vless / trojan / ss），不支持类型逐条跳过。

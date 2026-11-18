@@ -128,6 +128,16 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 	if err := validateJSONObject(input.XrayFinalMaskJSON); err != nil {
 		return model.Settings{}, fmt.Errorf("invalid finalmask JSON: %w", err)
 	}
+	// Config override is a user-supplied JSON object deep-merged into the
+	// generated Xray configuration. Only a top-level object is meaningful for
+	// merging; the size cap keeps a pasted document from bloating data.json.
+	input.ConfigOverride = strings.TrimSpace(input.ConfigOverride)
+	if len(input.ConfigOverride) > 128*1024 {
+		return model.Settings{}, errors.New("配置覆写过大（最多 128 KB）")
+	}
+	if err := validateJSONObject(input.ConfigOverride); err != nil {
+		return model.Settings{}, fmt.Errorf("配置覆写不是合法的 JSON 对象: %w", err)
+	}
 	input.XrayDNSServers = strings.TrimSpace(input.XrayDNSServers)
 	switch input.XrayDNSStrategy {
 	case "UseIP", "UseIPv4", "UseIPv6", "AsIs":

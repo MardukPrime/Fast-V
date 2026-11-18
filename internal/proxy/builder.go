@@ -60,7 +60,11 @@ func BuildConfig(node model.Node, settings model.Settings, customRules ...model.
 	apiEnabled := statsAPIEnabled(settings)
 	outbounds := []any{outbound, buildDirectOutbound(), buildBlockOutbound()}
 	routingConfig := buildRouting(settings.ProxyMode, customRules, apiEnabled, settings.XrayDomainStrategy)
-	return json.MarshalIndent(buildConfigDocument(settings, outbounds, routingConfig), "", "  ")
+	document := buildConfigDocument(settings, outbounds, routingConfig)
+	if err := mergeConfigOverride(document, settings.ConfigOverride); err != nil {
+		return nil, err
+	}
+	return json.MarshalIndent(document, "", "  ")
 }
 
 // BuildLoadBalanceConfig creates a complete Xray JSON configuration that routes
@@ -97,7 +101,55 @@ func BuildLoadBalanceConfig(nodes []model.Node, settings model.Settings, customR
 	routingConfig := buildLoadBalanceRouting(settings.ProxyMode, customRules, apiEnabled, settings.XrayDomainStrategy, strategy)
 	document := buildConfigDocument(settings, outbounds, routingConfig)
 	document["observatory"] = buildObservatory(settings)
+	if err := mergeConfigOverride(document, settings.ConfigOverride); err != nil {
+		return nil, err
+	}
 	return json.MarshalIndent(document, "", "  ")
+}
+
+// mergeConfigOverride deep-merges the user supplied JSON object override into a
+// generated configuration document. Generated objects are merged recursively,
+// arrays and scalars replace the generated value, and a null value removes the
+// key so advanced users can drop generated fields. An empty override is a
+// no-op. Only the top level of the override has to be a JSON object; the
+// settings service validates the same shape before saving.
+func mergeConfigOverride(document map[string]any, override string) error {
+	trimmed := strings.TrimSpace(override)
+	if trimmed == "" {
+		return nil
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return fmt.Errorf("invalid config override JSON: %w", err)
+	}
+	if parsed == nil {
+		return errors.New("config override must be a JSON object")
+	}
+	mergeConfigDocument(document, parsed)
+	return nil
+}
+
+// mergeConfigDocument recursively applies an already parsed override object to
+// a configuration document (or nested object) following the semantics of
+// mergeConfigOverride: objects merge, arrays and scalars replace, null deletes.
+func mergeConfigDocument(target map[string]any, override map[string]any) {
+	for key, value := range override {
+		if value == nil {
+			delete(target, key)
+			continue
+		}
+		overrideObject, isObject := value.(map[string]any)
+		if !isObject {
+			target[key] = value
+			continue
+		}
+		targetObject, isObject := target[key].(map[string]any)
+		if !isObject {
+			target[key] = overrideObject
+			continue
+		}
+		mergeConfigDocument(targetObject, overrideObject)
+	}
 }
 
 // buildConfigDocument assembles the shared parts of the Xray configuration. The

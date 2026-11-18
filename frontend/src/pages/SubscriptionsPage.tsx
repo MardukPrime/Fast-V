@@ -14,6 +14,37 @@ import "./subscriptions.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Per-subscription auto-update intervals offered by the options dialog. Zero
+// means "follow the global Settings.UpdateIntervalMinutes".
+const subscriptionIntervalOptions: number[] = [0, 30, 60, 120, 360, 720, 1440];
+
+function autoUpdateSummary(sub: SubscriptionView) {
+  if (!sub.autoUpdate) return t("sub.options.statusOff");
+  if (!sub.updateIntervalMinutes) return t("sub.options.statusGlobal");
+  return t("sub.options.statusInterval", { minutes: sub.updateIntervalMinutes });
+}
+
+/** Gear glyph for the per-subscription options action. */
+function GearIcon(props: { size?: number }) {
+  const size = () => props.size ?? 14;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 function formatTime(value: string) {
   if (!value) return t("sub.time.never");
   const date = new Date(value);
@@ -98,6 +129,14 @@ export default function SubscriptionsPage() {
   const [qrLoading, setQrLoading] = createSignal(false);
   const [qrError, setQRError] = createSignal("");
   const [qrTarget, setQRTarget] = createSignal<SubscriptionView | null>(null);
+  // Per-subscription advanced options dialog. The card view seeds the form;
+  // saving replaces that list item with the view returned by the backend.
+  const [optionsTarget, setOptionsTarget] = createSignal<SubscriptionView | null>(null);
+  const [optionsAutoUpdate, setOptionsAutoUpdate] = createSignal(true);
+  const [optionsInterval, setOptionsInterval] = createSignal(0);
+  const [optionsUserAgent, setOptionsUserAgent] = createSignal("");
+  const [optionsBusy, setOptionsBusy] = createSignal(false);
+  const [optionsError, setOptionsError] = createSignal("");
   let qrRequest = 0;
   let alive = true;
   let urlInput: HTMLInputElement | undefined;
@@ -291,6 +330,49 @@ export default function SubscriptionsPage() {
     if (sub) void openSubscriptionQRCode(sub);
   };
 
+  const openSubscriptionOptions = (sub: SubscriptionView) => {
+    setOptionsTarget(sub);
+    setOptionsAutoUpdate(Boolean(sub.autoUpdate));
+    setOptionsInterval(sub.updateIntervalMinutes ?? 0);
+    setOptionsUserAgent(sub.userAgent ?? "");
+    setOptionsError("");
+    setError("");
+    setMessage("");
+  };
+
+  const closeSubscriptionOptions = () => {
+    if (optionsBusy()) return;
+    setOptionsTarget(null);
+    setOptionsError("");
+  };
+
+  const saveSubscriptionOptions = async () => {
+    const target = optionsTarget();
+    if (!target || optionsBusy()) return;
+    setOptionsBusy(true);
+    setOptionsError("");
+    setError("");
+    setMessage("");
+    try {
+      const updated = await SubscriptionService.SetOptions(
+        target.id,
+        optionsAutoUpdate(),
+        optionsInterval(),
+        optionsUserAgent(),
+      );
+      // Update the row in place so the card's auto-update status refreshes
+      // immediately after saving, without reloading the whole list.
+      setSubscriptions((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setOptionsTarget(null);
+      setMessage(t("sub.options.saved", { name: updated.name }));
+    } catch (err) {
+      // Validation failures come back from the backend as Chinese messages.
+      setOptionsError(t("sub.options.saveFailed", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setOptionsBusy(false);
+    }
+  };
+
   return (
     <div class="page-stack">
       <section class="mini-stats subscription-stats">
@@ -407,6 +489,9 @@ export default function SubscriptionsPage() {
                               <span classList={{ "status-dot": true, online: sub.enabled }} />
                               {sub.enabled ? t("sub.card.enabled") : t("sub.card.disabled")}
                             </span>
+                            <span classList={{ "sub-chip": true, "sub-update-chip": true, "is-off": !sub.autoUpdate }}>
+                              <Icon name="refresh" size={12} /> {autoUpdateSummary(sub)}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -500,6 +585,15 @@ export default function SubscriptionsPage() {
                         <button class="btn secondary" type="button" onClick={() => openNodes(sub)}>
                           <Icon name="nodes" size={14} /> {t("sub.actions.nodes")}
                         </button>
+                        <button
+                          class="btn secondary"
+                          type="button"
+                          onClick={() => openSubscriptionOptions(sub)}
+                          aria-label={t("sub.options.aria", { name: sub.name })}
+                          title={t("sub.options.title")}
+                        >
+                          <GearIcon size={14} /> {t("sub.options.button")}
+                        </button>
                         <button class="btn secondary" type="button" onClick={() => updateSubscription(sub.id)} disabled={updating()}>
                           <Icon name="refresh" size={14} /> {updating() ? t("sub.actions.updating") : t("sub.actions.update")}
                         </button>
@@ -570,6 +664,103 @@ export default function SubscriptionsPage() {
             </div>
           </div>
         </div>
+      </Show>
+
+      <Show when={optionsTarget()}>
+        {(target) => (
+          <div
+            class="modal-backdrop"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeSubscriptionOptions();
+            }}
+          >
+            <div
+              class="modal sub-options-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("sub.options.titleWithName", { name: target().name })}
+            >
+              <div class="modal-heading">
+                <div>
+                  <h3>{t("sub.options.titleWithName", { name: target().name })}</h3>
+                  <span>{t("sub.options.subtitle")}</span>
+                </div>
+                <button class="icon-button" onClick={closeSubscriptionOptions} aria-label={t("sub.common.close")}>
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              <div class="sub-options-body">
+                <label class="switch-row">
+                  <span>
+                    <strong>{t("sub.options.autoUpdate")}</strong>
+                    <small>{t("sub.options.autoUpdateHint")}</small>
+                  </span>
+                  <span classList={{ "switch": true, on: optionsAutoUpdate() }}>
+                    <input
+                      type="checkbox"
+                      checked={optionsAutoUpdate()}
+                      disabled={optionsBusy()}
+                      onChange={(event) => setOptionsAutoUpdate(event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+                <div class="settings-grid sub-options-grid">
+                  <label>
+                    <span>{t("sub.options.interval")}</span>
+                    <select
+                      value={String(optionsInterval())}
+                      disabled={optionsBusy()}
+                      onChange={(event) => setOptionsInterval(Number(event.currentTarget.value))}
+                    >
+                      <For each={subscriptionIntervalOptions}>
+                        {(minutes) => (
+                          <option value={String(minutes)}>
+                            {minutes === 0
+                              ? t("sub.options.intervalFollowGlobal")
+                              : t("sub.options.intervalMinutes", { minutes })}
+                          </option>
+                        )}
+                      </For>
+                      <Show when={optionsInterval() !== 0 && !subscriptionIntervalOptions.includes(optionsInterval())}>
+                        <option value={String(optionsInterval())}>
+                          {t("sub.options.intervalMinutes", { minutes: optionsInterval() })}
+                        </option>
+                      </Show>
+                    </select>
+                    <small>{t("sub.options.intervalHint")}</small>
+                  </label>
+                  <label>
+                    <span>{t("sub.options.userAgent")}</span>
+                    <input
+                      value={optionsUserAgent()}
+                      onInput={(event) => setOptionsUserAgent(event.currentTarget.value)}
+                      placeholder={t("sub.options.userAgentPlaceholder")}
+                      spellcheck={false}
+                      autocomplete="off"
+                      maxlength={200}
+                      disabled={optionsBusy()}
+                    />
+                    <small>{t("sub.options.userAgentHint")}</small>
+                  </label>
+                </div>
+                <Show when={optionsError()}>
+                  <div class="alert error sub-options-error">
+                    <span class="alert-message"><Icon name="alert" size={14} /> {optionsError()}</span>
+                  </div>
+                </Show>
+              </div>
+              <div class="modal-footer">
+                <button class="btn ghost" type="button" onClick={closeSubscriptionOptions} disabled={optionsBusy()}>
+                  {t("sub.options.cancel")}
+                </button>
+                <button class="btn primary" type="button" onClick={() => void saveSubscriptionOptions()} disabled={optionsBusy()}>
+                  <Icon name="check" size={14} /> {optionsBusy() ? t("sub.options.saving") : t("sub.options.save")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </Show>
 
       <QRModal

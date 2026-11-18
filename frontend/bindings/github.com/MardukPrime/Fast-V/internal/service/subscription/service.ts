@@ -39,6 +39,15 @@ export function QRCode(id: string): $CancellablePromise<string> {
     return $Call.ByID(2752607638, id);
 }
 
+/**
+ * SetOptions updates the per-subscription automatic update switch, the optional
+ * refresh interval and the custom User-Agent header. intervalMinutes zero means
+ * "follow the global Settings.UpdateIntervalMinutes".
+ */
+export function SetOptions(id: string, autoUpdate: boolean, intervalMinutes: number, userAgent: string): $CancellablePromise<model$0.SubscriptionView> {
+    return $Call.ByID(1157962498, id, autoUpdate, intervalMinutes, userAgent);
+}
+
 export function Update(id: string): $CancellablePromise<model$0.SubscriptionView> {
     return $Call.ByID(4020208309, id);
 }

@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.3.0--pre.1-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.3.0--pre.2-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -296,6 +296,8 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 配置备份与恢复、开机自启、系统托盘（代理模式切换与重启代理）、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
 - 全局快捷键（设置页可录制自定义组合，默认 Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换模式、Ctrl+Shift+N 下一个节点）
 - WebDAV 云备份与恢复（兼容 Basic Auth，测试连接 / 上传 / 恢复）
+- 配置覆写：高级用户可用 JSON 深合并覆盖生成的 Xray 配置（对象递归合并、数组替换、null 删除字段，保存后重启代理生效）
+- 订阅独立自动更新：每个订阅可单独开关自动更新、设置独立更新间隔与自定义 User-Agent（默认跟随全局设置）
 - 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
 
 - 多平台构建：Windows x64、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
@@ -945,5 +946,261 @@ func TestLoadBalanceConfigPassesXrayValidation(t *testing.T) {
 				t.Fatalf("xray load balancing config validation failed: %v\n%s", err, output)
 			}
 		})
+	}
+}
+
+func overrideTestNode() model.Node {
+	return model.Node{Protocol: "trojan", Raw: "trojan://password@example.com:443#Override"}
+}
+
+func mustBuildOverrideConfig(t *testing.T, settings model.Settings) map[string]any {
+	t.Helper()
+	raw, err := BuildConfig(overrideTestNode(), settings)
+	if err != nil {
+		t.Fatalf("BuildConfig failed: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("generated config is not valid JSON: %v", err)
+	}
+	return config
+}
+
+func mustBuildLoadBalanceOverrideConfig(t *testing.T, nodes []model.Node, settings model.Settings) map[string]any {
+	t.Helper()
+	raw, err := BuildLoadBalanceConfig(nodes, settings)
+	if err != nil {
+		t.Fatalf("BuildLoadBalanceConfig failed: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("generated load balance config is not valid JSON: %v", err)
+	}
+	return config
+}
+
+func TestBuildConfigEmptyOverrideIsNoOp(t *testing.T) {
+	settings := testSettings()
+	settings.XrayDNSServers = "1.1.1.1, 9.9.9.9"
+	baseline, err := BuildConfig(overrideTestNode(), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, override := range []string{"", "   \n\t ", "{}"} {
+		withOverride := settings
+		withOverride.ConfigOverride = override
+		raw, err := BuildConfig(overrideTestNode(), withOverride)
+		if err != nil {
+			t.Fatalf("override %q: BuildConfig failed: %v", override, err)
+		}
+		if string(raw) != string(baseline) {
+			t.Fatalf("override %q changed the generated config:\nbaseline: %s\nwith override: %s", override, baseline, raw)
+		}
+	}
+}
+
+func TestBuildConfigOverrideDeepMergesObjects(t *testing.T) {
+	settings := testSettings()
+	settings.XrayDNSServers = "1.1.1.1, 9.9.9.9"
+	settings.XrayDomainStrategy = "IPIfNonMatch"
+	settings.ConfigOverride = `{
+		"log": {"loglevel": "warning", "error": "fastv-error.log"},
+		"dns": {"queryStrategy": "UseIPv6"}
+	}`
+	config := mustBuildOverrideConfig(t, settings)
+
+	logConfig, ok := config["log"].(map[string]any)
+	if !ok || logConfig["loglevel"] != "warning" || logConfig["error"] != "fastv-error.log" {
+		t.Fatalf("override did not deep merge log: %+v", config["log"])
+	}
+	dnsConfig, ok := config["dns"].(map[string]any)
+	if !ok {
+		t.Fatalf("dns config is missing: %+v", config)
+	}
+	if dnsConfig["queryStrategy"] != "UseIPv6" {
+		t.Fatalf("override did not replace dns query strategy: %+v", dnsConfig)
+	}
+	servers, _ := dnsConfig["servers"].([]any)
+	if len(servers) != 2 || servers[0] != "1.1.1.1" || servers[1] != "9.9.9.9" {
+		t.Fatalf("override removed the generated dns servers: %+v", dnsConfig)
+	}
+	routing, _ := config["routing"].(map[string]any)
+	if routing["domainStrategy"] != "IPIfNonMatch" {
+		t.Fatalf("unrelated generated routing fields must survive: %+v", routing)
+	}
+	if rules, _ := routing["rules"].([]any); len(rules) == 0 {
+		t.Fatalf("generated routing rules must survive: %+v", routing)
+	}
+	if inbounds, _ := config["inbounds"].([]any); len(inbounds) != 1 {
+		t.Fatalf("generated inbounds must survive: %+v", config["inbounds"])
+	}
+	if outbounds, _ := config["outbounds"].([]any); len(outbounds) != 3 {
+		t.Fatalf("generated outbounds must survive: %+v", config["outbounds"])
+	}
+}
+
+func TestBuildConfigOverrideReplacesArrays(t *testing.T) {
+	settings := testSettings()
+	settings.ConfigOverride = `{"routing": {"rules": [{"type": "field", "domain": ["full:example.org"], "outboundTag": "direct"}]}}`
+	config := mustBuildOverrideConfig(t, settings)
+
+	routing, _ := config["routing"].(map[string]any)
+	rules, _ := routing["rules"].([]any)
+	if len(rules) != 1 {
+		t.Fatalf("override must replace the routing rules array, got %+v", rules)
+	}
+	rule, _ := rules[0].(map[string]any)
+	if rule["type"] != "field" || rule["outboundTag"] != "direct" {
+		t.Fatalf("unexpected overridden rule: %+v", rule)
+	}
+	domains, _ := rule["domain"].([]any)
+	if len(domains) != 1 || domains[0] != "full:example.org" {
+		t.Fatalf("unexpected overridden domains: %+v", rule)
+	}
+	if routing["domainStrategy"] == nil {
+		t.Fatalf("deep merge must keep sibling routing fields: %+v", routing)
+	}
+}
+
+func TestBuildConfigOverrideDeletesNullFields(t *testing.T) {
+	settings := testSettings()
+	settings.XrayAPIEnabled = true
+	settings.XrayAPIPort = 10085
+	settings.ConfigOverride = `{
+		"log": null,
+		"stats": null,
+		"observatory": null,
+		"routing": {"domainStrategy": null},
+		"policy": {"system": {"statsInboundUplink": null}}
+	}`
+	config := mustBuildOverrideConfig(t, settings)
+
+	if _, ok := config["log"]; ok {
+		t.Fatalf("null override must delete the log section: %+v", config["log"])
+	}
+	if _, ok := config["stats"]; ok {
+		t.Fatalf("null override must delete the stats section: %+v", config["stats"])
+	}
+	if _, ok := config["observatory"]; ok {
+		t.Fatalf("null override must not create the observatory section: %+v", config["observatory"])
+	}
+	routing, _ := config["routing"].(map[string]any)
+	if _, ok := routing["domainStrategy"]; ok {
+		t.Fatalf("nested null must delete routing.domainStrategy: %+v", routing)
+	}
+	if rules, _ := routing["rules"].([]any); len(rules) == 0 {
+		t.Fatalf("nested null must not delete sibling routing rules: %+v", routing)
+	}
+	policy, _ := config["policy"].(map[string]any)
+	system, _ := policy["system"].(map[string]any)
+	if _, ok := system["statsInboundUplink"]; ok {
+		t.Fatalf("nested null must delete policy.system.statsInboundUplink: %+v", system)
+	}
+	if system["statsOutboundUplink"] != true {
+		t.Fatalf("nested null must not delete sibling policy fields: %+v", system)
+	}
+	if _, ok := config["api"]; !ok {
+		t.Fatalf("unrelated api section must survive the override: %+v", config)
+	}
+}
+
+func TestBuildConfigRejectsInvalidOverride(t *testing.T) {
+	cases := []struct {
+		name     string
+		override string
+	}{
+		{"truncated json", `{"log":`},
+		{"top-level array", `[]`},
+		{"top-level number", `123`},
+		{"top-level string", `"text"`},
+		{"top-level null", `null`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := testSettings()
+			settings.ConfigOverride = tc.override
+			_, err := BuildConfig(overrideTestNode(), settings)
+			if err == nil {
+				t.Fatalf("override %q: expected an error", tc.override)
+			}
+			if !strings.Contains(err.Error(), "config override") {
+				t.Fatalf("override %q: error must mention config override: %v", tc.override, err)
+			}
+		})
+	}
+}
+
+func TestBuildConfigOverrideAddsTopLevelKeys(t *testing.T) {
+	settings := testSettings()
+	settings.ConfigOverride = `{"stats": {}, "customFeature": {"enabled": true, "level": 3}}`
+	config := mustBuildOverrideConfig(t, settings)
+
+	stats, ok := config["stats"].(map[string]any)
+	if !ok {
+		t.Fatalf("override must add the stats key: %+v", config["stats"])
+	}
+	if len(stats) != 0 {
+		t.Fatalf("the new stats object must stay empty: %+v", stats)
+	}
+	custom, ok := config["customFeature"].(map[string]any)
+	if !ok {
+		t.Fatalf("override must add the customFeature key: %+v", config["customFeature"])
+	}
+	if custom["enabled"] != true || custom["level"].(float64) != 3 {
+		t.Fatalf("unexpected new top-level object: %+v", custom)
+	}
+	if _, ok := config["api"]; ok {
+		t.Fatalf("override must not fabricate unrelated sections: %+v", config["api"])
+	}
+	if outbounds, _ := config["outbounds"].([]any); len(outbounds) != 3 {
+		t.Fatalf("generated outbounds must survive: %+v", config["outbounds"])
+	}
+}
+
+func TestBuildLoadBalanceConfigOverrideApplies(t *testing.T) {
+	settings := testSettings()
+	settings.LoadBalanceEnabled = true
+	settings.LoadBalanceMode = "leastPing"
+	settings.ConfigOverride = `{
+		"log": {"loglevel": "warning"},
+		"observatory": {"probeInterval": "120s"},
+		"routing": {"balancers": [{"tag": "proxy", "selector": ["balancer-node-"], "strategy": {"type": "roundRobin"}}]}
+	}`
+	config := mustBuildLoadBalanceOverrideConfig(t, loadBalanceNodes(), settings)
+
+	logConfig, _ := config["log"].(map[string]any)
+	if logConfig["loglevel"] != "warning" {
+		t.Fatalf("override did not deep merge the load balance log: %+v", logConfig)
+	}
+	observatory, ok := config["observatory"].(map[string]any)
+	if !ok {
+		t.Fatalf("observatory is missing: %+v", config["observatory"])
+	}
+	if observatory["probeInterval"] != "120s" {
+		t.Fatalf("override did not replace the observatory probe interval: %+v", observatory)
+	}
+	if observatory["probeURL"] != settings.TestURL {
+		t.Fatalf("override removed the generated probe URL: %+v", observatory)
+	}
+	routing, _ := config["routing"].(map[string]any)
+	balancers, _ := routing["balancers"].([]any)
+	if len(balancers) != 1 {
+		t.Fatalf("override must replace the balancers array, got %+v", balancers)
+	}
+	balancer, _ := balancers[0].(map[string]any)
+	strategy, _ := balancer["strategy"].(map[string]any)
+	if strategy["type"] != "roundRobin" {
+		t.Fatalf("unexpected overridden balancer: %+v", balancer)
+	}
+	if outbounds, _ := config["outbounds"].([]any); len(outbounds) != 4 {
+		t.Fatalf("generated node outbounds must survive: %+v", config["outbounds"])
+	}
+	rules, _ := routing["rules"].([]any)
+	if len(rules) == 0 {
+		t.Fatalf("generated routing rules must survive: %+v", routing)
+	}
+	last, _ := rules[len(rules)-1].(map[string]any)
+	if last["balancerTag"] != "proxy" {
+		t.Fatalf("generated rules must keep targeting the balancer: %+v", last)
 	}
 }

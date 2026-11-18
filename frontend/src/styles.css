@@ -8567,3 +8567,114 @@ textarea:focus {
   font-size: 9px;
   line-height: 1.25;
 }
+
+/* ----------------------------------------------------------------
+   M12 · Config override editor + per-subscription options dialog
+   Appended on purpose: every rule above stays untouched. The blocks
+   below only style the two new UI surfaces and consume the shared
+   design tokens declared earlier.
+   ---------------------------------------------------------------- */
+
+/* Settings > Core: config override JSON editor. Reuses the monospace
+   textarea treatment of .advanced-json-grid but owns a full-width box. */
+.config-override-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.config-override-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: 10px;
+}
+
+.config-override-field textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.045);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+:root[data-theme="light"] .config-override-field textarea {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.config-override-field textarea:focus {
+  border-color: var(--accent-line);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.config-override-field textarea.is-invalid {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--glass-border));
+}
+
+.config-override-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.config-override-error svg {
+  flex: 0 0 auto;
+}
+
+.config-override-field .config-override-hint {
+  color: var(--faint);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+}
+
+/* Subscriptions: auto-update state chip on the card meta line. */
+.sub-update-chip {
+  color: var(--muted);
+}
+
+.sub-update-chip.is-off {
+  color: var(--faint);
+}
+
+/* Subscriptions: per-subscription options dialog. The overlay, heading and
+   footer reuse the global .modal* primitives. */
+.sub-options-modal {
+  width: min(540px, 100%);
+}
+
+.sub-options-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 6px 20px 18px;
+  overflow-y: auto;
+}
+
+.sub-options-body .switch-row {
+  margin-top: 12px;
+}
+
+.sub-options-body .settings-grid {
+  margin-top: 14px;
+}
+
+.sub-options-error {
+  margin-top: 14px;
+}
+
+@media (max-width: 560px) {
+  .sub-options-body .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

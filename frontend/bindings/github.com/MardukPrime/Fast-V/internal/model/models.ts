@@ -334,6 +334,7 @@ export interface Settings {
     "xrayDnsStrategy": string;
     "xrayDnsServers": string;
     "xrayDomainStrategy": string;
+    "configOverride": string;
     "xrayTunMtu": number;
     "xraySockoptTfo": boolean;
     "xraySockoptMptcp": boolean;
@@ -398,6 +399,9 @@ export interface SubscriptionView {
     "totalBytes": number;
     "expireAt": number;
     "usageUpdatedAt": string;
+    "autoUpdate": boolean;
+    "updateIntervalMinutes": number;
+    "userAgent": string;
 }
 
 /**

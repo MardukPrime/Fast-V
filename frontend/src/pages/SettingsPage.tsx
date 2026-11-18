@@ -39,6 +39,7 @@ const defaults: Settings = {
   xrayDnsStrategy: "UseIP",
   xrayDnsServers: "1.1.1.1,8.8.8.8",
   xrayDomainStrategy: "IPIfNonMatch",
+  configOverride: "",
   xrayTunMtu: 1500,
   xraySockoptTfo: false,
   xraySockoptMptcp: false,
@@ -353,6 +354,35 @@ function updateHint(info: UpdateInfo) {
 const autoSelectIntervalRange = { min: 1, max: 1440 };
 const autoSelectToleranceRange = { min: 0, max: 5000 };
 
+// Mirrors internal/service/settings: the override is trimmed by the backend, the
+// stored text may be empty, must parse as a JSON object and may not exceed
+// 128 KB. Validating locally keeps the inline error instant and blocks a save
+// before the request is sent.
+const configOverrideMaxBytes = 128 * 1024;
+
+function configOverrideByteLength(value: string) {
+  if (typeof TextEncoder === "undefined") return value.length;
+  return new TextEncoder().encode(value).length;
+}
+
+function validateConfigOverride(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (configOverrideByteLength(trimmed) > configOverrideMaxBytes) {
+    return t("set.configOverrideTooLarge");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return t("set.configOverrideInvalidJson");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return t("set.configOverrideNotObject");
+  }
+  return "";
+}
+
 export default function SettingsPage(props: SettingsProps) {
   const [settings, setSettings] = createSignal<Settings>(defaults);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
@@ -596,6 +626,25 @@ export default function SettingsPage(props: SettingsProps) {
     return "";
   };
 
+  // Re-evaluated on every keystroke: the inline error under the override editor
+  // and the save-time guard share the same message.
+  const configOverrideError = () => validateConfigOverride(settings().configOverride);
+
+  const formatConfigOverride = () => {
+    const raw = settings().configOverride.trim();
+    if (!raw) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // The inline hint below the editor already explains the parse error.
+      return;
+    }
+    update("configOverride", JSON.stringify(parsed, null, 2));
+  };
+
+  const clearConfigOverride = () => update("configOverride", "");
+
   // Mirrors internal/hotkey.ValidateSettingsCombos: every non-empty combination
   // must parse and no two actions may share the same normalized combination.
   // Empty values are allowed and simply disable that action. The per-row map is
@@ -636,7 +685,8 @@ export default function SettingsPage(props: SettingsProps) {
     const loadBalanceError = validateLoadBalance();
     const hotkeys = collectHotkeyErrors();
     const hotkeyError = hotkeys.firstError;
-    const validationError = autoSelectError || inboundError || loadBalanceError || hotkeyError;
+    const configOverrideValidation = configOverrideError();
+    const validationError = autoSelectError || inboundError || loadBalanceError || hotkeyError || configOverrideValidation;
     if (validationError) {
       if (inboundError) {
         setClientExpanded(true);
@@ -650,6 +700,12 @@ export default function SettingsPage(props: SettingsProps) {
         setHotkeyErrors(hotkeys.rowErrors);
         setIntegrationExpanded(true);
         writeSectionState("fastv.settings.integrationOpen", true);
+      }
+      if (configOverrideValidation) {
+        // The editor lives inside the collapsible core section; open it so the
+        // inline error and the field are visible instead of only the page alert.
+        setCoreExpanded(true);
+        writeSectionState("fastv.settings.coreOpen", true);
       }
       setMessage("");
       setError(validationError);
@@ -1571,6 +1627,53 @@ export default function SettingsPage(props: SettingsProps) {
                 </button>
                 <button class="btn ghost" type="button" onClick={() => update("xrayFinalMaskJson", "")}>
                   {t("set.clearFinalMask")}
+                </button>
+              </div>
+            </div>
+            <div class="setting-block config-override-block">
+              <div class="setting-label">
+                <strong>{t("set.configOverride")}</strong>
+                <small>{t("set.configOverrideHint")}</small>
+              </div>
+              <label class="config-override-field">
+                <textarea
+                  classList={{
+                    "config-override-input": true,
+                    "is-invalid": configOverrideError() !== "",
+                  }}
+                  value={settings().configOverride}
+                  onInput={(event) => update("configOverride", event.currentTarget.value)}
+                  spellcheck={false}
+                  rows={10}
+                  placeholder={t("set.configOverridePlaceholder")}
+                  aria-invalid={configOverrideError() !== ""}
+                  aria-describedby="config-override-hint"
+                />
+                <Show when={configOverrideError()}>
+                  <span class="config-override-error" role="alert">
+                    <Icon name="alert" size={13} /> {configOverrideError()}
+                  </span>
+                </Show>
+                <small id="config-override-hint" class="config-override-hint">
+                  {t("set.configOverrideMaxSize")} · {t("set.configOverrideRestart")}
+                </small>
+              </label>
+              <div class="core-actions">
+                <button
+                  class="btn secondary"
+                  type="button"
+                  onClick={formatConfigOverride}
+                  disabled={!settings().configOverride.trim()}
+                >
+                  {t("set.configOverrideFormat")}
+                </button>
+                <button
+                  class="btn ghost"
+                  type="button"
+                  onClick={clearConfigOverride}
+                  disabled={!settings().configOverride}
+                >
+                  {t("set.configOverrideClear")}
                 </button>
               </div>
             </div>

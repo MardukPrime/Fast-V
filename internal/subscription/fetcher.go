@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MardukPrime/Fast-V/internal/buildinfo"
 )
 
 // UserInfo is the traffic and expiry metadata supplied by a subscription endpoint.
@@ -26,6 +28,26 @@ type FetchResult struct {
 	UserInfo UserInfo
 }
 
+// DefaultUserAgent returns the User-Agent header sent to subscription endpoints
+// that do not configure their own. It identifies the client and its version to
+// the provider, for example "FastV/0.1.0".
+func DefaultUserAgent() string {
+	version := strings.TrimSpace(buildinfo.Version)
+	if version == "" {
+		version = "dev"
+	}
+	return fmt.Sprintf("%s/%s", buildinfo.ProductName, version)
+}
+
+// userAgentOrDefault trims a configured User-Agent and falls back to
+// DefaultUserAgent when nothing was configured.
+func userAgentOrDefault(userAgent string) string {
+	if trimmed := strings.TrimSpace(userAgent); trimmed != "" {
+		return trimmed
+	}
+	return DefaultUserAgent()
+}
+
 // Fetch downloads a subscription body with a bounded size and deterministic timeout.
 func Fetch(ctx context.Context, rawURL string) (string, error) {
 	result, err := FetchWithMeta(ctx, rawURL)
@@ -37,6 +59,13 @@ func Fetch(ctx context.Context, rawURL string) (string, error) {
 
 // FetchWithMeta downloads a subscription and captures Subscription-Userinfo headers.
 func FetchWithMeta(ctx context.Context, rawURL string) (FetchResult, error) {
+	return FetchWithMetaOptions(ctx, rawURL, "")
+}
+
+// FetchWithMetaOptions downloads a subscription like FetchWithMeta but sends
+// userAgent as the User-Agent header when it is non-empty. An empty userAgent
+// falls back to DefaultUserAgent so providers still see a stable client name.
+func FetchWithMetaOptions(ctx context.Context, rawURL, userAgent string) (FetchResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
@@ -44,7 +73,7 @@ func FetchWithMeta(ctx context.Context, rawURL string) (FetchResult, error) {
 	if err != nil {
 		return FetchResult{}, err
 	}
-	req.Header.Set("User-Agent", "FastV/0.1.0")
+	req.Header.Set("User-Agent", userAgentOrDefault(userAgent))
 	req.Header.Set("Accept", "*/*")
 
 	client := &http.Client{Timeout: 20 * time.Second}

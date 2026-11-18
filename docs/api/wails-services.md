@@ -50,6 +50,8 @@
 | List | - | []SubscriptionView | 订阅列表 |
 | Add | SubscriptionInput | SubscriptionView | 拉取、解析并保存订阅 |
 | Update | id | SubscriptionView | 更新单个订阅 |
+| UpdateAll | - | UpdateAllResult | 更新全部启用的订阅 |
+| SetOptions | id, autoUpdate, intervalMinutes, userAgent | SubscriptionView | 更新单个订阅的自动更新开关、独立间隔（0=跟随全局）与自定义 User-Agent |
 | UpdateAll | - | UpdateAllResult | 更新全部启用订阅 |
 | Delete | id | - | 删除订阅及其节点 |
 | Nodes | id | []NodeView | 查看订阅解析出的节点 |
@@ -143,7 +145,7 @@
 | layoutMode | 导航布局：sidebar 或 dock（默认 dock，存储 v6 起旧 sidebar 配置自动迁移） |
 | dockTransparency | 底栏玻璃背景透明度，5-90 |
 | autoUpdate | 订阅自动更新开关 |
-| updateIntervalMinutes | 订阅自动更新间隔 |
+| updateIntervalMinutes | 订阅自动更新间隔（全局默认值） |
 | proxyMode | rule、global 或 direct，写入 Xray 路由 |
 | coreAutoUpdate | 内核自动更新 |
 | coreType | xray 或 singbox |
@@ -159,6 +161,7 @@
 | xrayDnsServers | Xray DNS 服务器列表，逗号或换行分隔 |
 | xrayDnsStrategy | dns.queryStrategy，支持 UseIP、UseIPv4、UseIPv6、AsIs |
 | xrayDomainStrategy | routing.domainStrategy，支持 IPIfNonMatch、IPOnDemand、AsIs |
+| configOverride | 用户 JSON 对象，深合并进生成的 Xray 配置（对象递归合并、数组/标量替换、null 删除字段；≤128 KB） |
 | xrayTunMtu | TUN inbound MTU，范围 576-9000 |
 | xraySockoptTfo | 启用 sockopt.tcpFastOpen |
 | xraySockoptMptcp | 启用 sockopt.tcpMptcp |
@@ -279,6 +282,9 @@
 | totalBytes | 套餐总流量 |
 | expireAt | 到期时间，Unix 秒 |
 | usageUpdatedAt | 用量信息最近更新时间 |
+| autoUpdate | 该订阅是否参与自动更新（全局开关仍为总开关） |
+| updateIntervalMinutes | 该订阅独立更新间隔；0 表示跟随全局 |
+| userAgent | 拉取该订阅时使用的 User-Agent；空表示默认 FastV/<版本> |
 
 数据来自订阅响应头 `Subscription-Userinfo`，格式示例：
 
