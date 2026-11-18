@@ -155,6 +155,19 @@ jobs:
           Compress-Archive -Path dist/Fast-V.exe, LICENSE, README.md -DestinationPath "dist/FastV-$env:APP_VERSION-windows-amd64.zip" -Force
           Get-ChildItem dist | Format-Table Name, Length
 
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            Write-Host "makensis already available"
+            exit 0
+          }
+          choco install nsis -y --no-progress
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) {
+            throw "NSIS installation did not provide makensis.exe"
+          }
+          Write-Host "NSIS installed"
+
       - name: Build Windows installer (NSIS)
         shell: pwsh
         env:
