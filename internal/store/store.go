@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/MardukPrime/Fast-V/internal/model"
+	"github.com/MardukPrime/Fast-V/internal/secure"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -205,6 +207,11 @@ func NewStoreAt(path string) (*Store, error) {
 		if err := json.Unmarshal(raw, &loaded); err != nil {
 			return nil, err
 		}
+		// Sensitive settings are persisted protected, so decrypt them before the
+		// normal migration/normalization. The in-memory model always holds
+		// plaintext; a value that cannot be decrypted (foreign Windows user or
+		// machine, corruption) is cleared instead of failing the whole load.
+		loaded.Settings = decryptSettingsSecrets(loaded.Settings)
 		s.data = mergeStoreData(loaded)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -472,6 +479,11 @@ func (s *Store) snapshotLocked() storeData {
 // Export returns the complete persisted configuration (settings, subscriptions,
 // nodes, routing rules and the active node) as versioned JSON. The output can be
 // imported again on the same or another installation with Restore.
+//
+// Unlike data.json, an exported document is portable: it contains the settings
+// exactly as held in memory, i.e. the WebDAV and inbound passwords in plaintext
+// (no DPAPI protection), so a backup can be restored by another Windows user or
+// machine. Backup files must therefore be stored and transferred securely.
 func (s *Store) Export() ([]byte, error) {
 	s.mu.RLock()
 	data := s.snapshotLocked()
@@ -767,8 +779,84 @@ func (s *Store) update(fn func(*storeData) error) error {
 	return s.saveLocked()
 }
 
+// Sensitive settings (WebDAV and inbound credentials) are never written to
+// data.json as plaintext: saveLocked protects them with the platform secret
+// backend (DPAPI on Windows) and NewStoreAt unprotects them again. The package
+// level function variables make the codec injectable so store tests do not
+// depend on the DPAPI availability of the test machine.
+var (
+	secureProtect   = secure.ProtectString
+	secureUnprotect = secure.UnprotectString
+)
+
+// Names of the protected settings fields, used in log messages only: the values
+// themselves are never logged.
+const (
+	webdavPasswordField  = "webdavPassword"
+	inboundPasswordField = "inboundPassword"
+)
+
+// encryptSettingsSecrets returns a copy of settings whose sensitive fields are
+// replaced by their protected persisted representation. A protection failure
+// falls back to plaintext and is logged instead of blocking the save: refusing
+// to save the whole configuration because DPAPI is temporarily unavailable
+// would be worse than the already user-private (0600) data file.
+func encryptSettingsSecrets(settings Settings) Settings {
+	settings.WebDavPassword = encryptSecret(webdavPasswordField, settings.WebDavPassword)
+	settings.InboundPassword = encryptSecret(inboundPasswordField, settings.InboundPassword)
+	return settings
+}
+
+func encryptSecret(field, plain string) string {
+	if plain == "" {
+		return ""
+	}
+	protected, err := secureProtect(plain)
+	if err != nil {
+		log.Printf("store: 加密敏感配置 %s 失败，本次保存回退明文: %v", field, err)
+		return plain
+	}
+	if !secure.IsEncrypted(protected) {
+		log.Printf("store: 敏感配置 %s 的加密结果无效，本次保存回退明文", field)
+		return plain
+	}
+	return protected
+}
+
+// decryptSettingsSecrets returns a copy of settings with the protected fields
+// turned back into plaintext. Values written by older builds carry no prefix and
+// pass through unchanged.
+func decryptSettingsSecrets(settings Settings) Settings {
+	settings.WebDavPassword = decryptSecret(webdavPasswordField, settings.WebDavPassword)
+	settings.InboundPassword = decryptSecret(inboundPasswordField, settings.InboundPassword)
+	return settings
+}
+
+func decryptSecret(field, value string) string {
+	if value == "" || !secure.IsEncrypted(value) {
+		return value
+	}
+	plain, err := secureUnprotect(value)
+	if err == nil {
+		return plain
+	}
+	if errors.Is(err, secure.ErrUnsupported) {
+		// The current platform cannot decrypt (only Windows has DPAPI). Keep the
+		// stored value untouched so this platform never silently drops data.
+		return value
+	}
+	// A damaged blob or one encrypted for another Windows user/machine must
+	// never be used as a password: clear the field and keep loading.
+	log.Printf("store: 解密敏感配置 %s 失败，已清空该字段: %v", field, err)
+	return ""
+}
+
 func (s *Store) saveLocked() error {
-	raw, err := json.MarshalIndent(s.data, "", "  ")
+	// Only the serialized copy carries protected secrets; the in-memory model
+	// keeps plaintext so Export/Restore and the services are unaffected.
+	persisted := s.data
+	persisted.Settings = encryptSettingsSecrets(persisted.Settings)
+	raw, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err
 	}

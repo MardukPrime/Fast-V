@@ -27,6 +27,9 @@ All notable changes to FastV are documented here.
 - 安装与分发：Windows NSIS 安装包（桌面/开始菜单快捷方式、卸载程序，卸载不删除用户数据）；Linux `.deb` 包（安装到 `/opt/fastv`，含 desktop 入口与 GTK/WebKitGTK 依赖声明）；发布工作流对安装包做静默安装/卸载冒烟测试与 `dpkg-deb` 校验；macOS 暂无 DMG/公证（继续提供 zip 并注明签名限制）。
 - 配置快照导出/导入：快照可导出为与本地备份兼容的 JSON 文件（使用系统保存对话框），也可从本地 JSON 备份文件导入为新快照（校验备份格式、8 MB 上限、保留策略）。
 - 运行日志持久化：`<数据目录>/logs/fastv.log` 记录启动/退出/崩溃（含堆栈）与内核/代理日志，5 MB 轮转、保留 3 个文件，便于问题排查。
+- 敏感配置加密：Windows 使用当前用户 DPAPI 加密 WebDAV 密码与入站认证密码后写入 `data.json`；旧版明文配置可平滑读取/迁移，解密失败时清空该字段并继续启动；备份与快照仍为明文（导出文件需妥善保管）。
+- 首次运行引导：三步引导介绍代理模式、订阅/节点导入与快照、网络救援、诊断报告、日志位置，关闭后不再显示（localStorage 标记）。
+- 文档：新增 [用户手册](docs/USER_GUIDE.md)（安装/网络接管/节点分组/路由规则/订阅/备份/安全/诊断/个性化/更新卸载）与 [常见问题 FAQ](docs/product/FAQ.md)（20 条：现象/原因/解决）。
 - 分享链接导入 / 导出、剪贴板批量导入、手动节点、收藏、排序与批量启用/禁用/删除。
 - 节点与订阅二维码（Go 端生成 PNG data URL）。
 - 订阅格式兼容：分享链接、Base64 与 Clash / Meta YAML（vmess / vless / trojan / ss），不支持类型逐条跳过。

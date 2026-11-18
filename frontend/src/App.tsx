@@ -107,6 +107,96 @@ function deepLinkToastDetail(toast: DeepLinkToast): string {
   return (toast.message || toast.name).trim();
 }
 
+// First-run onboarding storage marker. The guide shows up until the marker
+// exists; a storage failure counts as "already seen" so a locked-down webview
+// can never trap the window behind a guide that cannot be dismissed for good.
+const ONBOARDING_STORAGE_KEY = "fastv.onboarding.v1";
+
+// Code-only re-open hook: any future entry point (for example an About panel)
+// can bring the guide back with
+// window.dispatchEvent(new Event(ONBOARDING_OPEN_EVENT)) without new props.
+const ONBOARDING_OPEN_EVENT = "fastv:onboarding:open";
+
+function onboardingSeen(): boolean {
+  try {
+    return window.localStorage.getItem(ONBOARDING_STORAGE_KEY) !== null;
+  } catch {
+    return true;
+  }
+}
+
+function markOnboardingSeen(): void {
+  try {
+    window.localStorage.setItem(ONBOARDING_STORAGE_KEY, "1");
+  } catch {
+    // Storage may be unavailable; the overlay still closes for this session.
+  }
+}
+
+type OnboardingMode = { label: string; description: string };
+
+type OnboardingAction = { label: string; page: PageKey };
+
+// One of the three onboarding cards. Optional groups let each card keep its own
+// content shape (modes / supported formats / safety features) without new
+// components or per-card props.
+type OnboardingCard = {
+  index: number;
+  icon: IconName;
+  title: string;
+  lead: string;
+  modes?: OnboardingMode[];
+  formats?: string[];
+  features?: string[];
+  note?: string;
+  logLine?: string;
+  action?: OnboardingAction;
+};
+
+// Accessor, not a constant: a zh/en switch must re-render every onboarding
+// string (the same pattern as navigation/pageMeta above).
+function onboardingCards(): OnboardingCard[] {
+  return [
+    {
+      index: 1,
+      icon: "route",
+      title: t("shell.onboarding.welcomeTitle"),
+      lead: t("shell.onboarding.welcomeLead"),
+      modes: [
+        { label: t("shell.onboarding.modeRule"), description: t("shell.onboarding.modeRuleDesc") },
+        { label: t("shell.onboarding.modeGlobal"), description: t("shell.onboarding.modeGlobalDesc") },
+        { label: t("shell.onboarding.modeDirect"), description: t("shell.onboarding.modeDirectDesc") },
+      ],
+      note: t("shell.onboarding.themeHint"),
+    },
+    {
+      index: 2,
+      icon: "subscription",
+      title: t("shell.onboarding.importTitle"),
+      lead: t("shell.onboarding.importLead"),
+      formats: [
+        t("shell.onboarding.formatShare"),
+        t("shell.onboarding.formatBase64"),
+        t("shell.onboarding.formatClash"),
+      ],
+      action: { label: t("shell.onboarding.goImport"), page: "subscriptions" },
+    },
+    {
+      index: 3,
+      icon: "check",
+      title: t("shell.onboarding.safeTitle"),
+      lead: t("shell.onboarding.safeLead"),
+      features: [
+        t("shell.onboarding.safeSnapshot"),
+        t("shell.onboarding.safeRescue"),
+        t("shell.onboarding.safeDiagnostics"),
+      ],
+      logLine: t("shell.onboarding.logPath", { dir: t("shell.onboarding.dataDir") }),
+      action: { label: t("shell.onboarding.openSettings"), page: "settings" },
+    },
+  ];
+}
+
 export default function App() {
   const [active, setActive] = createSignal<PageKey>("dashboard");
   const [info, setInfo] = createSignal<AppInfo | null>(null);
@@ -122,6 +212,10 @@ export default function App() {
   const [deeplinkToasts, setDeeplinkToasts] = createSignal<DeepLinkToast[]>([]);
   let deeplinkToastId = 0;
   const deeplinkToastTimers = new Map<number, number>();
+  // First-run guide state: the overlay opens after the shell has mounted when
+  // the storage marker is missing. Every dismissal path writes the marker.
+  const [onboardingOpen, setOnboardingOpen] = createSignal(false);
+  let onboardingCloseButton: HTMLButtonElement | undefined;
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
   const activeMeta = () => pageMeta()[active()];
@@ -275,6 +369,50 @@ export default function App() {
     });
   });
 
+  // Any dismissal (Skip, Get started, close button, backdrop click, Escape or
+  // closing the window from the titlebar) marks the guide as seen so it only
+  // greets a user once.
+  const dismissOnboarding = () => {
+    markOnboardingSeen();
+    setOnboardingOpen(false);
+  };
+
+  // The import/settings shortcuts both end the guide and jump to the target
+  // page, which is the fastest first-run path.
+  const handleOnboardingAction = (page: PageKey) => {
+    dismissOnboarding();
+    setActive(page);
+  };
+
+  onMount(() => {
+    if (!onboardingSeen()) {
+      // Wait one frame so the overlay fades in above a painted shell instead of
+      // an empty window.
+      const frame = requestAnimationFrame(() => setOnboardingOpen(true));
+      onCleanup(() => cancelAnimationFrame(frame));
+    }
+    const handleOpenRequest = () => setOnboardingOpen(true);
+    window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest);
+    onCleanup(() => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest));
+  });
+
+  // While the guide is open: focus its close button for keyboard users and let
+  // Escape dismiss it. Cleanup runs on dismissal and on component teardown.
+  createEffect(() => {
+    if (!onboardingOpen()) return;
+    const focusFrame = requestAnimationFrame(() => onboardingCloseButton?.focus());
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      dismissOnboarding();
+    };
+    document.addEventListener("keydown", handleKeydown);
+    onCleanup(() => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeydown);
+    });
+  });
+
   const handleStartProxy = async () => {
     setProxyBusy(true);
     setProxyError("");
@@ -396,7 +534,18 @@ export default function App() {
           <button type="button" class="window-control" aria-label={t("shell.windowMaximizeOrRestore")} onClick={toggleMaximise}>
             <Icon name="maximize" size={10} />
           </button>
-          <button type="button" class="window-control close" aria-label={t("shell.windowClose")} onClick={() => AppWindow.Close()}>
+          <button
+            type="button"
+            class="window-control close"
+            aria-label={t("shell.windowClose")}
+            onClick={() => {
+              // Closing the window from the titlebar while the guide is open
+              // also counts as read, so a first-run user is not greeted by the
+              // same overlay after every restart.
+              if (onboardingOpen()) markOnboardingSeen();
+              AppWindow.Close();
+            }}
+          >
             <Icon name="close" size={11} />
           </button>
         </div>
@@ -631,6 +780,137 @@ export default function App() {
               </div>
             )}
           </For>
+        </div>
+      </Show>
+      <Show when={onboardingOpen()}>
+        <div
+          class="onboarding-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="onboarding-title"
+          aria-describedby="onboarding-subtitle"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) dismissOnboarding();
+          }}
+        >
+          <section class="onboarding-panel">
+            <header class="onboarding-header">
+              <div class="onboarding-heading">
+                <span class="onboarding-mark" aria-hidden="true">F</span>
+                <div class="onboarding-heading-copy">
+                  <h2 id="onboarding-title">{t("shell.onboarding.title")}</h2>
+                  <p id="onboarding-subtitle">{t("shell.onboarding.subtitle")}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                ref={(element) => (onboardingCloseButton = element)}
+                class="onboarding-close"
+                aria-label={t("shell.onboarding.close")}
+                onClick={dismissOnboarding}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </header>
+
+            <div class="onboarding-grid">
+              <For each={onboardingCards()}>
+                {(card) => (
+                  <article class="onboarding-card">
+                    <div class="onboarding-card-head">
+                      <span class="onboarding-step">
+                        <span class="onboarding-sr">{t("shell.onboarding.step", { index: card.index })}</span>
+                        <span aria-hidden="true">{String(card.index).padStart(2, "0")}</span>
+                      </span>
+                      <span class="onboarding-icon" aria-hidden="true">
+                        <Icon name={card.icon} size={16} />
+                      </span>
+                    </div>
+                    <h3>{card.title}</h3>
+                    <p class="onboarding-lead">{card.lead}</p>
+                    <Show when={card.modes}>
+                      {(modes) => (
+                        <ul class="onboarding-modes">
+                          <For each={modes()}>
+                            {(mode) => (
+                              <li class="onboarding-mode">
+                                <strong>{mode.label}</strong>
+                                <span>{mode.description}</span>
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      )}
+                    </Show>
+                    <Show when={card.formats}>
+                      {(formats) => (
+                        <ul class="onboarding-list">
+                          <For each={formats()}>
+                            {(item) => (
+                              <li>
+                                <Icon name="check" size={12} />
+                                <span>{item}</span>
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      )}
+                    </Show>
+                    <Show when={card.features}>
+                      {(features) => (
+                        <ul class="onboarding-list">
+                          <For each={features()}>
+                            {(item) => (
+                              <li>
+                                <Icon name="check" size={12} />
+                                <span>{item}</span>
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      )}
+                    </Show>
+                    <Show when={card.note}>
+                      {(note) => <p class="onboarding-note">{note()}</p>}
+                    </Show>
+                    <Show when={card.logLine}>
+                      {(line) => (
+                        <p class="onboarding-log">
+                          <Icon name="logs" size={12} />
+                          <code>{line()}</code>
+                        </p>
+                      )}
+                    </Show>
+                    <Show when={card.action}>
+                      {(action) => (
+                        <button
+                          type="button"
+                          class="btn glass onboarding-action"
+                          onClick={() => handleOnboardingAction(action().page)}
+                        >
+                          {action().label}
+                          <Icon name="chevron" size={12} />
+                        </button>
+                      )}
+                    </Show>
+                  </article>
+                )}
+              </For>
+            </div>
+
+            <footer class="onboarding-footer">
+              <p class="onboarding-once">{t("shell.onboarding.onceHint")}</p>
+              <div class="onboarding-actions">
+                <button type="button" class="btn ghost" onClick={dismissOnboarding}>
+                  {t("shell.onboarding.skip")}
+                </button>
+                <button type="button" class="btn primary" onClick={dismissOnboarding}>
+                  {t("shell.onboarding.start")}
+                  <Icon name="play" size={12} />
+                </button>
+              </div>
+            </footer>
+          </section>
         </div>
       </Show>
     </div>

@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.7.0--pre.2-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.8.0--pre.1-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -310,6 +310,9 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - PAC 系统代理模式：生成本地 `fastv.pac`（私有/本地直连，其余走代理）并接管 Windows 自动代理配置
 - 配置快照与回滚：本地最多保留 20 个配置快照，一键回滚（回滚前自动创建安全快照，可撤销）；支持快照导出为 JSON 与从本地备份文件导入快照
 - 诊断与运行日志持久化：运行日志写入 `<数据目录>/logs/fastv.log`（5 MB 轮转、保留 3 个文件），启动/退出/崩溃与内核日志均可追溯
+- 敏感配置加密：Windows 上 WebDAV 密码与入站认证密码使用当前用户 DPAPI 加密后写入本地配置（备份/快照文件仍为明文，需妥善保管）
+- 首次运行引导：三步介绍代理模式、导入方式与快照/救援/诊断/日志能力，仅显示一次
+- 完整文档：[用户手册](docs/USER_GUIDE.md) 与 [常见问题 FAQ](docs/product/FAQ.md)
 - TUN 自检与回退向导：检查平台、管理员权限、内核与 wintun.dll、代理状态，失败时给出修复建议并可一键切回系统代理
 - 环境清理：检查并清理卸载残留（fastv:// 协议注册、开机自启项、PAC 文件），不删除用户数据并显示数据目录
 - 托盘状态图标：按代理状态（运行/启动中/异常/停止）显示不同颜色
@@ -338,6 +341,8 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 
 ## 文档
 
+- [用户手册](docs/USER_GUIDE.md)
+- [常见问题 FAQ](docs/product/FAQ.md)
 - [节点配置编辑器](docs/cores/xray/node-editor.md)
 - [网络诊断](docs/network-diagnostics.md)
 - [Xray TUN](docs/cores/xray/tun.md)
