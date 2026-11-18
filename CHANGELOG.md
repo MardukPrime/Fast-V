@@ -24,6 +24,7 @@ All notable changes to FastV are documented here.
 - TUN 自检与回退向导：检查平台支持、TUN 开关、管理员权限、Xray 内核与 wintun.dll、代理状态；失败时展示修复建议，可一键关闭 TUN 并切换到系统代理后重启代理。
 - 环境清理：检查/清理 fastv:// 协议注册、开机自启项与 PAC 文件，不删除订阅/节点/设置等用户数据，并显示数据目录。
 - 托盘状态图标：运行/启动中/异常/停止使用不同颜色，托盘图标随代理状态自动更新。
+- 安装与分发：Windows NSIS 安装包（桌面/开始菜单快捷方式、卸载程序，卸载不删除用户数据）；Linux `.deb` 包（安装到 `/opt/fastv`，含 desktop 入口与 GTK/WebKitGTK 依赖声明）；发布工作流对安装包做静默安装/卸载冒烟测试与 `dpkg-deb` 校验；macOS 暂无 DMG/公证（继续提供 zip 并注明签名限制）。
 - 分享链接导入 / 导出、剪贴板批量导入、手动节点、收藏、排序与批量启用/禁用/删除。
 - 节点与订阅二维码（Go 端生成 PNG data URL）。
 - 订阅格式兼容：分享链接、Base64 与 Clash / Meta YAML（vmess / vless / trojan / ss），不支持类型逐条跳过。

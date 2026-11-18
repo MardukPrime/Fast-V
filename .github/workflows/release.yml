@@ -151,8 +151,60 @@ jobs:
         env:
           APP_VERSION: ${{ needs.meta.outputs.version }}
         run: |
+          Copy-Item LICENSE, README.md dist/
           Compress-Archive -Path dist/Fast-V.exe, LICENSE, README.md -DestinationPath "dist/FastV-$env:APP_VERSION-windows-amd64.zip" -Force
           Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Build Windows installer (NSIS)
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
+            "${env:ProgramFiles}\NSIS\makensis.exe"
+          )
+          $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $makensis) {
+            $cmd = Get-Command makensis -ErrorAction SilentlyContinue
+            if ($cmd) { $makensis = $cmd.Source }
+          }
+          if (-not $makensis) { throw "makensis (NSIS) not found on the runner" }
+          # VIProductVersion requires X.X.X.X; turn 0.6.0-pre.2 into 0.6.0.2.
+          $parts = @()
+          foreach ($part in ($env:APP_VERSION -replace '-', '.' -split '\.')) {
+            if ($part -match '^\d+$') { $parts += $part }
+          }
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $fileVersion = ($parts[0..3] -join '.')
+          $outFile = Join-Path (Get-Location) "dist\FastV-$env:APP_VERSION-windows-amd64-setup.exe"
+          & $makensis "/DAPP_VERSION=$env:APP_VERSION" "/DAPP_FILE_VERSION=$fileVersion" "/DSOURCE_DIR=$(Join-Path (Get-Location) 'dist')" "/DOUT_FILE=$outFile" "/DASSETS_DIR=$(Join-Path (Get-Location) 'assets')" "packaging\windows\fastv.nsi"
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path $outFile)) { throw "installer was not created: $outFile" }
+          Write-Host ("Built installer: {0:N1} MB (file version {1})" -f ((Get-Item $outFile).Length / 1MB), $fileVersion)
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Smoke test Windows installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          $setup = Join-Path (Get-Location) "dist\FastV-$env:APP_VERSION-windows-amd64-setup.exe"
+          $installDir = Join-Path $env:ProgramFiles "FastV"
+          if (Test-Path $installDir) { Remove-Item $installDir -Recurse -Force }
+          $proc = Start-Process -FilePath $setup -ArgumentList '/S' -PassThru -Wait
+          if ($proc.ExitCode -ne 0) { throw "silent install failed with exit code $($proc.ExitCode)" }
+          $exe = Join-Path $installDir "Fast-V.exe"
+          if (-not (Test-Path $exe)) { throw "installer did not install Fast-V.exe" }
+          $uninstaller = Join-Path $installDir "uninstall.exe"
+          if (-not (Test-Path $uninstaller)) { throw "installer did not create uninstall.exe" }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 5MB) { throw "installed executable is unexpectedly small: $size bytes" }
+          Write-Host ("Installed Fast-V.exe: {0:N1} MB" -f ($size / 1MB))
+          $uninstallProc = Start-Process -FilePath $uninstaller -ArgumentList '/S' -PassThru -Wait
+          Start-Sleep -Seconds 2
+          if (Test-Path (Join-Path $installDir "Fast-V.exe")) { throw "uninstaller did not remove Fast-V.exe" }
+          Write-Host "Windows installer smoke test passed (install + uninstall)"
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -275,9 +327,14 @@ jobs:
           Categories=Network;
           DESKTOP
             tar -czf "dist/FastV-${APP_VERSION}-linux-${arch}.tar.gz" -C stage .
+            bash packaging/linux/build-deb.sh stage/FastV "${arch}" "${APP_VERSION}" dist "${PWD}"
             echo "packaged linux/${arch}"
           done
           ls -la dist
+          echo "--- Debian package checks ---"
+          dpkg-deb -I dist/FastV-${APP_VERSION}-linux-amd64.deb
+          dpkg-deb -I dist/FastV-${APP_VERSION}-linux-arm64.deb
+          dpkg-deb -c dist/FastV-${APP_VERSION}-linux-amd64.deb | grep -E '(/opt/fastv/FastV|/usr/bin/fastv|fastv.desktop)'
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -304,18 +361,19 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          sha256sum *.zip *.tar.gz *.exe *.deb > SHA256SUMS.txt
           {
             echo "version=${APP_VERSION}"
             echo "tag=${APP_TAG}"
             echo "commit=${GITHUB_SHA}"
             echo ""
             echo "Platforms:"
-            echo "- windows-amd64: Windows 10/11 x64 + Microsoft Edge WebView2 Runtime"
+            echo "- windows-amd64: Windows 10/11 x64 + Microsoft Edge WebView2 Runtime; portable zip or NSIS installer"
             echo "- macos-arm64: macOS 11+ (Apple Silicon), unsigned build - right-click > Open on first launch"
             echo "- macos-amd64: macOS 11+ (Intel), unsigned build - right-click > Open on first launch"
-            echo "- linux-amd64 / linux-arm64: requires GTK3 and WebKitGTK 4.1 (libwebkit2gtk-4.1)"
+            echo "- linux-amd64 / linux-arm64: portable tar.gz or .deb; requires GTK3 and WebKitGTK 4.1 (libwebkit2gtk-4.1)"
             echo ""
+            echo "macOS packages are not code-signed or notarized yet; users must allow them in System Settings."
             echo "In-app self update currently supports Windows only; macOS/Linux users should download the new package manually."
           } > release-info.txt
           ls -la
@@ -334,17 +392,22 @@ jobs:
 
             | Platform | Asset | Requirements |
             |---|---|---|
-            | Windows x64 | `FastV-${{ needs.meta.outputs.version }}-windows-amd64.zip` | Windows 10/11 + WebView2 Runtime |
+            | Windows x64 (installer) | `FastV-${{ needs.meta.outputs.version }}-windows-amd64-setup.exe` | Windows 10/11 + WebView2 Runtime |
+            | Windows x64 (portable) | `FastV-${{ needs.meta.outputs.version }}-windows-amd64.zip` | Windows 10/11 + WebView2 Runtime |
             | macOS Apple Silicon | `FastV-${{ needs.meta.outputs.version }}-macos-arm64.zip` | macOS 11+ (unsigned: right-click > Open) |
             | macOS Intel | `FastV-${{ needs.meta.outputs.version }}-macos-amd64.zip` | macOS 11+ (unsigned: right-click > Open) |
-            | Linux x64 | `FastV-${{ needs.meta.outputs.version }}-linux-amd64.tar.gz` | GTK3 + WebKitGTK 4.1 |
-            | Linux arm64 | `FastV-${{ needs.meta.outputs.version }}-linux-arm64.tar.gz` | GTK3 + WebKitGTK 4.1 |
+            | Linux x64 | `FastV-${{ needs.meta.outputs.version }}-linux-amd64.tar.gz` / `.deb` | GTK3 + WebKitGTK 4.1 |
+            | Linux arm64 | `FastV-${{ needs.meta.outputs.version }}-linux-arm64.tar.gz` / `.deb` | GTK3 + WebKitGTK 4.1 |
 
             - SHA-256 checksums: `SHA256SUMS.txt`
             - `release-info.txt` lists platform notes
+            - The Windows installer keeps user data in `%APPDATA%\FastV`; uninstalling does not delete it
+            - macOS packages are unsigned/notarized-pending; Linux `.deb` installs to `/opt/fastv`
             - In-app self update currently supports Windows; macOS/Linux users should download manually
           files: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.exe
+            dist/*.deb
             dist/SHA256SUMS.txt
             dist/release-info.txt

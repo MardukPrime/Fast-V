@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.6.0--pre.2-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.7.0--pre.1-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -194,9 +194,9 @@ TUN 模式需要：
 最新预发布版本由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
-- **Windows x64**：`FastV-<version>-windows-amd64.zip`，解压后运行 `Fast-V.exe`；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
+- **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
 - **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
-- **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz`，解压后运行 `FastV`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
+- **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz` 便携包，或 `FastV-<version>-linux-<arch>.deb` 安装包（安装到 `/opt/fastv`）；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
 - 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
 - 应用内自动更新当前仅支持 Windows；macOS/Linux 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)

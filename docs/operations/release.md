@@ -16,9 +16,9 @@ git push origin v0.3.0-pre.1
 工作流行为（多平台矩阵）：
 
 - `frontend`：ubuntu-latest 上安装依赖并构建前端，产物作为 artifact 供所有平台复用。
-- `windows-x64`：windows-latest，CGO 关闭，`-tags production -H windowsgui`，产物 `FastV-<version>-windows-amd64.zip`。
-- `macos`：macos-14 上分别交叉编译 arm64 与 amd64（`-tags "production purego"`、CGO 关闭），生成带 Info.plist 与图标的 `FastV.app`，打包为 `FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`（ad-hoc 签名，未做开发者签名/公证）。
-- `linux`：ubuntu-latest 上交叉编译 amd64 与 arm64，打包为 `FastV-<version>-linux-<arch>.tar.gz`（含桌面文件与图标；运行时需 GTK3 + WebKitGTK 4.1）。
+- `windows-x64`：windows-latest，CGO 关闭，`-tags production -H windowsgui`，产物 `FastV-<version>-windows-amd64.zip`；随后用 NSIS 构建 `FastV-<version>-windows-amd64-setup.exe`（脚本 `packaging/windows/fastv.nsi`），并在 runner 上执行静默安装/卸载冒烟测试。
+- `macos`：ubuntu-latest 上分别交叉编译 arm64 与 amd64（`-tags "production purego"`、CGO 关闭），生成带 Info.plist 与图标的 `FastV.app`，打包为 `FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`（ad-hoc 签名，未做开发者签名/公证；DMG 需 macOS runner，暂未提供）。
+- `linux`：ubuntu-latest 上交叉编译 amd64 与 arm64，打包为 `FastV-<version>-linux-<arch>.tar.gz` 与 `FastV-<version>-linux-<arch>.deb`（`packaging/linux/build-deb.sh`，安装到 `/opt/fastv`，依赖 libgtk-3-0 + libwebkit2gtk-4.1-0），并用 `dpkg-deb -I/-c` 校验包元数据。
 - `release`：汇总全部 artifact，生成合并的 `SHA256SUMS.txt` 与 `release-info.txt`，创建 GitHub Release；版本号含 `-pre`/`-beta`/`-rc` 等后缀自动标记为 **pre-release**。
 - 应用内「检查更新」按当前平台与架构选择资产（Windows zip / macOS zip / Linux tar.gz）；自动安装目前仅 Windows 可用，macOS/Linux 会提示手动下载。
 
