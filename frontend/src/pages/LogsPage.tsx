@@ -5,6 +5,7 @@ import { Events } from "@wailsio/runtime";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import type { LogEntry, ProxyState } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import { t } from "../i18n";
 
 type LogsPageProps = {
   proxyState: ProxyState;
@@ -109,7 +110,7 @@ export default function LogsPage(props: LogsPageProps) {
     try {
       await ProxyService.ClearLogs();
       setLogs([]);
-      setNotice("日志已清空。");
+      setNotice(t("logs.notice.cleared"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -120,24 +121,24 @@ export default function LogsPage(props: LogsPageProps) {
     const text = filtered().map(formatLogLine).join("\n");
     try {
       await navigator.clipboard.writeText(text);
-      setNotice("当前筛选日志已复制。");
+      setNotice(t("logs.notice.copiedFiltered"));
     } catch {
-      setError("复制日志失败，请检查剪贴板权限。");
+      setError(t("logs.error.copyFiltered"));
     }
   };
 
   const copyAllLogs = async () => {
     if (logs().length === 0) {
       setNotice("");
-      setError("还没有日志可复制，请先启动代理以产生内核日志。");
+      setError(t("logs.error.noLogsToCopy"));
       return;
     }
     setError("");
     try {
       await navigator.clipboard.writeText(logs().map(formatLogLine).join("\n"));
-      flashNotice(`已复制全部 ${logs().length} 条日志。`);
+      flashNotice(t("logs.notice.copiedAll", { count: logs().length }));
     } catch {
-      setError("复制全部日志失败，请检查剪贴板权限。");
+      setError(t("logs.error.copyAll"));
     }
   };
 
@@ -147,7 +148,7 @@ export default function LogsPage(props: LogsPageProps) {
     const entries = filtered();
     if (entries.length === 0) {
       setNotice("");
-      setError(logs().length === 0 ? "还没有日志可导出，请先启动代理以产生内核日志。" : "当前筛选没有匹配的日志，请调整搜索关键词或等级筛选后再导出。");
+      setError(logs().length === 0 ? t("logs.error.noLogsToExport") : t("logs.error.noMatchToExport"));
       return;
     }
     setError("");
@@ -161,16 +162,16 @@ export default function LogsPage(props: LogsPageProps) {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    flashNotice(`已导出 ${entries.length} 条日志为 ${link.download}。`);
+    flashNotice(t("logs.notice.exported", { count: entries.length, filename: link.download }));
   };
 
   const proxyLabel = () => {
     switch (props.proxyState.status) {
-      case "running": return `代理运行中 · ${props.proxyState.localAddr}`;
-      case "starting": return "代理启动中";
-      case "stopping": return "代理停止中";
-      case "error": return "代理异常";
-      default: return "代理未启动";
+      case "running": return t("logs.status.running", { addr: props.proxyState.localAddr });
+      case "starting": return t("logs.status.starting");
+      case "stopping": return t("logs.status.stopping");
+      case "error": return t("logs.status.error");
+      default: return t("logs.status.stopped");
     }
   };
 
@@ -179,21 +180,21 @@ export default function LogsPage(props: LogsPageProps) {
       <section class="log-toolbar panel">
         <div class="log-toolbar-left">
           <span classList={{ "status-dot": true, online: props.proxyState.status === "running", idle: props.proxyState.status !== "running" }} />
-          <div><strong>{proxyLabel()}</strong><small>{logs().length} 条日志 · {filtered().length} 条匹配</small></div>
+          <div><strong>{proxyLabel()}</strong><small>{t("logs.count", { total: logs().length, matched: filtered().length })}</small></div>
         </div>
         <div class="log-toolbar-right">
-          <label class="log-search"><Icon name="search" size={14} /><input value={search()} onInput={(event) => setSearch(event.currentTarget.value)} placeholder="搜索日志内容" /></label>
+          <label class="log-search"><Icon name="search" size={14} /><input value={search()} onInput={(event) => setSearch(event.currentTarget.value)} placeholder={t("logs.searchPlaceholder")} /></label>
           <select value={level()} onChange={(event) => setLevel(event.currentTarget.value)}>
-            <option value="">全部等级</option>
+            <option value="">{t("logs.allLevels")}</option>
             <For each={levels}>{(item) => <option value={item}>{levelLabel(item)}</option>}</For>
           </select>
-          <button classList={{ "btn": true, "secondary": true, active: autoScroll() }} type="button" onClick={() => setAutoScroll(!autoScroll())}><Icon name="chevron" size={13} class="rotate-down" /> 自动滚动</button>
-          <button classList={{ "btn": true, "secondary": true, active: paused() }} type="button" onClick={() => setPaused(!paused())}>{paused() ? "继续" : "暂停"}</button>
-          <button class="icon-button" type="button" onClick={load} disabled={loading()} aria-label="刷新日志"><Icon name="refresh" size={14} /></button>
-          <button class="icon-button" type="button" onClick={copyLogs} disabled={filtered().length === 0} aria-label="复制当前筛选日志" title="复制当前筛选日志"><Icon name="edit" size={14} /></button>
-          <button class="btn secondary" type="button" onClick={copyAllLogs} aria-label="复制全部日志" title="复制全部日志（不受筛选影响）"><Icon name="edit" size={14} /> 复制全部</button>
-          <button class="btn secondary" type="button" onClick={exportLogs} aria-label="导出当前筛选日志" title="导出当前筛选结果为 .log 文件"><Icon name="external" size={14} /> 导出日志</button>
-          <button class="btn ghost" type="button" onClick={clearLogs} disabled={logs().length === 0}>清空</button>
+          <button classList={{ "btn": true, "secondary": true, active: autoScroll() }} type="button" onClick={() => setAutoScroll(!autoScroll())}><Icon name="chevron" size={13} class="rotate-down" /> {t("logs.autoScroll")}</button>
+          <button classList={{ "btn": true, "secondary": true, active: paused() }} type="button" onClick={() => setPaused(!paused())}>{paused() ? t("logs.resume") : t("logs.pause")}</button>
+          <button class="icon-button" type="button" onClick={load} disabled={loading()} aria-label={t("logs.refresh")}><Icon name="refresh" size={14} /></button>
+          <button class="icon-button" type="button" onClick={copyLogs} disabled={filtered().length === 0} aria-label={t("logs.copyFiltered")} title={t("logs.copyFiltered")}><Icon name="edit" size={14} /></button>
+          <button class="btn secondary" type="button" onClick={copyAllLogs} aria-label={t("logs.copyAllAria")} title={t("logs.copyAllTitle")}><Icon name="edit" size={14} /> {t("logs.copyAll")}</button>
+          <button class="btn secondary" type="button" onClick={exportLogs} aria-label={t("logs.exportAria")} title={t("logs.exportTitle")}><Icon name="external" size={14} /> {t("logs.export")}</button>
+          <button class="btn ghost" type="button" onClick={clearLogs} disabled={logs().length === 0}>{t("logs.clear")}</button>
         </div>
       </section>
 
@@ -206,18 +207,18 @@ export default function LogsPage(props: LogsPageProps) {
 
       <section class="panel logs-panel">
         <div class="logs-head">
-          <span>时间</span>
-          <span>等级</span>
-          <span>来源</span>
-          <span>日志内容</span>
+          <span>{t("logs.head.time")}</span>
+          <span>{t("logs.head.level")}</span>
+          <span>{t("logs.head.source")}</span>
+          <span>{t("logs.head.message")}</span>
         </div>
         <div class="logs-view" ref={logView}>
-          <Show when={!loading()} fallback={<div class="empty-state">正在读取日志...</div>}>
+          <Show when={!loading()} fallback={<div class="empty-state">{t("logs.loading")}</div>}>
             <Show when={filtered().length > 0} fallback={
               <div class="empty-state">
                 <div class="empty-icon"><Icon name="logs" size={22} /></div>
-                <strong>{logs().length === 0 ? "还没有内核日志" : "没有匹配的日志"}</strong>
-                <span>{logs().length === 0 ? "启动代理后，Xray 的运行日志会显示在这里。" : "尝试调整搜索关键词或等级筛选。"}</span>
+                <strong>{logs().length === 0 ? t("logs.empty.noLogs") : t("logs.empty.noMatch")}</strong>
+                <span>{logs().length === 0 ? t("logs.empty.noLogsHint") : t("logs.empty.noMatchHint")}</span>
               </div>
             }>
               <For each={filtered()}>
@@ -234,8 +235,8 @@ export default function LogsPage(props: LogsPageProps) {
           </Show>
         </div>
         <div class="logs-footer">
-          <span>{paused() ? "已暂停接收新日志" : autoScroll() ? "自动滚动已开启" : "自动滚动已关闭"}</span>
-          <span>最多保留 1500 条</span>
+          <span>{paused() ? t("logs.footer.paused") : autoScroll() ? t("logs.footer.autoOn") : t("logs.footer.autoOff")}</span>
+          <span>{t("logs.footer.limit")}</span>
         </div>
       </section>
     </div>

@@ -8,24 +8,25 @@ import { Service as SubscriptionService } from "../../bindings/github.com/Marduk
 import type { NodeView, SubscriptionView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
+import { language, t } from "../i18n";
 
 import "./subscriptions.css";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function formatTime(value: string) {
-  if (!value) return "从未更新";
+  if (!value) return t("sub.time.never");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString(language());
 }
 
 // Compact timestamp for the info column: "11/17 11:24".
 function formatRecentTime(value: string) {
-  if (!value) return "从未更新";
+  if (!value) return t("sub.time.never");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleString(language(), { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatBytes(value: number) {
@@ -38,10 +39,10 @@ function formatBytes(value: number) {
 }
 
 function formatExpire(value: number) {
-  if (!value) return "未设置";
+  if (!value) return t("sub.time.notSet");
   const date = new Date(value * 1000);
-  if (Number.isNaN(date.getTime())) return "未设置";
-  return date.toLocaleDateString("zh-CN");
+  if (Number.isNaN(date.getTime())) return t("sub.time.notSet");
+  return date.toLocaleDateString(language());
 }
 
 function usageOf(sub: SubscriptionView) {
@@ -62,8 +63,8 @@ function remainingDays(expireAt: number): number | null {
 
 function formatRemainingDays(days: number | null) {
   if (days === null) return "—";
-  if (days <= 0) return "已过期";
-  return `剩余 ${days} 天`;
+  if (days <= 0) return t("sub.side.expired");
+  return t("sub.side.remaining", { days });
 }
 
 type UsageLevel = "normal" | "warning" | "danger";
@@ -133,9 +134,9 @@ export default function SubscriptionsPage() {
     const summary = expirySummary();
     if (summary.next !== null) {
       const days = Math.max(1, Math.ceil((summary.next - Date.now()) / DAY_MS));
-      return ` · 最近 ${days} 天后到期`;
+      return t("sub.stats.nextExpiry", { days });
     }
-    if (summary.expired > 0) return ` · ${summary.expired} 个已过期`;
+    if (summary.expired > 0) return t("sub.stats.expired", { count: summary.expired });
     return "";
   };
 
@@ -168,7 +169,7 @@ export default function SubscriptionsPage() {
     setError("");
     setMessage("");
     if (!url().trim()) {
-      setError("请输入订阅地址。");
+      setError(t("sub.error.urlRequired"));
       return;
     }
     setAdding(true);
@@ -176,7 +177,7 @@ export default function SubscriptionsPage() {
       await SubscriptionService.Add({ name: name().trim(), url: url().trim() });
       setName("");
       setURL("");
-      setMessage("订阅已添加并完成首次更新。");
+      setMessage(t("sub.success.added"));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -191,7 +192,7 @@ export default function SubscriptionsPage() {
     setUpdatingId(id);
     try {
       await SubscriptionService.Update(id);
-      setMessage("订阅已更新。");
+      setMessage(t("sub.success.updated"));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -207,9 +208,9 @@ export default function SubscriptionsPage() {
     setUpdatingAll(true);
     try {
       const result = await SubscriptionService.UpdateAll();
-      setMessage(`已更新 ${result.updated} 个订阅，失败 ${result.failed} 个。`);
+      setMessage(t("sub.success.updateAll", { updated: result.updated, failed: result.failed }));
       if ((result.errors ?? []).length > 0) {
-        setError((result.errors ?? []).join("；"));
+        setError((result.errors ?? []).join(t("sub.error.join")));
       }
       await load();
     } catch (err) {
@@ -220,14 +221,14 @@ export default function SubscriptionsPage() {
   };
 
   const removeSubscription = async (sub: SubscriptionView) => {
-    if (!window.confirm(`确定删除订阅「${sub.name}」及其 ${sub.nodeCount} 个节点吗？`)) {
+    if (!window.confirm(t("sub.confirm.delete", { name: sub.name, count: sub.nodeCount }))) {
       return;
     }
     setError("");
     setMessage("");
     try {
       await SubscriptionService.Delete(sub.id);
-      setMessage("订阅已删除。");
+      setMessage(t("sub.success.deleted"));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -239,7 +240,7 @@ export default function SubscriptionsPage() {
     try {
       await ProxyService.SwitchNode(node.id);
       setNodes((current) => (current ?? []).map((item) => ({ ...item, active: item.id === node.id })));
-      setMessage(`已将「${node.name}」设为当前节点。`);
+      setMessage(t("sub.success.active", { name: node.name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -273,7 +274,7 @@ export default function SubscriptionsPage() {
       const image = await SubscriptionService.QRCode(sub.id);
       if (!alive || token !== qrRequest) return;
       if (!image) {
-        setQRError("后端没有返回二维码图片，请稍后重试。");
+        setQRError(t("qr.error.noImage"));
         return;
       }
       setQRImage(image);
@@ -293,10 +294,10 @@ export default function SubscriptionsPage() {
   return (
     <div class="page-stack">
       <section class="mini-stats subscription-stats">
-        <div class="mini-stat"><span>订阅</span><strong>{subscriptions().length}</strong><small>{activeCount()} 个启用{nearestExpiryHint()}</small></div>
-        <div class="mini-stat"><span>节点</span><strong>{totalNodes()}</strong><small>{failedCount() > 0 ? "部分订阅待修复" : "已解析"}</small></div>
-        <div class="mini-stat"><span>套餐流量</span><strong>{formatBytes(usedTotal())}</strong><small>{quotaTotal() > 0 ? `共 ${formatBytes(quotaTotal())}` : "订阅端未提供"}</small></div>
-        <div class="mini-stat"><span>异常</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>{failedCount() > 0 ? "需要处理" : "全部正常"}</small></div>
+        <div class="mini-stat"><span>{t("sub.stats.subscriptions")}</span><strong>{subscriptions().length}</strong><small>{t("sub.stats.active", { count: activeCount() })}{nearestExpiryHint()}</small></div>
+        <div class="mini-stat"><span>{t("sub.stats.nodes")}</span><strong>{totalNodes()}</strong><small>{failedCount() > 0 ? t("sub.stats.nodesBroken") : t("sub.stats.nodesHint")}</small></div>
+        <div class="mini-stat"><span>{t("sub.stats.quota")}</span><strong>{formatBytes(usedTotal())}</strong><small>{quotaTotal() > 0 ? t("sub.stats.quotaTotal", { total: formatBytes(quotaTotal()) }) : t("sub.stats.quotaUnknown")}</small></div>
+        <div class="mini-stat"><span>{t("sub.stats.errors")}</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>{failedCount() > 0 ? t("sub.stats.errorsHint") : t("sub.stats.errorsOk")}</small></div>
       </section>
 
       <section class="panel add-panel">
@@ -304,21 +305,21 @@ export default function SubscriptionsPage() {
           <div class="heading-with-icon">
             <span class="heading-icon cyan"><Icon name="plus" size={17} /></span>
             <div>
-              <h3>添加订阅</h3>
-              <span>支持 Base64 订阅和常见分享链接</span>
+              <h3>{t("sub.add.title")}</h3>
+              <span>{t("sub.add.subtitle")}</span>
             </div>
           </div>
           <button class="btn secondary" onClick={updateAll} disabled={updatingAll() || subscriptions().length === 0}>
-            <Icon name="refresh" size={14} /> {updatingAll() ? "更新中..." : "全部更新"}
+            <Icon name="refresh" size={14} /> {updatingAll() ? t("sub.add.updatingAll") : t("sub.add.updateAll")}
           </button>
         </div>
         <form class="subscription-form" onSubmit={addSubscription}>
           <label>
-            <span>名称（可选）</span>
-            <input value={name()} onInput={(event) => setName(event.currentTarget.value)} placeholder="例如：主力机场" />
+            <span>{t("sub.add.name")}</span>
+            <input value={name()} onInput={(event) => setName(event.currentTarget.value)} placeholder={t("sub.add.namePlaceholder")} />
           </label>
           <label class="grow">
-            <span>订阅地址</span>
+            <span>{t("sub.add.url")}</span>
             <input
               ref={(element) => {
                 urlInput = element;
@@ -330,7 +331,7 @@ export default function SubscriptionsPage() {
             />
           </label>
           <button class="btn primary" type="submit" disabled={adding()}>
-            <Icon name="plus" size={14} /> {adding() ? "添加中..." : "添加订阅"}
+            <Icon name="plus" size={14} /> {adding() ? t("sub.add.submitting") : t("sub.add.submit")}
           </button>
         </form>
       </section>
@@ -345,27 +346,27 @@ export default function SubscriptionsPage() {
       <section class="panel">
         <div class="panel-heading">
           <div>
-            <h3>订阅列表</h3>
-            <span>{subscriptions().length} 个订阅 / {totalNodes()} 个节点</span>
+            <h3>{t("sub.list.title")}</h3>
+            <span>{t("sub.list.summary", { subscriptions: subscriptions().length, nodes: totalNodes() })}</span>
           </div>
           <button class="btn ghost" onClick={load} disabled={loading()}>
-            <Icon name="refresh" size={14} /> 刷新
+            <Icon name="refresh" size={14} /> {t("sub.list.refresh")}
           </button>
         </div>
 
-        <Show when={!loading()} fallback={<div class="empty-state">正在读取订阅...</div>}>
+        <Show when={!loading()} fallback={<div class="empty-state">{t("sub.list.loading")}</div>}>
           <Show when={subscriptions().length > 0} fallback={
             <div class="empty-state sub-empty">
               <div class="empty-icon"><Icon name="subscription" size={24} /></div>
-              <strong>还没有订阅</strong>
-              <span>添加订阅地址后，FastV 会自动解析节点，并同步套餐用量与到期时间。</span>
+              <strong>{t("sub.empty.title")}</strong>
+              <span>{t("sub.empty.hint")}</span>
               <ul class="sub-empty-steps">
-                <li>填写订阅地址</li>
-                <li>自动解析节点</li>
-                <li>同步用量与到期</li>
+                <li>{t("sub.empty.step1")}</li>
+                <li>{t("sub.empty.step2")}</li>
+                <li>{t("sub.empty.step3")}</li>
               </ul>
               <button class="btn secondary" type="button" onClick={focusAddForm}>
-                <Icon name="plus" size={14} /> 去添加订阅
+                <Icon name="plus" size={14} /> {t("sub.empty.action")}
               </button>
             </div>
           }>
@@ -396,15 +397,15 @@ export default function SubscriptionsPage() {
                               "is-ok": !sub.lastError,
                               "is-error": Boolean(sub.lastError),
                             }}>
-                              <span class="status-dot" /> {sub.lastError ? "异常" : "正常"}
+                              <span class="status-dot" /> {sub.lastError ? t("sub.card.error") : t("sub.card.ok")}
                             </span>
                           </div>
                           <div class="sub-host" title={sub.host || undefined}>{sub.host || "—"}</div>
                           <div class="sub-chips">
-                            <span class="sub-chip"><Icon name="nodes" size={12} /> {sub.nodeCount} 个节点</span>
+                            <span class="sub-chip"><Icon name="nodes" size={12} /> {t("sub.card.nodes", { count: sub.nodeCount })}</span>
                             <span class="sub-chip">
                               <span classList={{ "status-dot": true, online: sub.enabled }} />
-                              {sub.enabled ? "已启用" : "已停用"}
+                              {sub.enabled ? t("sub.card.enabled") : t("sub.card.disabled")}
                             </span>
                           </div>
                         </div>
@@ -415,19 +416,19 @@ export default function SubscriptionsPage() {
                           when={hasQuota}
                           fallback={
                             <div class="sub-usage-empty">
-                              <span class="sub-usage-unknown">用量未知</span>
+                              <span class="sub-usage-unknown">{t("sub.usage.unknown")}</span>
                               <Show when={used > 0}>
-                                <span class="sub-usage-note">已用 {formatBytes(used)}</span>
+                                <span class="sub-usage-note">{t("sub.usage.usedNote", { value: formatBytes(used) })}</span>
                               </Show>
                               <Show when={sub.usageUpdatedAt}>
-                                <span class="sub-usage-note">更新于 {formatRecentTime(sub.usageUpdatedAt)}</span>
+                                <span class="sub-usage-note">{t("sub.usage.updatedAt", { time: formatRecentTime(sub.usageUpdatedAt) })}</span>
                               </Show>
                             </div>
                           }
                         >
                           <div class="sub-usage-head">
-                            <span class="sub-usage-label" title={`已用 ${formatBytes(used)} / ${formatBytes(sub.totalBytes)}`}>
-                              已用 <strong>{formatBytes(used)}</strong> / {formatBytes(sub.totalBytes)}
+                            <span class="sub-usage-label" title={t("sub.usage.title", { used: formatBytes(used), total: formatBytes(sub.totalBytes) })}>
+                              {t("sub.usage.usedLabel")} <strong>{formatBytes(used)}</strong> / {formatBytes(sub.totalBytes)}
                             </span>
                             <span classList={{
                               "sub-usage-pct": true,
@@ -440,7 +441,7 @@ export default function SubscriptionsPage() {
                           <div
                             class="sub-progress"
                             role="progressbar"
-                            aria-label={`${sub.name} 套餐用量`}
+                            aria-label={t("sub.usage.aria", { name: sub.name })}
                             aria-valuemin="0"
                             aria-valuemax="100"
                             aria-valuenow={String(percent)}
@@ -455,10 +456,10 @@ export default function SubscriptionsPage() {
                             />
                           </div>
                           <div class="sub-usage-meta">
-                            <span>上传 {formatBytes(sub.uploadBytes ?? 0)}</span>
-                            <span>下载 {formatBytes(sub.downloadBytes ?? 0)}</span>
+                            <span>{t("sub.usage.upload", { value: formatBytes(sub.uploadBytes ?? 0) })}</span>
+                            <span>{t("sub.usage.download", { value: formatBytes(sub.downloadBytes ?? 0) })}</span>
                             <Show when={sub.usageUpdatedAt}>
-                              <span>用量更新 {formatRecentTime(sub.usageUpdatedAt)}</span>
+                              <span>{t("sub.usage.updatedLabel", { time: formatRecentTime(sub.usageUpdatedAt) })}</span>
                             </Show>
                           </div>
                         </Show>
@@ -466,7 +467,7 @@ export default function SubscriptionsPage() {
 
                       <div class="sub-side">
                         <div class="sub-side-item">
-                          <span class="sub-side-label">剩余天数</span>
+                          <span class="sub-side-label">{t("sub.side.remainingDays")}</span>
                           <strong classList={{
                             "sub-side-days": true,
                             "is-muted": days === null,
@@ -476,13 +477,13 @@ export default function SubscriptionsPage() {
                             {formatRemainingDays(days)}
                           </strong>
                           <Show when={(sub.expireAt ?? 0) > 0}>
-                            <span class="sub-side-note" title={`到期时间 ${formatExpire(sub.expireAt ?? 0)}`}>
+                            <span class="sub-side-note" title={t("sub.side.expireTitle", { date: formatExpire(sub.expireAt ?? 0) })}>
                               {formatExpire(sub.expireAt ?? 0)}
                             </span>
                           </Show>
                         </div>
                         <div class="sub-side-item">
-                          <span class="sub-side-label">最近更新</span>
+                          <span class="sub-side-label">{t("sub.side.recent")}</span>
                           <span class="sub-side-value" title={formatTime(sub.updatedAt)}>{formatRecentTime(sub.updatedAt)}</span>
                         </div>
                       </div>
@@ -492,22 +493,22 @@ export default function SubscriptionsPage() {
                           class="btn secondary"
                           type="button"
                           onClick={() => void openSubscriptionQRCode(sub)}
-                          title="订阅二维码包含私有令牌，请谨慎分享"
+                          title={t("sub.actions.qrTitle")}
                         >
-                          <QRCodeIcon size={14} /> 二维码
+                          <QRCodeIcon size={14} /> {t("sub.actions.qr")}
                         </button>
                         <button class="btn secondary" type="button" onClick={() => openNodes(sub)}>
-                          <Icon name="nodes" size={14} /> 节点
+                          <Icon name="nodes" size={14} /> {t("sub.actions.nodes")}
                         </button>
                         <button class="btn secondary" type="button" onClick={() => updateSubscription(sub.id)} disabled={updating()}>
-                          <Icon name="refresh" size={14} /> {updating() ? "更新中" : "更新"}
+                          <Icon name="refresh" size={14} /> {updating() ? t("sub.actions.updating") : t("sub.actions.update")}
                         </button>
                         <button
                           class="btn danger"
                           type="button"
                           onClick={() => removeSubscription(sub)}
-                          aria-label={`删除 ${sub.name}`}
-                          title="删除订阅"
+                          aria-label={t("sub.actions.deleteAria", { name: sub.name })}
+                          title={t("sub.actions.deleteTitle")}
                         >
                           <Icon name="trash" size={14} />
                         </button>
@@ -533,15 +534,15 @@ export default function SubscriptionsPage() {
             <div class="modal-heading">
               <div>
                 <h3>{nodesTitle()}</h3>
-                <span>{(nodes() ?? []).length} 个节点</span>
+                <span>{t("sub.card.nodes", { count: (nodes() ?? []).length })}</span>
               </div>
-              <button class="icon-button" onClick={() => setNodes(null)} aria-label="关闭"><Icon name="close" size={18} /></button>
+              <button class="icon-button" onClick={() => setNodes(null)} aria-label={t("sub.common.close")}><Icon name="close" size={18} /></button>
             </div>
             <div class="node-table-wrap">
-              <Show when={(nodes() ?? []).length > 0} fallback={<div class="empty-state">没有解析到节点。</div>}>
+              <Show when={(nodes() ?? []).length > 0} fallback={<div class="empty-state">{t("sub.nodes.empty")}</div>}>
                 <table class="node-table">
                   <thead>
-                    <tr><th>名称</th><th>协议</th><th>地址</th><th>端口</th><th>操作</th></tr>
+                    <tr><th>{t("sub.nodes.col.name")}</th><th>{t("sub.nodes.col.protocol")}</th><th>{t("sub.nodes.col.address")}</th><th>{t("sub.nodes.col.port")}</th><th>{t("sub.nodes.col.actions")}</th></tr>
                   </thead>
                   <tbody>
                     <For each={nodes() ?? []}>
@@ -554,10 +555,10 @@ export default function SubscriptionsPage() {
                           <td>
                             <Show when={node.active} fallback={
                               <button class="btn ghost compact" onClick={() => setActiveNode(node)} disabled={!node.enabled}>
-                                {node.enabled ? "设为当前" : "已禁用"}
+                                {node.enabled ? t("sub.nodes.setActive") : t("sub.nodes.disabled")}
                               </button>
                             }>
-                              <span class="status-label ok"><span class="status-dot" />当前</span>
+                              <span class="status-label ok"><span class="status-dot" />{t("sub.nodes.current")}</span>
                             </Show>
                           </td>
                         </tr>
@@ -573,12 +574,12 @@ export default function SubscriptionsPage() {
 
       <QRModal
         open={qrOpen()}
-        title={qrTitle() ? `订阅二维码 · ${qrTitle()}` : "订阅二维码"}
-        subtitle="扫码可在其他设备或客户端中导入该订阅"
+        title={qrTitle() ? t("sub.qr.titleWithName", { name: qrTitle() }) : t("sub.qr.title")}
+        subtitle={t("sub.qr.subtitle")}
         image={qrImage()}
         loading={qrLoading()}
         error={qrError()}
-        hint="订阅链接包含私有令牌；为保证安全，后端只提供二维码图片，无法在此显示或复制文本链接。"
+        hint={t("sub.qr.hint")}
         onClose={closeQRCode}
         onRetry={retryQRCode}
       />

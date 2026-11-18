@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
 
+import { t } from "../i18n";
 import Icon from "./Icon";
 
 /**
@@ -97,11 +98,11 @@ export default function QRModal(props: QRModalProps) {
   const copyLink = async () => {
     const link = props.link?.trim() ?? "";
     if (!link) {
-      setCopyError("没有可复制的分享链接。");
+      setCopyError(t("qr.error.noLink"));
       return;
     }
     if (!navigator.clipboard?.writeText) {
-      setCopyError("当前环境不支持剪贴板，请手动选中链接复制。");
+      setCopyError(t("qr.error.noClipboard"));
       return;
     }
     try {
@@ -116,7 +117,7 @@ export default function QRModal(props: QRModalProps) {
       }, 1600);
     } catch {
       if (!alive) return;
-      setCopyError("复制失败，请手动选中链接复制。");
+      setCopyError(t("qr.error.copyFailed"));
     }
   };
 
@@ -144,9 +145,9 @@ export default function QRModal(props: QRModalProps) {
           <div class="modal-heading">
             <div>
               <h3>{props.title}</h3>
-              <span>{props.subtitle ?? "扫码后即可导入或分享"}</span>
+              <span>{props.subtitle ?? t("qr.defaultSubtitle")}</span>
             </div>
-            <button class="icon-button" onClick={close} aria-label="关闭二维码">
+            <button class="icon-button" onClick={close} aria-label={t("qr.closeAria")}>
               <Icon name="close" size={18} />
             </button>
           </div>
@@ -161,7 +162,7 @@ export default function QRModal(props: QRModalProps) {
                     <Show when={props.image}>
                       {(image) => (
                         <div class="qr-image-wrap">
-                          <img class="qr-image" src={image()} alt={`${props.title}二维码`} width="320" height="320" />
+                          <img class="qr-image" src={image()} alt={t("qr.imageAlt", { title: props.title })} width="320" height="320" />
                         </div>
                       )}
                     </Show>
@@ -173,7 +174,7 @@ export default function QRModal(props: QRModalProps) {
                     </span>
                     <Show when={props.onRetry}>
                       <button class="btn ghost compact" type="button" onClick={() => props.onRetry?.()}>
-                        <Icon name="refresh" size={13} /> 重试
+                        <Icon name="refresh" size={13} /> {t("qr.retry")}
                       </button>
                     </Show>
                   </div>
@@ -182,7 +183,7 @@ export default function QRModal(props: QRModalProps) {
             >
               <div class="qr-placeholder">
                 <span class="qr-spinner" aria-hidden="true" />
-                <span>正在生成二维码...</span>
+                <span>{t("qr.generating")}</span>
               </div>
             </Show>
 
@@ -197,8 +198,8 @@ export default function QRModal(props: QRModalProps) {
                     type="button"
                     onClick={() => void copyLink()}
                   >
-                    <Show when={copied()} fallback={<><CopyIcon /> 复制链接</>}>
-                      <Icon name="check" size={13} /> 已复制
+                    <Show when={copied()} fallback={<><CopyIcon /> {t("qr.copyLink")}</>}>
+                      <Icon name="check" size={13} /> {t("qr.copied")}
                     </Show>
                   </button>
                 </div>
@@ -225,7 +226,7 @@ export default function QRModal(props: QRModalProps) {
 
           <div class="modal-footer">
             <button class="btn ghost" type="button" onClick={close}>
-              关闭
+              {t("qr.close")}
             </button>
           </div>
         </div>

@@ -5,6 +5,8 @@ import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/inter
 import type { BatchResult, NodeConfig, NodeConfigPreview, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
+import { t } from "../i18n";
+
 import "./servers.css";
 
 type ServersProps = {
@@ -17,14 +19,14 @@ type SortMode = "default" | "name" | "latency" | "favorite";
 
 type BatchAction = "enable" | "disable" | "copy" | "delete" | "tag";
 
-const sortOptions: { value: SortMode; label: string }[] = [
-  { value: "default", label: "默认顺序" },
-  { value: "name", label: "按名称" },
-  { value: "latency", label: "按延迟" },
-  { value: "favorite", label: "收藏优先" },
+const sortOptions = (): { value: SortMode; label: string }[] => [
+  { value: "default", label: t("srv.sort.default") },
+  { value: "name", label: t("srv.sort.name") },
+  { value: "latency", label: t("srv.sort.latency") },
+  { value: "favorite", label: t("srv.sort.favorite") },
 ];
 
-const isSortMode = (value: string): value is SortMode => sortOptions.some((option) => option.value === value);
+const isSortMode = (value: string): value is SortMode => sortOptions().some((option) => option.value === value);
 
 const protocolOptions = ["vmess", "vless", "trojan", "shadowsocks"];
 const networkOptions = [
@@ -34,8 +36,8 @@ const networkOptions = [
   { value: "httpupgrade", label: "HTTPUpgrade" },
   { value: "xhttp", label: "XHTTP" },
 ];
-const tlsOptions = [
-  { value: "none", label: "无 TLS" },
+const tlsOptions = (): { value: string; label: string }[] => [
+  { value: "none", label: t("srv.editor.tlsNone") },
   { value: "tls", label: "TLS" },
   { value: "reality", label: "REALITY" },
 ];
@@ -54,11 +56,11 @@ function validateNodeTag(value: string): string {
   for (const char of value) {
     const code = char.codePointAt(0) ?? 0;
     if (char === "\n" || char === "\r" || code < 0x20 || code === 0x7f) {
-      return "标签不能包含换行或控制字符";
+      return t("srv.tag.error.controlChars");
     }
   }
   if (tagCharCount(value) > TAG_MAX_LENGTH) {
-    return `标签最多 ${TAG_MAX_LENGTH} 个字符`;
+    return t("srv.tag.error.tooLong", { count: TAG_MAX_LENGTH });
   }
   return "";
 }
@@ -193,7 +195,7 @@ export default function ServersPage(props: ServersProps) {
   const subscriptions = createMemo(() => {
     const map = new Map<string, string>();
     for (const node of nodes()) {
-      map.set(node.subscriptionId, node.subscriptionName || "未命名订阅");
+      map.set(node.subscriptionId, node.subscriptionName || t("srv.subscription.unnamed"));
     }
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   });
@@ -316,7 +318,7 @@ export default function ServersPage(props: ServersProps) {
     if (!id) return;
     const node = nodes().find((item) => item.id === id);
     if (!node || !node.enabled) {
-      setError("该节点已禁用，请先启用。");
+      setError(t("srv.error.nodeDisabled"));
       return;
     }
     setBusyID(id);
@@ -345,7 +347,7 @@ export default function ServersPage(props: ServersProps) {
   };
 
   const removeNode = async (node: NodeView) => {
-    if (!window.confirm(`确定删除节点「${node.name}」吗？`)) return;
+    if (!window.confirm(t("srv.confirm.deleteNode", { name: node.name }))) return;
     setBusyID(node.id);
     setError("");
     try {
@@ -396,7 +398,7 @@ export default function ServersPage(props: ServersProps) {
       // Never leave a requested node without a visible outcome: a missing
       // result is reported as a per-node failure instead of silently ignored.
       for (const id of requestedIDs) {
-        if (!byID.has(id)) next[id] = urlTestFailure(id, "测速未返回结果");
+        if (!byID.has(id)) next[id] = urlTestFailure(id, t("srv.latency.noResult"));
       }
       return next;
     });
@@ -452,14 +454,14 @@ export default function ServersPage(props: ServersProps) {
     const errors = result.errors ?? [];
     if (result.affected > 0) {
       showPageNotice(requested > result.affected
-        ? `${action} ${result.affected} / ${requested} 个节点，其余节点失败。`
-        : `${action} ${result.affected} 个节点。`);
+        ? t("srv.batch.partial", { action, affected: result.affected, requested })
+        : t("srv.batch.done", { action, count: result.affected }));
     } else if (errors.length === 0) {
-      setError(`${action}失败：后端没有更新任何节点。`);
+      setError(t("srv.batch.failedNone"));
     }
     if (errors.length > 0) {
-      const head = errors.slice(0, 2).join("；");
-      setError(errors.length > 2 ? `${head}；等共 ${errors.length} 个错误。` : head);
+      const head = errors.slice(0, 2).join(t("srv.error.join"));
+      setError(errors.length > 2 ? t("srv.batch.moreErrors", { head, count: errors.length }) : head);
     }
   };
 
@@ -473,7 +475,7 @@ export default function ServersPage(props: ServersProps) {
       const result = await NodeService.SetEnabledBatch(ids, enabled);
       await load();
       clearSelection();
-      reportBatchResult(enabled ? "已启用" : "已禁用", result, ids.length);
+      reportBatchResult(enabled ? t("srv.batch.action.enabled") : t("srv.batch.action.disabled"), result, ids.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -491,17 +493,17 @@ export default function ServersPage(props: ServersProps) {
       const links = await NodeService.ExportLinks(ids);
       const texts = (links ?? []).map((item) => item.link.trim()).filter(Boolean);
       if (texts.length === 0) {
-        setError("所选节点没有可导出的分享链接。");
+        setError(t("srv.copy.noLinks"));
         return;
       }
       if (!navigator.clipboard?.writeText) {
-        setError("当前环境不支持剪贴板，无法复制分享链接。");
+        setError(t("srv.copy.noClipboard"));
         return;
       }
       await navigator.clipboard.writeText(texts.join("\n"));
       showPageNotice(texts.length < ids.length
-        ? `已复制 ${texts.length} 个节点的分享链接，${ids.length - texts.length} 个节点没有可导出的链接。`
-        : `已复制 ${texts.length} 个节点的分享链接。`);
+        ? t("srv.copy.partial", { copied: texts.length, missing: ids.length - texts.length })
+        : t("srv.copy.done", { count: texts.length }));
       clearSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -514,14 +516,14 @@ export default function ServersPage(props: ServersProps) {
     if (batchBusyActive()) return;
     const ids = [...selectedIDs()];
     if (ids.length === 0) return;
-    if (!window.confirm(`确定删除选中的 ${ids.length} 个节点吗？删除后无法恢复，该操作有风险。`)) return;
+    if (!window.confirm(t("srv.confirm.batchDelete", { count: ids.length }))) return;
     setBatchBusy("delete");
     setError("");
     try {
       const result = await NodeService.DeleteBatch(ids);
       await load();
       clearSelection();
-      reportBatchResult("已删除", result, ids.length);
+      reportBatchResult(t("srv.batch.action.deleted"), result, ids.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -584,19 +586,19 @@ export default function ServersPage(props: ServersProps) {
       const partial = requested > result.affected;
       if (tag) {
         showPageNotice(partial
-          ? `已为 ${result.affected} / ${requested} 个节点设置标签「${tag}」，其余节点失败。`
-          : `已为 ${result.affected} 个节点设置标签「${tag}」。`);
+          ? t("srv.tag.setPartial", { affected: result.affected, requested, tag })
+          : t("srv.tag.setDone", { count: result.affected, tag }));
       } else {
         showPageNotice(partial
-          ? `已清除 ${result.affected} / ${requested} 个节点的标签，其余节点失败。`
-          : `已清除 ${result.affected} 个节点的标签。`);
+          ? t("srv.tag.clearPartial", { affected: result.affected, requested })
+          : t("srv.tag.clearDone", { count: result.affected }));
       }
     } else if (errors.length === 0) {
-      setError("设置标签失败：后端没有更新任何节点。");
+      setError(t("srv.tag.failedNone"));
     }
     if (errors.length > 0) {
-      const head = errors.slice(0, 2).join("；");
-      setError(errors.length > 2 ? `${head}；等共 ${errors.length} 个错误。` : head);
+      const head = errors.slice(0, 2).join(t("srv.error.join"));
+      setError(errors.length > 2 ? t("srv.batch.moreErrors", { head, count: errors.length }) : head);
     }
   };
 
@@ -619,7 +621,7 @@ export default function ServersPage(props: ServersProps) {
       if (single) {
         const updated = await NodeService.SetTag(single.id, tag);
         setNodes((current) => current.map((item) => item.id === single.id ? updated : item));
-        showPageNotice(tag ? `已为「${single.name}」设置标签「${tag}」。` : `已清除「${single.name}」的标签。`);
+        showPageNotice(tag ? t("srv.tag.setOne", { name: single.name, tag }) : t("srv.tag.clearOne", { name: single.name }));
         await refreshTags();
       } else {
         setBatchBusy("tag");
@@ -665,15 +667,15 @@ export default function ServersPage(props: ServersProps) {
       ]);
       if (!alive || token !== qrRequest) return;
       if (!image) {
-        setQRError("后端没有返回二维码图片，请稍后重试。");
+        setQRError(t("qr.error.noImage"));
         return;
       }
       const link = links?.[0]?.link ?? "";
       setQRImage(image);
       setQRLink(link);
       setQRHint(link
-        ? "使用支持扫码导入的客户端（如 v2rayN、Xray）扫描二维码即可添加该节点。"
-        : "该节点暂时无法导出文本分享链接，可以扫描二维码在客户端中导入。");
+        ? t("srv.qr.hintWithLink")
+        : t("srv.qr.hintNoLink"));
     } catch (err) {
       if (!alive || token !== qrRequest) return;
       setQRError(err instanceof Error ? err.message : String(err));
@@ -704,25 +706,25 @@ export default function ServersPage(props: ServersProps) {
   const pasteFromClipboard = async () => {
     setImportError("");
     if (!navigator.clipboard?.readText) {
-      setImportError("当前环境不支持读取剪贴板，请手动粘贴分享链接。");
+      setImportError(t("srv.import.clipboardUnsupported"));
       return;
     }
     try {
       const text = await navigator.clipboard.readText();
       if (!text.trim()) {
-        setImportError("剪贴板为空，请先复制节点分享链接。");
+        setImportError(t("srv.import.clipboardEmpty"));
         return;
       }
       setImportText((current) => current.trim() ? `${current.trim()}\n${text.trim()}` : text.trim());
     } catch {
-      setImportError("无法读取剪贴板，请手动粘贴分享链接。");
+      setImportError(t("srv.import.clipboardFailed"));
     }
   };
 
   const importNodes = async () => {
     const text = importText().trim();
     if (!text) {
-      setImportError("请先粘贴节点分享链接。");
+      setImportError(t("srv.import.empty"));
       return;
     }
     setImportBusy(true);
@@ -735,15 +737,15 @@ export default function ServersPage(props: ServersProps) {
       if (result.imported > 0) {
         await load();
         showPageNotice(result.skipped > 0
-          ? `已导入 ${result.imported} 条节点，跳过 ${result.skipped} 条重复或无效链接。`
-          : `已导入 ${result.imported} 条节点。`);
+          ? t("srv.import.doneSkipped", { count: result.imported, skipped: result.skipped })
+          : t("srv.import.done", { count: result.imported }));
       }
       if (errors.length > 0) {
-        setImportError(`导入完成，但有 ${errors.length} 条链接未能处理，详见下方列表。`);
+        setImportError(t("srv.import.partialErrors", { count: errors.length }));
         return;
       }
       if (result.imported === 0) {
-        setImportError(result.skipped > 0 ? "这些链接都已存在，没有新增节点。" : "没有识别到可导入的节点链接。");
+        setImportError(result.skipped > 0 ? t("srv.import.allDuplicate") : t("srv.import.none"));
         return;
       }
       setImportOpen(false);
@@ -758,15 +760,15 @@ export default function ServersPage(props: ServersProps) {
 
   const latencyLabel = (node: NodeView) => {
     const entry = effectiveLatency(node);
-    if (!entry) return <span class="latency unknown">未测试</span>;
-    const sourceLabel = entry.source === "url" ? "真实链路延迟" : "TCP 连通性";
+    if (!entry) return <span class="latency unknown">{t("srv.latency.untested")}</span>;
+    const sourceLabel = entry.source === "url" ? t("srv.latency.sourceUrl") : t("srv.latency.sourceTcp");
     if (entry.result.error) {
-      return <span class="latency bad" title={`${sourceLabel}：${entry.result.error}`}>失败</span>;
+      return <span class="latency bad" title={t("srv.latency.titleError", { source: sourceLabel, error: entry.result.error })}>{t("srv.latency.failed")}</span>;
     }
     return (
       <span
         classList={{ "latency": true, good: entry.result.latencyMs < 100, mid: entry.result.latencyMs >= 100 && entry.result.latencyMs < 300, bad: entry.result.latencyMs >= 300 }}
-        title={`${sourceLabel}：${entry.result.latencyMs} ms`}
+        title={t("srv.latency.titleMs", { source: sourceLabel, ms: entry.result.latencyMs })}
       >
         {entry.result.latencyMs} ms
       </span>
@@ -867,9 +869,9 @@ export default function ServersPage(props: ServersProps) {
   return (
     <div class="page-stack srv-page">
       <section class="mini-stats">
-        <div class="mini-stat"><span>全部节点</span><strong>{nodes().length}</strong><small>{enabledCount()} 个启用</small></div>
-        <div class="mini-stat"><span>当前节点</span><strong>{activeCount()}</strong><small>已选择</small></div>
-        <div class="mini-stat"><span>筛选结果</span><strong>{filteredNodes().length}</strong><small>当前列表</small></div>
+        <div class="mini-stat"><span>{t("srv.stats.total")}</span><strong>{nodes().length}</strong><small>{t("srv.stats.enabled", { count: enabledCount() })}</small></div>
+        <div class="mini-stat"><span>{t("srv.stats.current")}</span><strong>{activeCount()}</strong><small>{t("srv.stats.selected")}</small></div>
+        <div class="mini-stat"><span>{t("srv.stats.filtered")}</span><strong>{filteredNodes().length}</strong><small>{t("srv.stats.filteredHint")}</small></div>
       </section>
 
       <section class="panel srv-panel">
@@ -877,8 +879,8 @@ export default function ServersPage(props: ServersProps) {
           <div class="heading-with-icon">
             <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
             <div>
-              <h3>节点管理</h3>
-              <span>编辑节点配置、快速切换当前节点和测试连通性</span>
+              <h3>{t("srv.title")}</h3>
+              <span>{t("srv.subtitle")}</span>
             </div>
           </div>
           <div class="srv-heading-actions">
@@ -887,10 +889,10 @@ export default function ServersPage(props: ServersProps) {
               value={activeNodeID()}
               onChange={(event) => switchActiveNode(event.currentTarget.value)}
               disabled={nodes().length === 0 || busyID() !== ""}
-              aria-label="快速切换当前节点"
-              title="快速切换当前节点"
+              aria-label={t("srv.quickSwitchAria")}
+              title={t("srv.quickSwitchAria")}
             >
-              <option value="">快速切换节点</option>
+              <option value="">{t("srv.quickSwitch")}</option>
               <For each={nodes().filter((node) => node.enabled)}>
                 {(node) => <option value={node.id} selected={node.id === activeNodeID()}>{node.active ? "✓ " : ""}{node.name}</option>}
               </For>
@@ -899,9 +901,9 @@ export default function ServersPage(props: ServersProps) {
               class="btn secondary srv-test-list"
               onClick={testAll}
               disabled={urlTestBusy() || filteredNodes().length === 0}
-              title="真实链路 HTTP 延迟测速（会临时启动 Xray，可能耗时数秒）"
+              title={t("srv.testTitle")}
             >
-              <Icon name="refresh" size={14} /> {testingAll() ? "测速中..." : "测试当前列表"}
+              <Icon name="refresh" size={14} /> {testingAll() ? t("srv.testing") : t("srv.test")}
             </button>
           </div>
         </div>
@@ -912,40 +914,40 @@ export default function ServersPage(props: ServersProps) {
             <input
               value={search()}
               onInput={(event) => setSearch(event.currentTarget.value)}
-              placeholder="搜索节点、标签、地址或订阅"
-              aria-label="搜索节点"
+              placeholder={t("srv.searchPlaceholder")}
+              aria-label={t("srv.searchAria")}
             />
           </label>
-          <div class="srv-filters" role="group" aria-label="筛选与排序">
-            <span class="srv-filter-label" aria-hidden="true">筛选</span>
+          <div class="srv-filters" role="group" aria-label={t("srv.filtersAria")}>
+            <span class="srv-filter-label" aria-hidden="true">{t("srv.filterLabel")}</span>
             <select
               class="srv-select srv-select-protocol"
               value={protocol()}
               onChange={(event) => setProtocol(event.currentTarget.value)}
-              aria-label="按协议筛选"
-              title="按协议筛选"
+              aria-label={t("srv.protocolFilter")}
+              title={t("srv.protocolFilter")}
             >
-              <option value="">全部协议</option>
+              <option value="">{t("srv.allProtocols")}</option>
               <For each={protocolOptions}>{(item) => <option value={item}>{protocolLabel(item)}</option>}</For>
             </select>
             <select
               class="srv-select srv-select-tag"
               value={tagFilter()}
               onChange={(event) => setTagFilter(event.currentTarget.value)}
-              aria-label="按标签筛选节点"
-              title="按标签筛选节点"
+              aria-label={t("srv.tagFilter")}
+              title={t("srv.tagFilter")}
             >
-              <option value="">全部标签</option>
+              <option value="">{t("srv.allTags")}</option>
               <For each={tags()}>{(tag) => <option value={tag}>{tag}</option>}</For>
             </select>
             <select
               class="srv-select srv-select-sub"
               value={subscriptionID()}
               onChange={(event) => setSubscriptionID(event.currentTarget.value)}
-              aria-label="按订阅筛选"
-              title="按订阅筛选"
+              aria-label={t("srv.subscriptionFilter")}
+              title={t("srv.subscriptionFilter")}
             >
-              <option value="">全部订阅</option>
+              <option value="">{t("srv.allSubscriptions")}</option>
               <For each={subscriptions()}>{(item) => <option value={item.id}>{item.name}</option>}</For>
             </select>
             <span class="srv-filter-sep" aria-hidden="true" />
@@ -953,50 +955,50 @@ export default function ServersPage(props: ServersProps) {
               class="srv-select srv-select-sort"
               value={sortMode()}
               onChange={(event) => { const value = event.currentTarget.value; if (isSortMode(value)) setSortMode(value); }}
-              aria-label="节点排序方式"
-              title="节点排序方式"
+              aria-label={t("srv.sortLabel")}
+              title={t("srv.sortLabel")}
             >
-              <For each={sortOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+              <For each={sortOptions()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
             </select>
           </div>
           <div class="srv-tools">
             <button class="btn secondary srv-import" onClick={openImport} disabled={loading()}>
-              <Icon name="plus" size={14} /> 导入节点
+              <Icon name="plus" size={14} /> {t("srv.import")}
             </button>
-            <button class="btn ghost icon-only srv-refresh" onClick={load} disabled={loading()} aria-label="刷新节点" title="刷新节点">
+            <button class="btn ghost icon-only srv-refresh" onClick={load} disabled={loading()} aria-label={t("srv.refresh")} title={t("srv.refresh")}>
               <Icon name="refresh" size={14} />
             </button>
           </div>
         </div>
 
         <Show when={selectedCount() > 0}>
-          <div class="srv-batch-bar" role="region" aria-label="批量操作">
-            <span class="srv-batch-count">已选 <strong>{selectedCount()}</strong> 项</span>
+          <div class="srv-batch-bar" role="region" aria-label={t("srv.batch.region")}>
+            <span class="srv-batch-count">{t("srv.batch.selectedPrefix")}<strong>{selectedCount()}</strong>{t("srv.batch.selectedSuffix")}</span>
             <div class="srv-batch-actions">
               <button class="btn ghost compact" type="button" onClick={toggleSelectAll} disabled={batchBusyActive() || selectableIDs().length === 0}>
-                {allSelected() ? "取消全选" : "全选"}
+                {allSelected() ? t("srv.batch.deselectAll") : t("srv.batch.selectAll")}
               </button>
               <button class="btn ghost compact" type="button" onClick={invertSelection} disabled={batchBusyActive() || selectableIDs().length === 0}>
-                反选
+                {t("srv.batch.invert")}
               </button>
               <button class="btn ghost compact" type="button" onClick={clearSelection} disabled={batchBusyActive()}>
-                清空选择
+                {t("srv.batch.clear")}
               </button>
               <span class="srv-batch-divider" aria-hidden="true" />
               <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(true)} disabled={batchBusyActive()}>
-                <Icon name="check" size={13} /> {batchBusy() === "enable" ? "启用中..." : "批量启用"}
+                <Icon name="check" size={13} /> {batchBusy() === "enable" ? t("srv.batch.enabling") : t("srv.batch.enable")}
               </button>
               <button class="btn secondary compact" type="button" onClick={() => void runBatchSetEnabled(false)} disabled={batchBusyActive()}>
-                <Icon name="stop" size={13} /> {batchBusy() === "disable" ? "禁用中..." : "批量禁用"}
+                <Icon name="stop" size={13} /> {batchBusy() === "disable" ? t("srv.batch.disabling") : t("srv.batch.disable")}
               </button>
               <button class="btn secondary compact" type="button" onClick={() => void runBatchCopyLinks()} disabled={batchBusyActive()}>
-                <CopyLinkIcon /> {batchBusy() === "copy" ? "复制中..." : "批量复制链接"}
+                <CopyLinkIcon /> {batchBusy() === "copy" ? t("srv.batch.copying") : t("srv.batch.copy")}
               </button>
               <button class="btn secondary compact" type="button" onClick={openBatchTagEditor} disabled={batchBusyActive()}>
-                <Icon name="edit" size={13} /> 设置标签
+                <Icon name="edit" size={13} /> {t("srv.batch.tag")}
               </button>
               <button class="btn danger compact" type="button" onClick={() => void runBatchDelete()} disabled={batchBusyActive()}>
-                <Icon name="trash" size={13} /> {batchBusy() === "delete" ? "删除中..." : "批量删除"}
+                <Icon name="trash" size={13} /> {batchBusy() === "delete" ? t("srv.batch.deleting") : t("srv.batch.delete")}
               </button>
             </div>
           </div>
@@ -1005,7 +1007,7 @@ export default function ServersPage(props: ServersProps) {
         <Show when={pageNotice()}>
           <div class="alert success srv-notice">
             <span class="alert-message"><Icon name="check" size={15} /> {pageNotice()}</span>
-            <button class="icon-button" onClick={() => setPageNotice("")} aria-label="关闭导入提示">
+            <button class="icon-button" onClick={() => setPageNotice("")} aria-label={t("srv.batch.closeNoticeAria")}>
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -1015,23 +1017,23 @@ export default function ServersPage(props: ServersProps) {
           <div class="alert error srv-notice"><span class="alert-message"><Icon name="alert" size={15} /> {error()}</span></div>
         </Show>
 
-        <Show when={!loading()} fallback={<div class="empty-state">正在读取节点...</div>}>
+        <Show when={!loading()} fallback={<div class="empty-state">{t("srv.empty.loading")}</div>}>
           <Show when={filteredNodes().length > 0} fallback={
             <div class="empty-state">
               <div class="empty-icon"><Icon name="server" size={22} /></div>
-              <strong>{nodes().length === 0 ? "还没有节点" : "没有匹配的节点"}</strong>
-              <span>{nodes().length === 0 ? "添加订阅后，解析出的节点会显示在这里。" : "尝试调整搜索词或筛选条件。"}</span>
+              <strong>{nodes().length === 0 ? t("srv.empty.noNodes") : t("srv.empty.noMatches")}</strong>
+              <span>{nodes().length === 0 ? t("srv.empty.noNodesHint") : t("srv.empty.noMatchesHint")}</span>
               <Show when={nodes().length === 0}>
                 <div class="node-empty-actions">
-                  <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>去添加订阅</button>
-                  <button class="btn secondary" onClick={openImport}>导入节点</button>
+                  <button class="btn secondary" onClick={() => props.onNavigate("subscriptions")}>{t("srv.empty.addSubscription")}</button>
+                  <button class="btn secondary" onClick={openImport}>{t("srv.import")}</button>
                 </div>
               </Show>
             </div>
           }>
             <div class="srv-table">
               <div class="srv-table-head">
-                <label class="srv-select-all" title="全选当前列表">
+                <label class="srv-select-all" title={t("srv.table.selectAll")}>
                   <input
                     ref={(element) => { selectAllRef = element; }}
                     class="srv-check"
@@ -1039,33 +1041,33 @@ export default function ServersPage(props: ServersProps) {
                     checked={allSelected()}
                     disabled={batchBusyActive() || selectableIDs().length === 0}
                     onChange={toggleSelectAll}
-                    aria-label="全选当前列表"
+                    aria-label={t("srv.table.selectAll")}
                   />
                 </label>
-                <span class="srv-col-name">节点</span>
-                <span class="srv-col-protocol">协议</span>
-                <span class="srv-col-address">地址</span>
-                <span class="srv-col-latency">延迟</span>
-                <span class="srv-col-state">状态</span>
-                <span class="srv-col-actions">操作</span>
+                <span class="srv-col-name">{t("srv.table.col.name")}</span>
+                <span class="srv-col-protocol">{t("srv.table.col.protocol")}</span>
+                <span class="srv-col-address">{t("srv.table.col.address")}</span>
+                <span class="srv-col-latency">{t("srv.table.col.latency")}</span>
+                <span class="srv-col-state">{t("srv.table.col.state")}</span>
+                <span class="srv-col-actions">{t("srv.table.col.actions")}</span>
               </div>
               <For each={sortedNodes()}>
                 {(node) => (
                   <div classList={{ "srv-row": true, active: node.active, disabled: !node.enabled, selected: selectedIDs().has(node.id) }}>
                     <div class="srv-cell-select">
-                      <label class="srv-check-label" title={selectedIDs().has(node.id) ? "取消选择该节点" : "选择该节点"}>
+                      <label class="srv-check-label" title={selectedIDs().has(node.id) ? t("srv.row.deselect") : t("srv.row.select")}>
                         <input
                           class="srv-check"
                           type="checkbox"
                           checked={selectedIDs().has(node.id)}
                           disabled={batchBusyActive()}
                           onChange={() => toggleSelected(node.id)}
-                          aria-label={`选择 ${node.name}`}
+                          aria-label={t("srv.row.selectAria", { name: node.name })}
                         />
                       </label>
                       <button
                         classList={{ "srv-radio": true, selected: node.active }}
-                        aria-label={node.active ? "当前节点" : `将 ${node.name} 设为当前节点`}
+                        aria-label={node.active ? t("srv.row.currentAria") : t("srv.row.setCurrentAria", { name: node.name })}
                         onClick={() => switchActiveNode(node.id)}
                         disabled={busyID() === node.id}
                       >
@@ -1076,7 +1078,7 @@ export default function ServersPage(props: ServersProps) {
                       <div class="srv-node-main">
                         <strong class="srv-node-name" title={node.name}>{node.name}</strong>
                         <Show when={node.manual}>
-                          <span class="srv-chip srv-chip-manual" title="通过分享链接手动导入的节点">手动</span>
+                          <span class="srv-chip srv-chip-manual" title={t("srv.row.manualTitle")}>{t("srv.row.manual")}</span>
                         </Show>
                         <Show when={node.tag}>
                           <button
@@ -1084,14 +1086,14 @@ export default function ServersPage(props: ServersProps) {
                             class="srv-chip srv-chip-tag"
                             onClick={() => openNodeTagEditor(node)}
                             disabled={batchBusyActive() || tagBusy()}
-                            title={`标签：${node.tag}（点击编辑）`}
-                            aria-label={`编辑 ${node.name} 的标签：${node.tag}`}
+                            title={t("srv.row.tagTitle", { tag: node.tag })}
+                            aria-label={t("srv.row.tagAria", { name: node.name, tag: node.tag })}
                           >
                             {node.tag}
                           </button>
                         </Show>
                       </div>
-                      <small class="srv-node-sub">{node.subscriptionName || (node.manual ? "手动添加" : "")}</small>
+                      <small class="srv-node-sub">{node.subscriptionName || (node.manual ? t("srv.row.manualSub") : "")}</small>
                     </div>
                     <span class="srv-proto" title={protocolLabel(node.protocol)}>{protocolLabel(node.protocol)}</span>
                     <span class="srv-addr" title={`${node.address}:${node.port}`}>{node.address}:{node.port}</span>
@@ -1100,19 +1102,19 @@ export default function ServersPage(props: ServersProps) {
                       classList={{ "srv-state": true, on: node.enabled }}
                       onClick={() => toggleEnabled(node)}
                       disabled={busyID() === node.id}
-                      aria-label={`${node.enabled ? "禁用" : "启用"} ${node.name}`}
-                      title={node.enabled ? "点击禁用该节点" : "点击启用该节点"}
+                      aria-label={node.enabled ? t("srv.row.disableAria", { name: node.name }) : t("srv.row.enableAria", { name: node.name })}
+                      title={node.enabled ? t("srv.row.disableTitle") : t("srv.row.enableTitle")}
                     >
                       <span class="status-dot" />
-                      {node.enabled ? "启用" : "禁用"}
+                      {node.enabled ? t("srv.row.enabled") : t("srv.row.disabled")}
                     </button>
                     <div class="srv-actions">
                       <button
                         classList={{ "srv-action": true, "srv-favorite": true, on: node.favorite }}
                         onClick={() => toggleFavorite(node)}
                         aria-pressed={node.favorite}
-                        aria-label={node.favorite ? `取消收藏 ${node.name}` : `收藏 ${node.name}`}
-                        title={node.favorite ? "取消收藏" : "收藏"}
+                        aria-label={node.favorite ? t("srv.row.favoriteRemoveAria", { name: node.name }) : t("srv.row.favoriteAddAria", { name: node.name })}
+                        title={node.favorite ? t("srv.row.favoriteRemove") : t("srv.row.favoriteAdd")}
                       >
                         <FavoriteStarIcon filled={node.favorite} />
                       </button>
@@ -1121,8 +1123,8 @@ export default function ServersPage(props: ServersProps) {
                         onClick={() => testNode(node)}
                         disabled={urlTestBusy()}
                         aria-busy={testingID() === node.id}
-                        aria-label={`测试 ${node.name} 的真实链路延迟`}
-                        title={testingID() === node.id ? "测速中..." : "真实链路 HTTP 延迟测速（会临时启动 Xray）"}
+                        aria-label={t("srv.row.testAria", { name: node.name })}
+                        title={testingID() === node.id ? t("srv.testing") : t("srv.row.testTitle")}
                       >
                         <Icon name="speed" size={14} />
                       </button>
@@ -1130,8 +1132,8 @@ export default function ServersPage(props: ServersProps) {
                         class="srv-action srv-qr"
                         onClick={() => void openNodeQRCode(node)}
                         disabled={batchBusyActive()}
-                        aria-label={`查看 ${node.name} 的分享二维码`}
-                        title="分享二维码（弹窗内可复制链接）"
+                        aria-label={t("srv.row.qrAria", { name: node.name })}
+                        title={t("srv.row.qrTitle")}
                       >
                         <QRCodeIcon />
                       </button>
@@ -1139,8 +1141,8 @@ export default function ServersPage(props: ServersProps) {
                         class="srv-action"
                         onClick={() => openEditor(node)}
                         disabled={busyID() === node.id}
-                        aria-label={`编辑 ${node.name}`}
-                        title="编辑节点配置"
+                        aria-label={t("srv.row.editAria", { name: node.name })}
+                        title={t("srv.row.editTitle")}
                       >
                         <Icon name="edit" size={14} />
                       </button>
@@ -1148,8 +1150,8 @@ export default function ServersPage(props: ServersProps) {
                         class="srv-action srv-danger"
                         onClick={() => removeNode(node)}
                         disabled={busyID() === node.id}
-                        aria-label={`删除 ${node.name}`}
-                        title="删除节点"
+                        aria-label={t("srv.row.deleteAria", { name: node.name })}
+                        title={t("srv.row.deleteTitle")}
                       >
                         <Icon name="trash" size={14} />
                       </button>
@@ -1161,9 +1163,7 @@ export default function ServersPage(props: ServersProps) {
           </Show>
         </Show>
 
-        <p class="srv-hint">
-          「测速」为真实代理链路的 HTTP 延迟测试（会临时启动 Xray，可能耗时数秒）；没有真实链路结果时，延迟列回退显示 TCP 连通性结果。切换节点时会自动重启正在运行的代理。
-        </p>
+        <p class="srv-hint">{t("srv.hint")}</p>
       </section>
 
       <Show when={importOpen()}>
@@ -1171,10 +1171,10 @@ export default function ServersPage(props: ServersProps) {
           <div class="modal node-import-modal">
             <div class="modal-heading">
               <div>
-                <h3>导入节点</h3>
-                <span>粘贴 vmess / vless / trojan / ss 分享链接，或整段 base64 订阅内容</span>
+                <h3>{t("srv.import")}</h3>
+                <span>{t("srv.import.subtitle")}</span>
               </div>
-              <button class="icon-button" onClick={closeImport} disabled={importBusy()} aria-label="关闭">
+              <button class="icon-button" onClick={closeImport} disabled={importBusy()} aria-label={t("srv.common.close")}>
                 <Icon name="close" size={18} />
               </button>
             </div>
@@ -1182,10 +1182,10 @@ export default function ServersPage(props: ServersProps) {
             <div class="node-import-body">
               <div class="node-import-toolbar">
                 <button class="btn secondary compact" type="button" onClick={pasteFromClipboard} disabled={importBusy()}>
-                  <PasteIcon /> 从剪贴板粘贴
+                  <PasteIcon /> {t("srv.import.paste")}
                 </button>
                 <button class="btn ghost compact" type="button" onClick={() => setImportText("")} disabled={importBusy() || !importText().trim()}>
-                  清空
+                  {t("srv.import.clear")}
                 </button>
               </div>
               <textarea
@@ -1194,11 +1194,9 @@ export default function ServersPage(props: ServersProps) {
                 onInput={(event) => setImportText(event.currentTarget.value)}
                 spellcheck={false}
                 placeholder={"vmess://...\nvless://...\ntrojan://...\nss://..."}
-                aria-label="节点分享链接"
+                aria-label={t("srv.import.textareaAria")}
               />
-              <p class="node-import-hint">
-                每行一条分享链接；也支持直接粘贴整段 base64 编码的订阅内容。已在列表中的链接会自动跳过。
-              </p>
+              <p class="node-import-hint">{t("srv.import.hint")}</p>
 
               <Show when={importError()}>
                 <div class="alert error"><span class="alert-message"><Icon name="alert" size={14} /> {importError()}</span></div>
@@ -1208,10 +1206,10 @@ export default function ServersPage(props: ServersProps) {
                 {(result) => (
                   <div class="node-import-result">
                     <div class="node-import-result-head">
-                      <span class="tag success">成功 {result().imported} 条</span>
-                      <span class="tag neutral">跳过 {result().skipped} 条</span>
+                      <span class="tag success">{t("srv.import.resultSuccess", { count: result().imported })}</span>
+                      <span class="tag neutral">{t("srv.import.resultSkipped", { count: result().skipped })}</span>
                       <Show when={(result().errors?.length ?? 0) > 0}>
-                        <span class="tag danger">错误 {result().errors?.length ?? 0} 条</span>
+                        <span class="tag danger">{t("srv.import.resultErrors", { count: result().errors?.length ?? 0 })}</span>
                       </Show>
                     </div>
                     <Show when={(result().errors?.length ?? 0) > 0}>
@@ -1225,9 +1223,9 @@ export default function ServersPage(props: ServersProps) {
             </div>
 
             <div class="modal-footer">
-              <button class="btn ghost" type="button" onClick={closeImport} disabled={importBusy()}>关闭</button>
+              <button class="btn ghost" type="button" onClick={closeImport} disabled={importBusy()}>{t("srv.common.close")}</button>
               <button class="btn primary" type="button" onClick={importNodes} disabled={importBusy() || !importText().trim()}>
-                <Icon name="plus" size={14} /> {importBusy() ? "导入中..." : "导入"}
+                <Icon name="plus" size={14} /> {importBusy() ? t("srv.import.submitting") : t("srv.import.submit")}
               </button>
             </div>
           </div>
@@ -1239,23 +1237,23 @@ export default function ServersPage(props: ServersProps) {
           <div class="modal node-tag-modal">
             <div class="modal-heading">
               <div>
-                <h3>{tagEditorNode() ? "编辑节点标签" : "批量设置标签"}</h3>
+                <h3>{tagEditorNode() ? t("srv.tag.titleEdit") : t("srv.tag.titleBatch")}</h3>
                 <span>{tagEditorNode()
-                  ? `节点：${tagEditorNode()?.name ?? ""}`
-                  : `已选 ${tagEditorIDs().length} 个节点，保存后覆盖原有标签`}</span>
+                  ? t("srv.tag.subtitleOne", { name: tagEditorNode()?.name ?? "" })
+                  : t("srv.tag.subtitleBatch", { count: tagEditorIDs().length })}</span>
               </div>
-              <button class="icon-button" onClick={closeTagEditor} disabled={tagBusy()} aria-label="关闭">
+              <button class="icon-button" onClick={closeTagEditor} disabled={tagBusy()} aria-label={t("srv.common.close")}>
                 <Icon name="close" size={18} />
               </button>
             </div>
 
             <div class="node-tag-body">
               <label class="node-tag-field">
-                <span>标签名称</span>
+                <span>{t("srv.tag.nameLabel")}</span>
                 <input
                   class="node-tag-input"
                   value={tagValue()}
-                  placeholder="例如：香港、备用、低延迟；留空表示清除标签"
+                  placeholder={t("srv.tag.placeholder")}
                   onInput={(event) => applyTagInput(event.currentTarget.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -1264,19 +1262,19 @@ export default function ServersPage(props: ServersProps) {
                     }
                   }}
                   disabled={tagBusy()}
-                  aria-label="节点标签"
+                  aria-label={t("srv.tag.inputAria")}
                 />
               </label>
               <div class="node-tag-meta">
                 <span classList={{ "node-tag-counter": true, over: tagCharCount(tagValue()) > TAG_MAX_LENGTH }}>{tagCharCount(tagValue())} / {TAG_MAX_LENGTH}</span>
                 <button class="btn ghost compact node-tag-clear" type="button" onClick={clearTagInput} disabled={tagBusy() || !tagValue().trim()}>
-                  <Icon name="close" size={12} /> 清除标签
+                  <Icon name="close" size={12} /> {t("srv.tag.clear")}
                 </button>
               </div>
 
               <Show when={tags().length > 0}>
                 <div class="node-tag-presets">
-                  <span class="node-tag-presets-label">已有标签</span>
+                  <span class="node-tag-presets-label">{t("srv.tag.presets")}</span>
                   <div class="node-tag-preset-list">
                     <For each={tags()}>
                       {(tag) => (
@@ -1297,7 +1295,7 @@ export default function ServersPage(props: ServersProps) {
 
               <p class="node-tag-hint">
                 <Icon name="alert" size={12} />
-                <span>标签最多 {TAG_MAX_LENGTH} 个字符，不能包含换行或控制字符；留空保存会清除标签。</span>
+                <span>{t("srv.tag.hint", { count: TAG_MAX_LENGTH })}</span>
               </p>
 
               <Show when={tagError()}>
@@ -1306,9 +1304,9 @@ export default function ServersPage(props: ServersProps) {
             </div>
 
             <div class="modal-footer">
-              <button class="btn ghost" type="button" onClick={closeTagEditor} disabled={tagBusy()}>取消</button>
+              <button class="btn ghost" type="button" onClick={closeTagEditor} disabled={tagBusy()}>{t("srv.common.cancel")}</button>
               <button class="btn primary" type="button" onClick={() => void submitTag()} disabled={tagBusy() || validateNodeTag(tagValue()) !== "" || (tagEditorIDs().length === 0 && !tagEditorNode())}>
-                <Icon name="check" size={14} /> {tagBusy() ? "保存中..." : tagValue().trim() ? "保存标签" : "清除标签"}
+                <Icon name="check" size={14} /> {tagBusy() ? t("srv.tag.saving") : tagValue().trim() ? t("srv.tag.save") : t("srv.tag.clear")}
               </button>
             </div>
           </div>
@@ -1321,16 +1319,16 @@ export default function ServersPage(props: ServersProps) {
             <div class="modal node-editor-modal">
               <div class="modal-heading">
                 <div>
-                  <h3>编辑节点配置</h3>
+                  <h3>{t("srv.editor.title")}</h3>
                   <span>{protocolLabel(config().protocol)} · {config().address}:{config().port}</span>
                 </div>
-                <button class="icon-button" onClick={closeEditor} aria-label="关闭"><Icon name="close" size={18} /></button>
+                <button class="icon-button" onClick={closeEditor} aria-label={t("srv.common.close")}><Icon name="close" size={18} /></button>
               </div>
 
               <div class="node-editor-layout">
                 <div class="node-editor-main">
                   <div class="node-editor-tabs">
-                    <button classList={{ "node-editor-tab": true, active: editorTab() === "form" }} onClick={() => switchTab("form")}>表单配置</button>
+                    <button classList={{ "node-editor-tab": true, active: editorTab() === "form" }} onClick={() => switchTab("form")}>{t("srv.editor.tabForm")}</button>
                     <button classList={{ "node-editor-tab": true, active: editorTab() === "json" }} onClick={() => switchTab("json")}>Xray JSON</button>
                   </div>
 
@@ -1338,63 +1336,63 @@ export default function ServersPage(props: ServersProps) {
                     <div class="node-json-editor">
                       <div class="node-editor-note">
                         <Icon name="external" size={13} />
-                        <span>高级 JSON 直接作为 outbound 使用。清空后保存会恢复为表单生成配置。</span>
+                        <span>{t("srv.editor.jsonNote")}</span>
                       </div>
                       <textarea
                         value={config().outboundJson}
                         onInput={(event) => updateEditor("outboundJson", event.currentTarget.value)}
                         spellcheck={false}
-                        placeholder="留空时使用表单生成 Xray outbound"
+                        placeholder={t("srv.editor.jsonPlaceholder")}
                       />
                       <button class="btn secondary compact" onClick={generateJSON} type="button">
-                        <Icon name="refresh" size={13} /> 从当前表单生成 JSON
+                        <Icon name="refresh" size={13} /> {t("srv.editor.generateJson")}
                       </button>
                     </div>
                   }>
                     <div class="node-editor-form">
                       <div class="node-editor-section">
-                        <div class="node-editor-section-title">基础信息</div>
+                        <div class="node-editor-section-title">{t("srv.editor.sectionBasic")}</div>
                         <div class="node-editor-grid two">
-                          <label><span>节点名称</span><input value={config().name} onInput={(event) => updateEditor("name", event.currentTarget.value)} /></label>
-                          <label><span>协议</span><select value={config().protocol} onChange={(event) => updateEditor("protocol", event.currentTarget.value)}>
+                          <label><span>{t("srv.editor.name")}</span><input value={config().name} onInput={(event) => updateEditor("name", event.currentTarget.value)} /></label>
+                          <label><span>{t("srv.editor.protocol")}</span><select value={config().protocol} onChange={(event) => updateEditor("protocol", event.currentTarget.value)}>
                             <For each={protocolOptions}>{(item) => <option value={item}>{protocolLabel(item)}</option>}</For>
                           </select></label>
-                          <label><span>服务器地址</span><input value={config().address} onInput={(event) => updateEditor("address", event.currentTarget.value)} placeholder="example.com 或 1.2.3.4" /></label>
-                          <label><span>端口</span><input type="number" min="1" max="65535" value={config().port} onInput={(event) => updateEditor("port", Number(event.currentTarget.value))} /></label>
+                          <label><span>{t("srv.editor.address")}</span><input value={config().address} onInput={(event) => updateEditor("address", event.currentTarget.value)} placeholder={t("srv.editor.addressPlaceholder")} /></label>
+                          <label><span>{t("srv.editor.port")}</span><input type="number" min="1" max="65535" value={config().port} onInput={(event) => updateEditor("port", Number(event.currentTarget.value))} /></label>
                         </div>
                       </div>
 
                       <div class="node-editor-section">
-                        <div class="node-editor-section-title">凭证</div>
+                        <div class="node-editor-section-title">{t("srv.editor.credentials")}</div>
                         <div class="node-editor-grid two">
                           <Show when={config().protocol === "vmess" || config().protocol === "vless"}>
-                            <label><span>{config().protocol === "vmess" ? "UUID" : "用户 ID"}</span><input value={config().uuid} onInput={(event) => updateEditor("uuid", event.currentTarget.value)} /></label>
+                            <label><span>{config().protocol === "vmess" ? "UUID" : t("srv.editor.userId")}</span><input value={config().uuid} onInput={(event) => updateEditor("uuid", event.currentTarget.value)} /></label>
                           </Show>
                           <Show when={config().protocol === "vless"}>
                             <label><span>Flow</span><input value={config().flow} onInput={(event) => updateEditor("flow", event.currentTarget.value)} placeholder="xtls-rprx-vision" /></label>
-                            <label><span>VLESS 加密</span><input value={config().encryption} onInput={(event) => updateEditor("encryption", event.currentTarget.value)} placeholder="none 或 mlkem768x25519plus..." /></label>
+                            <label><span>{t("srv.editor.vlessEncryption")}</span><input value={config().encryption} onInput={(event) => updateEditor("encryption", event.currentTarget.value)} placeholder={t("srv.editor.encryptionPlaceholder")} /></label>
                           </Show>
                           <Show when={config().protocol === "vmess"}>
-                            <label><span>加密方式</span><input value={config().security} onInput={(event) => updateEditor("security", event.currentTarget.value)} placeholder="auto" /></label>
+                            <label><span>{t("srv.editor.encryption")}</span><input value={config().security} onInput={(event) => updateEditor("security", event.currentTarget.value)} placeholder="auto" /></label>
                           </Show>
                           <Show when={config().protocol === "trojan" || config().protocol === "shadowsocks"}>
-                            <label><span>密码</span><input type="password" value={config().password} onInput={(event) => updateEditor("password", event.currentTarget.value)} /></label>
+                            <label><span>{t("srv.editor.password")}</span><input type="password" value={config().password} onInput={(event) => updateEditor("password", event.currentTarget.value)} /></label>
                           </Show>
                           <Show when={config().protocol === "shadowsocks"}>
-                            <label><span>加密方式</span><input value={config().method} onInput={(event) => updateEditor("method", event.currentTarget.value)} placeholder="aes-256-gcm" /></label>
+                            <label><span>{t("srv.editor.encryption")}</span><input value={config().method} onInput={(event) => updateEditor("method", event.currentTarget.value)} placeholder="aes-256-gcm" /></label>
                           </Show>
                         </div>
                       </div>
 
                       <Show when={config().protocol !== "shadowsocks"}>
                         <div class="node-editor-section">
-                          <div class="node-editor-section-title">传输与安全</div>
+                          <div class="node-editor-section-title">{t("srv.editor.transportSecurity")}</div>
                           <div class="node-editor-grid two">
-                            <label><span>传输方式</span><select value={config().network} onChange={(event) => updateEditor("network", event.currentTarget.value)}>
+                            <label><span>{t("srv.editor.network")}</span><select value={config().network} onChange={(event) => updateEditor("network", event.currentTarget.value)}>
                               <For each={networkOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
                             </select></label>
-                            <label><span>安全层</span><select value={config().tls} onChange={(event) => updateEditor("tls", event.currentTarget.value)}>
-                              <For each={tlsOptions}>{(item) => <option value={item.value}>{item.label}</option>}</For>
+                            <label><span>{t("srv.editor.tls")}</span><select value={config().tls} onChange={(event) => updateEditor("tls", event.currentTarget.value)}>
+                              <For each={tlsOptions()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
                             </select></label>
                             <label><span>SNI / Server Name</span><input value={config().serverName} onInput={(event) => updateEditor("serverName", event.currentTarget.value)} /></label>
                             <label><span>Fingerprint</span><input value={config().fingerprint} onInput={(event) => updateEditor("fingerprint", event.currentTarget.value)} placeholder="chrome / firefox" /></label>
@@ -1412,7 +1410,7 @@ export default function ServersPage(props: ServersProps) {
                             </div>
                           </Show>
                           <label class="switch-row node-editor-switch">
-                            <span><strong>允许不安全 TLS</strong><small>仅用于测试自签名证书，不建议长期开启。</small></span>
+                            <span><strong>{t("srv.editor.allowInsecure")}</strong><small>{t("srv.editor.allowInsecureHint")}</small></span>
                             <span classList={{ "switch": true, on: config().allowInsecure }}>
                               <input type="checkbox" checked={config().allowInsecure} onChange={(event) => updateEditor("allowInsecure", event.currentTarget.checked)} />
                               <span class="switch-track"><span class="switch-thumb" /></span>
@@ -1426,13 +1424,13 @@ export default function ServersPage(props: ServersProps) {
 
                 <aside class="node-editor-side">
                   <div class="node-editor-preview-head">
-                    <div><strong>Xray outbound 预览</strong><span>可直接参考 Xray 官方字段结构</span></div>
-                    <button class="icon-button" onClick={refreshPreview} aria-label="刷新预览"><Icon name="refresh" size={14} /></button>
+                    <div><strong>{t("srv.editor.previewTitle")}</strong><span>{t("srv.editor.previewHint")}</span></div>
+                    <button class="icon-button" onClick={refreshPreview} aria-label={t("srv.editor.previewRefreshAria")}><Icon name="refresh" size={14} /></button>
                   </div>
-                  <pre class="node-config-preview">{editorPreview()?.outboundJson ?? config().outboundJson ?? "配置已修改，点击刷新预览。"}</pre>
+                  <pre class="node-config-preview">{editorPreview()?.outboundJson ?? config().outboundJson ?? t("srv.editor.previewStale")}</pre>
                   <div class="node-editor-shortcut">
                     <Icon name="edit" size={13} />
-                    <span>保存并应用会立即切换当前节点；代理运行中会自动重启。</span>
+                    <span>{t("srv.editor.applyHint")}</span>
                   </div>
                 </aside>
               </div>
@@ -1445,12 +1443,12 @@ export default function ServersPage(props: ServersProps) {
               </Show>
 
               <div class="modal-footer">
-                <button class="btn ghost" type="button" onClick={closeEditor} disabled={editorBusy()}>取消</button>
+                <button class="btn ghost" type="button" onClick={closeEditor} disabled={editorBusy()}>{t("srv.common.cancel")}</button>
                 <button class="btn secondary" type="button" onClick={() => saveEditor(false)} disabled={editorBusy()}>
-                  <Icon name="check" size={14} /> {editorBusy() ? "保存中..." : "保存"}
+                  <Icon name="check" size={14} /> {editorBusy() ? t("srv.editor.saving") : t("srv.editor.save")}
                 </button>
                 <button class="btn primary" type="button" onClick={() => saveEditor(true)} disabled={editorBusy()}>
-                  <Icon name="play" size={14} /> 保存并应用
+                  <Icon name="play" size={14} /> {t("srv.editor.saveApply")}
                 </button>
               </div>
             </div>
@@ -1460,8 +1458,8 @@ export default function ServersPage(props: ServersProps) {
 
       <QRModal
         open={qrOpen()}
-        title={qrTitle() ? `节点二维码 · ${qrTitle()}` : "节点二维码"}
-        subtitle={qrSubtitle() || "扫码后即可在客户端中导入该节点"}
+        title={qrTitle() ? t("srv.qr.titleWithName", { name: qrTitle() }) : t("srv.qr.title")}
+        subtitle={qrSubtitle() || t("srv.qr.defaultSubtitle")}
         link={qrLink()}
         image={qrImage()}
         loading={qrLoading()}

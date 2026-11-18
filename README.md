@@ -321,6 +321,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - [Xray TUN](docs/cores/xray/tun.md)
 - [GeoData](docs/cores/xray/geodata.md)
 - [液态玻璃底栏](docs/ui/LIQUID_GLASS.md)
+- [UI 覆盖与文字布局审查](docs/ui/UI_AUDIT.md)
 - [更新日志](CHANGELOG.md)
 - [完整文档索引](docs/README.md)
 

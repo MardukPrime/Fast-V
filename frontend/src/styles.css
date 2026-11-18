@@ -4028,7 +4028,7 @@ select {
 .routing-table-head,
 .routing-row {
   display: grid;
-  grid-template-columns: 44px minmax(140px, 1.2fr) 100px minmax(170px, 1.5fr) 78px 78px 154px;
+  grid-template-columns: 44px minmax(140px, 1.2fr) 112px minmax(170px, 1.5fr) 78px 78px 154px;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
@@ -4217,7 +4217,7 @@ select {
 @media (max-width: 1120px) {
   .routing-table-head,
   .routing-row {
-    grid-template-columns: 34px minmax(120px, 1.1fr) 88px minmax(130px, 1.2fr) 68px 68px 130px;
+    grid-template-columns: 34px minmax(120px, 1.1fr) 96px minmax(130px, 1.2fr) 68px 68px 130px;
     gap: 6px;
     padding-inline: 9px;
   }
@@ -8553,4 +8553,17 @@ textarea:focus {
   .webdav-actions .btn {
     justify-content: center;
   }
+}
+
+/* ----------------------------------------------------------------
+   UI audit fixes (2026-11): long English micro labels and columns
+   ---------------------------------------------------------------- */
+/* Network facts labels wrap to two lines instead of being ellipsized
+   ("CLOUDFLARE NODE" was cut to "CLOUDFLARE NO..."), and 8px labels
+   get one extra pixel of legibility. */
+.network-facts span {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 9px;
+  line-height: 1.25;
 }

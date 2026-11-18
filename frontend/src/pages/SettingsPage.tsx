@@ -9,11 +9,13 @@ import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/inter
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
 import type { BackupResult, CoreInfo, GeoDataInfo, ProxyState, Settings, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import { LANGUAGES, t } from "../i18n";
 
 type SettingsProps = {
   onSaved: (settings: Settings) => void;
   onPreviewTheme: (theme: string) => void;
   onPreviewAccent: (accent: string) => void;
+  onPreviewLanguage: (language: string) => void;
   onPreviewDockTransparency: (value: number) => void;
 };
 
@@ -75,20 +77,20 @@ const defaults: Settings = {
   xrayApiPort: 10085,
 };
 
-const themes = [
-  { value: "dark", label: "深色", hint: "低光环境" },
-  { value: "light", label: "浅色", hint: "明亮环境" },
-  { value: "system", label: "跟随系统", hint: "自动切换" },
+const themes = () => [
+  { value: "dark", label: t("set.themeDark"), hint: t("set.themeDarkHint") },
+  { value: "light", label: t("set.themeLight"), hint: t("set.themeLightHint") },
+  { value: "system", label: t("set.themeSystem"), hint: t("set.themeSystemHint") },
 ];
 
 // Must stay in sync with the backend whitelist in internal/service/settings.
 // The swatch palette itself is defined in styles.css for both page themes.
-const accentColors = [
-  { value: "sky", label: "天空蓝", hint: "默认" },
-  { value: "violet", label: "紫罗兰", hint: "柔和" },
-  { value: "emerald", label: "翡翠绿", hint: "自然" },
-  { value: "amber", label: "琥珀橙", hint: "温暖" },
-  { value: "rose", label: "玫瑰红", hint: "醒目" },
+const accentColors = () => [
+  { value: "sky", label: t("set.accentSky"), hint: t("set.accentSkyHint") },
+  { value: "violet", label: t("set.accentViolet"), hint: t("set.accentVioletHint") },
+  { value: "emerald", label: t("set.accentEmerald"), hint: t("set.accentEmeraldHint") },
+  { value: "amber", label: t("set.accentAmber"), hint: t("set.accentAmberHint") },
+  { value: "rose", label: t("set.accentRose"), hint: t("set.accentRoseHint") },
 ];
 
 // Configurable global shortcuts. Keep the action order and the settings fields
@@ -101,17 +103,17 @@ type HotkeyAction = {
   field: HotkeyField;
 };
 
-const globalHotkeyActions: HotkeyAction[] = [
-  { action: "启动 / 停止代理", field: "hotkeyToggleProxy" },
-  { action: "切换代理模式（规则 → 全局 → 直连）", field: "hotkeyCycleMode" },
-  { action: "切换到下一个启用节点", field: "hotkeyNextNode" },
+const hotkeyActions = (): HotkeyAction[] => [
+  { action: t("set.hotkeyToggleProxy"), field: "hotkeyToggleProxy" },
+  { action: t("set.hotkeyCycleMode"), field: "hotkeyCycleMode" },
+  { action: t("set.hotkeyNextNode"), field: "hotkeyNextNode" },
 ];
 
 const hotkeyModifierNames = ["Ctrl", "Alt", "Shift", "Win"] as const;
 type HotkeyModifier = (typeof hotkeyModifierNames)[number];
 
-const hotkeyMissingModifierError = "快捷键缺少修饰键（至少需要 Ctrl、Alt、Shift 或 Win 中的一个）。";
-const hotkeyRecordingHint = "Esc 取消，需包含 Ctrl/Alt/Shift/Win 至少一个修饰键";
+const hotkeyMissingModifierError = () => t("set.hotkeyMissingModifier");
+const hotkeyRecordingHint = () => t("set.hotkeyRecordingHint");
 
 const createHotkeyErrors = (): Record<HotkeyField, string> => ({
   hotkeyToggleProxy: "",
@@ -159,25 +161,25 @@ const formatHotkeyCombo = (modifiers: Set<HotkeyModifier>, mainKey: string): str
 // The canonical Ctrl+Alt+Shift+Win+Key form is returned on success.
 const parseHotkeyCombo = (value: string): { combo: string; error: string } => {
   const trimmed = value.trim();
-  if (!trimmed) return { combo: "", error: "快捷键不能为空" };
+  if (!trimmed) return { combo: "", error: t("set.hotkeyEmpty") };
   const modifiers = new Set<HotkeyModifier>();
   let mainKey = "";
   for (const rawPart of trimmed.split("+")) {
     const part = rawPart.trim();
-    if (!part) return { combo: "", error: `快捷键格式错误：${trimmed}` };
+    if (!part) return { combo: "", error: t("set.hotkeyFormatError", { combo: trimmed }) };
     const modifier = parseHotkeyModifier(part);
     if (modifier) {
-      if (modifiers.has(modifier)) return { combo: "", error: `快捷键修饰键重复：${modifier}` };
+      if (modifiers.has(modifier)) return { combo: "", error: t("set.hotkeyDuplicateModifier", { modifier }) };
       modifiers.add(modifier);
       continue;
     }
-    if (mainKey) return { combo: "", error: `快捷键只能包含一个主键：${trimmed}` };
+    if (mainKey) return { combo: "", error: t("set.hotkeyOneMainKey", { combo: trimmed }) };
     const key = normalizeHotkeyMainKey(part);
-    if (!key) return { combo: "", error: `不支持的按键：${part}` };
+    if (!key) return { combo: "", error: t("set.hotkeyUnsupportedKey", { part }) };
     mainKey = key;
   }
-  if (!mainKey) return { combo: "", error: "快捷键缺少主键" };
-  if (modifiers.size === 0) return { combo: "", error: "快捷键缺少修饰键（至少需要 Ctrl、Alt、Shift 或 Win 中的一个）" };
+  if (!mainKey) return { combo: "", error: t("set.hotkeyMissingMainKey") };
+  if (modifiers.size === 0) return { combo: "", error: hotkeyMissingModifierError() };
   return { combo: formatHotkeyCombo(modifiers, mainKey), error: "" };
 };
 
@@ -206,24 +208,24 @@ const hotkeyMainKeyFromEvent = (event: KeyboardEvent): string => {
 const isHotkeyModifierKey = (event: KeyboardEvent): boolean =>
   event.key === "Control" || event.key === "Alt" || event.key === "Shift" || event.key === "Meta" || event.key === "OS" || event.key === "Win";
 
-const layoutModes = [
-  { value: "sidebar", label: "侧边模式", hint: "保留左侧导航，关闭底栏" },
-  { value: "dock", label: "底栏模式", hint: "保留液态玻璃底栏，关闭侧边" },
+const layoutModes = () => [
+  { value: "sidebar", label: t("set.layoutSidebar"), hint: t("set.layoutSidebarHint") },
+  { value: "dock", label: t("set.layoutDock"), hint: t("set.layoutDockHint") },
 ];
 
-const proxyModes = [
-  { value: "rule", label: "规则分流", hint: "按规则选择直连或代理" },
-  { value: "global", label: "全局代理", hint: "所有流量走代理" },
-  { value: "direct", label: "直连", hint: "不经过代理" },
+const proxyModes = () => [
+  { value: "rule", label: t("set.proxyModeRule"), hint: t("set.proxyModeRuleHint") },
+  { value: "global", label: t("set.proxyModeGlobal"), hint: t("set.proxyModeGlobalHint") },
+  { value: "direct", label: t("set.proxyModeDirect"), hint: t("set.proxyModeDirectHint") },
 ];
 
-const coreTypes = [
-  { value: "xray", label: "Xray-core", hint: "已接入，支持版本检测和自动更新" },
-  { value: "singbox", label: "sing-box", hint: "规划中，参数会在接入后开放" },
+const coreTypes = () => [
+  { value: "xray", label: "Xray-core", hint: t("set.coreXrayHint") },
+  { value: "singbox", label: "sing-box", hint: t("set.coreSingboxHint") },
 ];
 
-const sockoptDomainStrategies = [
-  { value: "", label: "默认" },
+const sockoptDomainStrategies = () => [
+  { value: "", label: t("set.defaultValue") },
   { value: "AsIs", label: "AsIs" },
   { value: "UseIP", label: "UseIP" },
   { value: "UseIPv4", label: "UseIPv4" },
@@ -243,17 +245,17 @@ const finalMaskTemplate = `{
   ]
 }`;
 
-const dnsStrategies = [
-  { value: "UseIP", label: "UseIP", hint: "优先解析 A/AAAA 记录" },
-  { value: "UseIPv4", label: "UseIPv4", hint: "只使用 IPv4 解析结果" },
-  { value: "UseIPv6", label: "UseIPv6", hint: "只使用 IPv6 解析结果" },
-  { value: "AsIs", label: "AsIs", hint: "保持原始解析行为" },
+const dnsStrategies = () => [
+  { value: "UseIP", label: "UseIP", hint: t("set.dnsUseIpHint") },
+  { value: "UseIPv4", label: "UseIPv4", hint: t("set.dnsUseIpv4Hint") },
+  { value: "UseIPv6", label: "UseIPv6", hint: t("set.dnsUseIpv6Hint") },
+  { value: "AsIs", label: "AsIs", hint: t("set.dnsAsIsHint") },
 ];
 
-const domainStrategies = [
-  { value: "IPIfNonMatch", label: "IPIfNonMatch", hint: "域名规则未命中时再匹配 IP" },
-  { value: "IPOnDemand", label: "IPOnDemand", hint: "需要 IP 信息时按需解析" },
-  { value: "AsIs", label: "AsIs", hint: "只使用原始域名匹配" },
+const domainStrategies = () => [
+  { value: "IPIfNonMatch", label: "IPIfNonMatch", hint: t("set.domainIpIfNonMatchHint") },
+  { value: "IPOnDemand", label: "IPOnDemand", hint: t("set.domainIpOnDemandHint") },
+  { value: "AsIs", label: "AsIs", hint: t("set.domainAsIsHint") },
 ];
 
 const logLevels = [
@@ -265,24 +267,24 @@ const logLevels = [
 ];
 
 // Keep in sync with the backend validation in internal/service/settings.
-const loadBalanceModes = [
-  { value: "leastPing", label: "延迟优先", hint: "按 URL 延迟测速选择最快节点" },
-  { value: "leastLoad", label: "负载优先", hint: "优先选择当前负载较低的节点" },
-  { value: "roundRobin", label: "轮询", hint: "按顺序轮流使用全部启用节点" },
+const loadBalanceModes = () => [
+  { value: "leastPing", label: t("set.loadBalanceLeastPing"), hint: t("set.loadBalanceLeastPingHint") },
+  { value: "leastLoad", label: t("set.loadBalanceLeastLoad"), hint: t("set.loadBalanceLeastLoadHint") },
+  { value: "roundRobin", label: t("set.loadBalanceRoundRobin"), hint: t("set.loadBalanceRoundRobinHint") },
 ];
 
 const loadBalanceModeValues = ["leastPing", "leastLoad", "roundRobin"];
 
 function coreStatusLabel(status: string) {
   switch (status) {
-    case "ready": return "已就绪";
-    case "up_to_date": return "已是最新";
-    case "update_available": return "可更新";
-    case "checking": return "检查中";
-    case "downloading": return "下载中";
-    case "not_installed": return "未安装";
-    case "error": return "异常";
-    default: return status || "未安装";
+    case "ready": return t("set.coreStatusReady");
+    case "up_to_date": return t("set.coreStatusUpToDate");
+    case "update_available": return t("set.coreStatusUpdateAvailable");
+    case "checking": return t("set.coreStatusChecking");
+    case "downloading": return t("set.coreStatusDownloading");
+    case "not_installed": return t("set.coreStatusNotInstalled");
+    case "error": return t("set.coreStatusError");
+    default: return status || t("set.coreStatusNotInstalled");
   }
 }
 
@@ -320,7 +322,7 @@ function formatBackupTimestamp(date: Date) {
 }
 
 function formatCheckedAt(value: string) {
-  if (!value) return "未知";
+  if (!value) return t("set.unknown");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   const pad = (part: number) => String(part).padStart(2, "0");
@@ -330,22 +332,22 @@ function formatCheckedAt(value: string) {
 // The self-update panel reports the release asset size in MB; the backend
 // returns 0 when GitHub does not expose a size for the asset.
 function formatAssetSize(size: number) {
-  if (!Number.isFinite(size) || size <= 0) return "大小未知";
+  if (!Number.isFinite(size) || size <= 0) return t("set.sizeUnknown");
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function updateStatusLabel(info: UpdateInfo) {
-  if (info.downloadedPath) return "更新已下载";
-  if (info.error) return "检查失败";
-  if (info.available) return info.assetUrl ? "有可用更新" : "有可用更新（需手动下载）";
-  return "已是最新";
+  if (info.downloadedPath) return t("set.updateStatusDownloaded");
+  if (info.error) return t("set.updateStatusFailed");
+  if (info.available) return info.assetUrl ? t("set.updateStatusAvailable") : t("set.updateStatusAvailableManual");
+  return t("set.updateStatusLatest");
 }
 
 function updateHint(info: UpdateInfo) {
-  if (info.downloadedPath) return " · 更新包已就绪，可立即重启并安装。";
+  if (info.downloadedPath) return t("set.updateHintDownloaded");
   if (info.error) return "";
-  if (!info.available) return " · 无需更新。";
-  return info.assetUrl ? " · 可在下方下载安装包并自动安装。" : " · 请前往发布页面手动下载。";
+  if (!info.available) return t("set.updateHintNone");
+  return info.assetUrl ? t("set.updateHintAuto") : t("set.updateHintManual");
 }
 
 const autoSelectIntervalRange = { min: 1, max: 1440 };
@@ -441,7 +443,7 @@ export default function SettingsPage(props: SettingsProps) {
       try {
         setAutostartEnabled(await AppService.AutostartEnabled());
       } catch (err) {
-        setAutostartError(`读取开机自启状态失败：${errorMessage(err)}`);
+        setAutostartError(t("set.autostartReadError", { error: errorMessage(err) }));
       }
     })();
   });
@@ -534,7 +536,7 @@ export default function SettingsPage(props: SettingsProps) {
     if (!mainKey) {
       // Typing a bare modifier is part of building a combination, not an error.
       if (isHotkeyModifierKey(event)) return;
-      setHotkeyRowError(field, `不支持的按键：${event.key || event.code}；仅支持 A-Z、0-9 与 F1-F24。`);
+      setHotkeyRowError(field, t("set.hotkeyRecordUnsupported", { key: event.key || event.code }));
       return;
     }
     const modifiers = new Set<HotkeyModifier>();
@@ -543,7 +545,7 @@ export default function SettingsPage(props: SettingsProps) {
     if (event.shiftKey) modifiers.add("Shift");
     if (event.metaKey) modifiers.add("Win");
     if (modifiers.size === 0) {
-      setHotkeyRowError(field, hotkeyMissingModifierError);
+      setHotkeyRowError(field, hotkeyMissingModifierError());
       return;
     }
     update(field, formatHotkeyCombo(modifiers, mainKey));
@@ -563,10 +565,10 @@ export default function SettingsPage(props: SettingsProps) {
     const interval = current.autoSelectIntervalMinutes;
     const tolerance = current.autoSelectToleranceMs;
     if (!Number.isFinite(interval) || interval < autoSelectIntervalRange.min || interval > autoSelectIntervalRange.max) {
-      return `自动选路间隔必须在 ${autoSelectIntervalRange.min}-${autoSelectIntervalRange.max} 分钟之间。`;
+      return t("set.validationAutoSelectInterval", { min: autoSelectIntervalRange.min, max: autoSelectIntervalRange.max });
     }
     if (!Number.isFinite(tolerance) || tolerance < autoSelectToleranceRange.min || tolerance > autoSelectToleranceRange.max) {
-      return `切换容差必须在 ${autoSelectToleranceRange.min}-${autoSelectToleranceRange.max} 毫秒之间。`;
+      return t("set.validationTolerance", { min: autoSelectToleranceRange.min, max: autoSelectToleranceRange.max });
     }
     return "";
   };
@@ -575,11 +577,11 @@ export default function SettingsPage(props: SettingsProps) {
     const current = settings();
     if (!current.inboundAuthEnabled) return "";
     const username = current.inboundUsername;
-    if (!username) return "开启入站认证时必须填写用户名。";
-    if (/\s/.test(username)) return "入站认证用户名不能包含空白字符。";
+    if (!username) return t("set.validationInboundUsernameRequired");
+    if (/\s/.test(username)) return t("set.validationInboundUsernameWhitespace");
     const password = current.inboundPassword;
-    if (!password) return "开启入站认证时必须填写密码。";
-    if ([...password].length < 6) return "入站认证密码长度不能少于 6 位。";
+    if (!password) return t("set.validationInboundPasswordRequired");
+    if ([...password].length < 6) return t("set.validationInboundPasswordLength");
     return "";
   };
 
@@ -589,7 +591,7 @@ export default function SettingsPage(props: SettingsProps) {
   const validateLoadBalance = () => {
     const mode = settings().loadBalanceMode.trim();
     if (mode !== "" && !loadBalanceModeValues.includes(mode)) {
-      return "负载均衡策略必须是延迟优先（leastPing）、负载优先（leastLoad）或轮询（roundRobin）。";
+      return t("set.validationLoadBalanceMode");
     }
     return "";
   };
@@ -600,24 +602,25 @@ export default function SettingsPage(props: SettingsProps) {
   // used to highlight the offending row next to the page-level alert.
   const collectHotkeyErrors = () => {
     const current = settings();
+    const actions = hotkeyActions();
     const rowErrors = createHotkeyErrors();
     const seen = new Map<string, HotkeyField>();
     let firstError = "";
-    for (const item of globalHotkeyActions) {
+    for (const item of actions) {
       const raw = current[item.field].trim();
       if (!raw) continue;
       const parsed = parseHotkeyCombo(raw);
       if (parsed.error) {
         rowErrors[item.field] = parsed.error;
-        if (!firstError) firstError = `${item.action}快捷键无效：${parsed.error}。`;
+        if (!firstError) firstError = t("set.hotkeyInvalid", { action: item.action, error: parsed.error });
         continue;
       }
       const previousField = seen.get(parsed.combo);
       if (previousField) {
-        const previousAction = globalHotkeyActions.find((candidate) => candidate.field === previousField)?.action ?? previousField;
-        rowErrors[item.field] = `与「${previousAction}」重复：${parsed.combo}`;
-        rowErrors[previousField] = rowErrors[previousField] || `与「${item.action}」重复：${parsed.combo}`;
-        if (!firstError) firstError = `快捷键不能重复：${previousAction}与${item.action}都使用了 ${parsed.combo}。`;
+        const previousAction = actions.find((candidate) => candidate.field === previousField)?.action ?? previousField;
+        rowErrors[item.field] = t("set.hotkeyDuplicateRow", { action: previousAction, combo: parsed.combo });
+        rowErrors[previousField] = rowErrors[previousField] || t("set.hotkeyDuplicateRow", { action: item.action, combo: parsed.combo });
+        if (!firstError) firstError = t("set.hotkeyDuplicate", { first: previousAction, second: item.action, combo: parsed.combo });
         continue;
       }
       seen.set(parsed.combo, item.field);
@@ -659,7 +662,7 @@ export default function SettingsPage(props: SettingsProps) {
       const input: Settings = { ...settings() };
       // Persist the canonical Ctrl+Alt+Shift+Win+Key form (the backend does the
       // same normalization); an empty value keeps the action disabled.
-      for (const item of globalHotkeyActions) {
+      for (const item of hotkeyActions()) {
         const raw = input[item.field].trim();
         input[item.field] = raw ? parseHotkeyCombo(raw).combo : "";
       }
@@ -675,9 +678,9 @@ export default function SettingsPage(props: SettingsProps) {
       setHotkeyErrors(createHotkeyErrors());
       setRecordingHotkey("");
       props.onSaved(saved);
-      setMessage("设置已保存。");
+      setMessage(t("set.saved"));
       if (saved.tunMode && !elevated()) {
-        setMessage("TUN 模式需要管理员权限，正在请求 UAC 提权并重启 FastV...");
+        setMessage(t("set.tunElevation"));
         await AppService.RestartAsAdmin();
       }
     } catch (err) {
@@ -688,7 +691,7 @@ export default function SettingsPage(props: SettingsProps) {
   };
 
   const reset = async () => {
-    if (!window.confirm("确定恢复默认设置吗？")) return;
+    if (!window.confirm(t("set.resetConfirm"))) return;
     setSaving(true);
     setError("");
     setMessage("");
@@ -698,7 +701,7 @@ export default function SettingsPage(props: SettingsProps) {
       setHotkeyErrors(createHotkeyErrors());
       setRecordingHotkey("");
       props.onSaved(resetSettings);
-      setMessage("已恢复默认设置。");
+      setMessage(t("set.resetDone"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -714,10 +717,10 @@ export default function SettingsPage(props: SettingsProps) {
     setAutostartBusy(true);
     try {
       setAutostartEnabled(await AppService.SetAutostart(enabled));
-      setMessage(enabled ? "已开启开机自启。" : "已关闭开机自启。");
+      setMessage(enabled ? t("set.autostartEnabledMessage") : t("set.autostartDisabledMessage"));
     } catch (err) {
       setAutostartEnabled(previous);
-      setAutostartError(`设置开机自启失败：${errorMessage(err)}`);
+      setAutostartError(t("set.autostartError", { error: errorMessage(err) }));
     } finally {
       setAutostartBusy(false);
     }
@@ -738,9 +741,9 @@ export default function SettingsPage(props: SettingsProps) {
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setBackupMessage(`备份已导出为 fastv-backup-${formatBackupTimestamp(new Date())}.json。`);
+      setBackupMessage(t("set.exportDone", { file: `fastv-backup-${formatBackupTimestamp(new Date())}.json` }));
     } catch (err) {
-      setBackupError(`导出备份失败：${errorMessage(err)}`);
+      setBackupError(t("set.exportError", { error: errorMessage(err) }));
     } finally {
       setBackupBusy("");
     }
@@ -756,7 +759,7 @@ export default function SettingsPage(props: SettingsProps) {
       const text = await file.text();
       const result = await BackupService.Import(text);
       setImportResult(result);
-      setBackupMessage("备份已导入，请重启代理后生效。");
+      setBackupMessage(t("set.importDone"));
       try {
         const restored = await SettingsService.Get();
         setSettings(restored);
@@ -765,7 +768,7 @@ export default function SettingsPage(props: SettingsProps) {
         // The restore already succeeded; a stale form is better than a false error.
       }
     } catch (err) {
-      setBackupError(`导入备份失败：${errorMessage(err)}`);
+      setBackupError(t("set.importError", { error: errorMessage(err) }));
     } finally {
       setBackupBusy("");
     }
@@ -786,9 +789,9 @@ export default function SettingsPage(props: SettingsProps) {
     clearWebdavResult();
     try {
       await BackupService.WebDAVTest();
-      setWebdavMessage("连接测试成功：WebDAV 服务器可访问，且账号具备写入备份目录的权限。");
+      setWebdavMessage(t("set.webdavTestOk"));
     } catch (err) {
-      setWebdavError(`测试连接失败：${errorMessage(err)}`);
+      setWebdavError(t("set.webdavTestError", { error: errorMessage(err) }));
     } finally {
       setWebdavBusy("");
     }
@@ -801,9 +804,9 @@ export default function SettingsPage(props: SettingsProps) {
     try {
       const remoteUrl = await BackupService.WebDAVUpload();
       setWebdavRemoteUrl(remoteUrl);
-      setWebdavMessage("备份已上传到云端 WebDAV 服务器。");
+      setWebdavMessage(t("set.webdavUploadOk"));
     } catch (err) {
-      setWebdavError(`上传到云端失败：${errorMessage(err)}`);
+      setWebdavError(t("set.webdavUploadError", { error: errorMessage(err) }));
     } finally {
       setWebdavBusy("");
     }
@@ -811,16 +814,14 @@ export default function SettingsPage(props: SettingsProps) {
 
   const restoreWebdav = async () => {
     if (webdavBusy()) return;
-    const confirmed = window.confirm(
-      "从云端恢复会使用 WebDAV 服务器上的备份覆盖当前全部配置（设置、订阅、节点与路由规则），且无法撤销。确定继续吗？",
-    );
+    const confirmed = window.confirm(t("set.webdavRestoreConfirm"));
     if (!confirmed) return;
     setWebdavBusy("download");
     clearWebdavResult();
     try {
       const result = await BackupService.WebDAVDownload();
       setWebdavRestoreResult(result);
-      setWebdavMessage("云端备份已恢复，请重启代理后生效。");
+      setWebdavMessage(t("set.webdavRestoreOk"));
       // The restore replaced the persisted settings; reload the form so it does
       // not keep showing pre-restore values.
       try {
@@ -831,7 +832,7 @@ export default function SettingsPage(props: SettingsProps) {
         // The restore itself succeeded; a stale form is better than a false error.
       }
     } catch (err) {
-      setWebdavError(`从云端恢复失败：${errorMessage(err)}`);
+      setWebdavError(t("set.webdavRestoreError", { error: errorMessage(err) }));
     } finally {
       setWebdavBusy("");
     }
@@ -843,7 +844,7 @@ export default function SettingsPage(props: SettingsProps) {
     setMessage("");
     try {
       setGeoData(await CoreService.GeoData());
-      setMessage("GeoData 状态已刷新。");
+      setMessage(t("set.geoDataRefreshed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -858,7 +859,7 @@ export default function SettingsPage(props: SettingsProps) {
     try {
       const info = await CoreService.UpdateGeoData();
       setGeoData(info);
-      setMessage("GeoData 已更新。");
+      setMessage(t("set.geoDataUpdated"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -908,10 +909,10 @@ export default function SettingsPage(props: SettingsProps) {
       setUpdateInfo(info);
       setUpdateError(info.error || "");
       if (!info.error) {
-        setMessage(info.available ? `发现新版本 v${info.latestVersion}。` : "当前已是最新版本。");
+        setMessage(info.available ? t("set.updateFound", { version: info.latestVersion }) : t("set.updateLatest"));
       }
     } catch (err) {
-      setUpdateError(`检查更新失败：${errorMessage(err)}`);
+      setUpdateError(t("set.updateCheckError", { error: errorMessage(err) }));
     } finally {
       setUpdateBusy(false);
     }
@@ -927,14 +928,12 @@ export default function SettingsPage(props: SettingsProps) {
       const info = await AppService.DownloadUpdate();
       setUpdateInfo(info);
       if (info.error) {
-        setUpdateError(`下载更新失败：${info.error}`);
+        setUpdateError(t("set.updateDownloadError", { error: info.error }));
       } else {
-        setUpdateNotice(
-          `更新包 ${info.assetName || "安装包"}（${formatAssetSize(info.assetSize)}）已下载；确认后即可重启安装。`,
-        );
+        setUpdateNotice(t("set.updateDownloadNotice", { name: info.assetName || t("set.installerFallback"), size: formatAssetSize(info.assetSize) }));
       }
     } catch (err) {
-      setUpdateError(`下载更新失败：${errorMessage(err)}`);
+      setUpdateError(t("set.updateDownloadError", { error: errorMessage(err) }));
     } finally {
       setUpdateDownloadBusy(false);
     }
@@ -944,16 +943,16 @@ export default function SettingsPage(props: SettingsProps) {
     if (updateBusy() || updateDownloadBusy() || updateInstallBusy()) return;
     const info = updateInfo();
     if (!info?.downloadedPath) {
-      setUpdateError("没有已下载的更新包，请先下载更新。");
+      setUpdateError(t("set.updateNoPackage"));
       return;
     }
     const lines = [
-      `确定立即重启并安装 FastV v${info.latestVersion || "新版本"} 吗？`,
+      t("set.installConfirm", { version: info.latestVersion || t("set.newVersion") }),
       "",
-      "FastV 将退出，自动替换程序文件后重新启动。",
+      t("set.installWillExit"),
     ];
     if (proxyRunning()) {
-      lines.push("", "当前代理正在运行，安装前建议先停止代理；安装过程中网络会短暂中断。");
+      lines.push("", t("set.installProxyWarning"));
     }
     if (!window.confirm(lines.join("\n"))) return;
     setUpdateInstallBusy(true);
@@ -965,9 +964,9 @@ export default function SettingsPage(props: SettingsProps) {
       // The backend starts the replacement script and asks the app to quit.
       // A successful call is expected to terminate FastV, so keep the button
       // disabled and only surface the restart hint.
-      setUpdateNotice("正在重启并安装更新，FastV 将自动重新启动…");
+      setUpdateNotice(t("set.installing"));
     } catch (err) {
-      setUpdateError(`安装更新失败：${errorMessage(err)}`);
+      setUpdateError(t("set.installError", { error: errorMessage(err) }));
       setUpdateInstallBusy(false);
     }
   };
@@ -983,7 +982,7 @@ export default function SettingsPage(props: SettingsProps) {
 
   return (
     <form class="page-stack settings-page" onSubmit={save}>
-      <Show when={!loading()} fallback={<div class="empty-state">正在读取设置...</div>}>
+      <Show when={!loading()} fallback={<div class="empty-state">{t("set.loading")}</div>}>
         <details
           class="panel settings-section"
           open={clientExpanded()}
@@ -997,8 +996,8 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon indigo"><Icon name="settings" size={17} /></span>
               <div>
-                <h3>客户端设置</h3>
-                <span>只影响 FastV 的界面和使用体验</span>
+                <h3>{t("set.clientSection")}</h3>
+                <span>{t("set.clientSectionHint")}</span>
               </div>
             </div>
             <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
@@ -1006,11 +1005,11 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
           <div class="setting-block">
             <div class="setting-label">
-              <strong>界面主题</strong>
-              <small>选择后立即预览，保存后应用到下次启动。</small>
+              <strong>{t("set.theme")}</strong>
+              <small>{t("set.themeHint")}</small>
             </div>
             <div class="theme-options">
-              {themes.map((item) => (
+              {themes().map((item) => (
                 <button
                   type="button"
                   classList={{ "theme-option": true, active: settings().theme === item.value }}
@@ -1038,11 +1037,11 @@ export default function SettingsPage(props: SettingsProps) {
             </div>
             <div class="accent-picker">
               <div class="setting-label">
-                <strong>强调色</strong>
-                <small>用于主按钮、开关、选中态和焦点环；点击立即预览，保存后持久化。</small>
+                <strong>{t("set.accent")}</strong>
+                <small>{t("set.accentHint")}</small>
               </div>
-              <div class="accent-options" role="radiogroup" aria-label="强调色">
-                {accentColors.map((item) => (
+              <div class="accent-options" role="radiogroup" aria-label={t("set.accent")}>
+                {accentColors().map((item) => (
                   <button
                     type="button"
                     role="radio"
@@ -1070,11 +1069,11 @@ export default function SettingsPage(props: SettingsProps) {
 
           <div class="setting-block">
             <div class="setting-label">
-              <strong>导航布局</strong>
-              <small>侧边模式保留左侧导航；底栏模式隐藏侧边栏，只保留液态玻璃底栏。</small>
+              <strong>{t("set.layout")}</strong>
+              <small>{t("set.layoutHint")}</small>
             </div>
             <div class="mode-options">
-              {layoutModes.map((item) => (
+              {layoutModes().map((item) => (
                 <button type="button" classList={{ "mode-option": true, active: settings().layoutMode === item.value }} onClick={() => update("layoutMode", item.value)}>
                   <strong>{item.label}</strong>
                   <small>{item.hint}</small>
@@ -1086,37 +1085,39 @@ export default function SettingsPage(props: SettingsProps) {
           <Show when={settings().layoutMode === "dock"}>
             <div class="setting-block">
               <div class="setting-label">
-                <strong>底栏透明度</strong>
-                <small>只调整底栏玻璃背景的透明度，文字、图标和操作按钮保持不透明。</small>
+                <strong>{t("set.dockTransparency")}</strong>
+                <small>{t("set.dockTransparencyHint")}</small>
               </div>
               <div class="dock-transparency-row">
                 <input type="range" min="5" max="90" value={settings().dockTransparency} onInput={(event) => { const value = Number(event.currentTarget.value); update("dockTransparency", value); props.onPreviewDockTransparency(value); }} />
                 <strong>{settings().dockTransparency}%</strong>
               </div>
-              <div class="dock-transparency-scale"><span>更实</span><span>更透明</span></div>
+              <div class="dock-transparency-scale"><span>{t("set.dockMoreSolid")}</span><span>{t("set.dockMoreTransparent")}</span></div>
             </div>
           </Show>
 
           <div class="settings-grid compact">
             <label>
-              <span>界面语言</span>
-              <select value={settings().language} onChange={(event) => update("language", event.currentTarget.value)}>
-                <option value="zh-CN">简体中文</option>
-                <option value="en-US">English</option>
+              <span>{t("set.language")}</span>
+              <select value={settings().language} onChange={(event) => {
+                update("language", event.currentTarget.value);
+                props.onPreviewLanguage(event.currentTarget.value);
+              }}>
+                {LANGUAGES.map((item) => <option value={item.value}>{item.label}</option>)}
               </select>
-              <small>语言资源将在后续版本接入。</small>
+              <small>{t("set.languageHint")}</small>
             </label>
           </div>
 
                     <div class="setting-block">
             <div class="setting-label">
-              <strong>Windows 系统代理</strong>
-              <small>启动代理时自动设置 Windows 系统代理，停止代理或退出 FastV 时恢复原设置。TUN 模式会自动跳过。</small>
+              <strong>{t("set.systemProxy")}</strong>
+              <small>{t("set.systemProxyHint")}</small>
             </div>
             <label class="switch-row">
               <span>
-                <strong>自动设置系统代理</strong>
-                <small>{settings().tunMode ? "当前已启用 TUN 模式，将跳过系统代理设置。" : `系统代理将指向 127.0.0.1:${settings().xrayLocalPort}`}</small>
+                <strong>{t("set.autoSystemProxy")}</strong>
+                <small>{settings().tunMode ? t("set.systemProxySkippedTun") : t("set.systemProxyPointsTo", { port: settings().xrayLocalPort })}</small>
               </span>
               <span classList={{ "switch": true, on: settings().systemProxyMode === "system" }}>
                 <input type="checkbox" checked={settings().systemProxyMode === "system"} onChange={(event) => update("systemProxyMode", event.currentTarget.checked ? "system" : "off")} />
@@ -1126,11 +1127,11 @@ export default function SettingsPage(props: SettingsProps) {
           </div>
 <div class="setting-block">
             <div class="setting-label">
-              <strong>默认代理模式</strong>
-              <small>生成 Xray 路由规则时使用：规则分流、全局代理或全部直连。</small>
+              <strong>{t("set.defaultProxyMode")}</strong>
+              <small>{t("set.defaultProxyModeHint")}</small>
             </div>
             <div class="mode-options">
-              {proxyModes.map((item) => (
+              {proxyModes().map((item) => (
                 <button
                   type="button"
                   classList={{ "mode-option": true, active: settings().proxyMode === item.value }}
@@ -1146,26 +1147,26 @@ export default function SettingsPage(props: SettingsProps) {
             </div>
             <div class="settings-grid compact">
               <label>
-                <span>代理测试地址</span>
+                <span>{t("set.testUrl")}</span>
                 <input
                   value={settings().testUrl}
                   onInput={(event) => update("testUrl", event.currentTarget.value)}
                   placeholder="https://www.gstatic.com/generate_204"
                 />
-                <small>启动代理后使用本地 SOCKS/HTTP 入站访问此地址。</small>
+                <small>{t("set.testUrlHint")}</small>
               </label>
             </div>
           </div>
 
           <div class="setting-block">
             <div class="setting-label">
-              <strong>网络接管</strong>
-              <small>控制 FastV 如何接管系统流量。</small>
+              <strong>{t("set.networkTakeover")}</strong>
+              <small>{t("set.networkTakeoverHint")}</small>
             </div>
             <label class="switch-row tun-mode-row">
               <span>
-                <strong>TUN 模式</strong>
-                <small>全局接管系统流量。Xray-core 已支持 TUN，需要管理员权限、wintun.dll 和系统路由接管。</small>
+                <strong>{t("set.tunMode")}</strong>
+                <small>{t("set.tunModeHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().tunMode }}>
                 <input
@@ -1179,14 +1180,14 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().tunMode}>
               <div class="tun-warning">
                 <Icon name="alert" size={14} />
-                <span>TUN 模式需要管理员权限。保存设置后 FastV 会自动请求 UAC 提权并重启；也可以直接启动代理触发提权。请确保 wintun.dll 位于 xray.exe 同目录。当前状态：{elevated() ? "已获得管理员权限" : "普通权限，启动 TUN 时将自动申请提权"}。</span>
+                <span>{t("set.tunWarning", { status: elevated() ? t("set.elevated") : t("set.notElevated") })}</span>
               </div>
             </Show>
 
             <label class="switch-row">
               <span>
-                <strong>允许局域网连接</strong>
-                <small>{settings().allowLan ? `本地 SOCKS 入站监听 0.0.0.0:${settings().xrayLocalPort}，同网段设备可以把代理指向本机 IP。` : "本地 SOCKS 入站仅监听 127.0.0.1，只有本机可以使用本地代理。"}</small>
+                <strong>{t("set.allowLan")}</strong>
+                <small>{settings().allowLan ? t("set.allowLanOn", { port: settings().xrayLocalPort }) : t("set.allowLanOff")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().allowLan }}>
                 <input
@@ -1200,14 +1201,14 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().allowLan}>
               <div class="settings-inline-warning">
                 <Icon name="alert" size={13} />
-                <span>监听 0.0.0.0，同网段设备可用本机代理；请确认防火墙设置，并建议同时开启入站认证，避免同网段设备无需密码即可使用代理。</span>
+                <span>{t("set.allowLanWarning")}</span>
               </div>
             </Show>
 
             <label class="switch-row">
               <span>
-                <strong>入站认证</strong>
-                <small>为本地 SOCKS 入站启用用户名/密码认证；关闭时使用 noauth，本机应用无需填写密码。开启后访问本机代理的应用需要配置对应账号。</small>
+                <strong>{t("set.inboundAuth")}</strong>
+                <small>{t("set.inboundAuthHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().inboundAuthEnabled }}>
                 <input
@@ -1221,40 +1222,40 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().inboundAuthEnabled}>
               <div class="settings-grid">
                 <label>
-                  <span>入站用户名</span>
+                  <span>{t("set.inboundUsername")}</span>
                   <input
                     value={settings().inboundUsername}
                     onInput={(event) => update("inboundUsername", event.currentTarget.value)}
-                    placeholder="例如 fastv"
+                    placeholder={t("set.inboundUsernamePlaceholder")}
                   />
-                  <small>不能为空，且不能包含空白字符。</small>
+                  <small>{t("set.inboundUsernameHint")}</small>
                 </label>
                 <label>
-                  <span>入站密码</span>
+                  <span>{t("set.inboundPassword")}</span>
                   <input
                     type="password"
                     value={settings().inboundPassword}
                     onInput={(event) => update("inboundPassword", event.currentTarget.value)}
-                    placeholder="至少 6 位"
+                    placeholder={t("set.inboundPasswordPlaceholder")}
                   />
-                  <small>至少 6 位；保存并重启代理后生效。</small>
+                  <small>{t("set.inboundPasswordHint")}</small>
                 </label>
               </div>
               <div class="settings-inline-warning">
                 <Icon name="alert" size={13} />
-                <span>入站认证只作用于本地 SOCKS 入站，TUN 入站不受影响；修改账号密码后需要重启代理才会生效。</span>
+                <span>{t("set.inboundAuthWarning")}</span>
               </div>
             </Show>
           </div>
 
           <div class="setting-block">
             <div class="setting-label">
-              <strong>订阅更新</strong>
-              <small>控制订阅刷新间隔和启动时自动更新。</small>
+              <strong>{t("set.subscriptionUpdate")}</strong>
+              <small>{t("set.subscriptionUpdateHint")}</small>
             </div>
             <div class="settings-grid">
               <label>
-                <span>更新间隔（分钟）</span>
+                <span>{t("set.updateInterval")}</span>
                 <input
                   type="number"
                   min="15"
@@ -1262,13 +1263,13 @@ export default function SettingsPage(props: SettingsProps) {
                   value={settings().updateIntervalMinutes}
                   onInput={(event) => update("updateIntervalMinutes", Number(event.currentTarget.value))}
                 />
-                <small>允许范围 15-1440 分钟。</small>
+                <small>{t("set.updateIntervalHint")}</small>
               </label>
             </div>
             <label class="switch-row">
               <span>
-                <strong>自动更新订阅</strong>
-                <small>应用启动后按更新间隔检查订阅。</small>
+                <strong>{t("set.autoUpdateSubscriptions")}</strong>
+                <small>{t("set.autoUpdateSubscriptionsHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().autoUpdate }}>
                 <input
@@ -1296,8 +1297,8 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon cyan"><Icon name="server" size={17} /></span>
               <div>
-                <h3>内核设置</h3>
-                <span>不同内核只展示各自的参数</span>
+                <h3>{t("set.coreSection")}</h3>
+                <span>{t("set.coreSectionHint")}</span>
               </div>
             </div>
             <span class="settings-section-meta">
@@ -1310,11 +1311,11 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
           <div class="setting-block">
             <div class="setting-label">
-              <strong>代理内核</strong>
-              <small>选择用于处理代理流量的内核。</small>
+              <strong>{t("set.coreType")}</strong>
+              <small>{t("set.coreTypeHint")}</small>
             </div>
             <div class="core-type-options">
-              {coreTypes.map((item) => (
+              {coreTypes().map((item) => (
                 <button
                   type="button"
                   classList={{ "core-type-option": true, active: settings().coreType === item.value }}
@@ -1336,44 +1337,44 @@ export default function SettingsPage(props: SettingsProps) {
           <Show when={settings().coreType === "xray"} fallback={
             <div class="core-placeholder">
               <div class="empty-icon"><Icon name="route" size={22} /></div>
-              <strong>sing-box 内核尚未接入</strong>
-              <span>接入后会在这里显示 sing-box 专属参数，不会和客户端设置混在一起。</span>
+              <strong>{t("set.singboxNotReady")}</strong>
+              <span>{t("set.singboxNotReadyHint")}</span>
             </div>
           }>
             <div class="core-summary">
               <div class="core-version">
-                <span>当前版本</span>
-                <strong>{core()?.version || "未安装"}</strong>
+                <span>{t("set.currentVersion")}</span>
+                <strong>{core()?.version || t("set.notInstalled")}</strong>
               </div>
               <div class="core-version">
-                <span>最新版本</span>
-                <strong>{core()?.latestVersion || "未检查"}</strong>
+                <span>{t("set.latestVersion")}</span>
+                <strong>{core()?.latestVersion || t("set.notChecked")}</strong>
               </div>
               <div class="core-version">
-                <span>更新方式</span>
-                <strong>{settings().coreAutoUpdate ? "自动检测" : "手动检查"}</strong>
+                <span>{t("set.updateMethod")}</span>
+                <strong>{settings().coreAutoUpdate ? t("set.autoDetect") : t("set.manualCheck")}</strong>
               </div>
             </div>
 
-            <p class="core-message">{core()?.message || "可以检查最新 Xray-core 版本。"}</p>
+            <p class="core-message">{core()?.message || t("set.coreMessageDefault")}</p>
 
             <div class="core-actions">
               <button class="btn secondary" type="button" onClick={checkCore} disabled={coreBusy() !== ""}>
-                <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? "检查中..." : "检查更新"}
+                <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? t("set.checking") : t("set.checkUpdate")}
               </button>
               <button class="btn primary" type="button" onClick={downloadCore} disabled={coreBusy() !== ""}>
-                <Icon name="external" size={14} /> {coreBusy() === "downloading" ? "下载中..." : "下载最新版"}
+                <Icon name="external" size={14} /> {coreBusy() === "downloading" ? t("set.downloading") : t("set.downloadLatest")}
               </button>
             </div>
 
             <div class="core-params">
               <div class="setting-label">
-                <strong>Xray 运行参数</strong>
-                <small>这些参数只属于 Xray-core，修改后重新启动代理即可生效。</small>
+                <strong>{t("set.xrayRuntimeParams")}</strong>
+                <small>{t("set.xrayRuntimeParamsHint")}</small>
               </div>
               <div class="core-param-grid">
                 <label>
-                  <span>本地 SOCKS/HTTP 端口</span>
+                  <span>{t("set.localPort")}</span>
                   <input
                     type="number"
                     min="1"
@@ -1381,17 +1382,17 @@ export default function SettingsPage(props: SettingsProps) {
                     value={settings().xrayLocalPort}
                     onInput={(event) => update("xrayLocalPort", Number(event.currentTarget.value))}
                   />
-                  <small>启动代理时监听 127.0.0.1 的 SOCKS/HTTP 端口。</small>
+                  <small>{t("set.localPortHint")}</small>
                 </label>
                 <label>
-                  <span>日志级别</span>
+                  <span>{t("set.logLevel")}</span>
                   <select value={settings().xrayLogLevel} onChange={(event) => update("xrayLogLevel", event.currentTarget.value)}>
                     {logLevels.map((level) => <option value={level.value}>{level.label}</option>)}
                   </select>
-                  <small>写入 Xray 配置的 log.loglevel。</small>
+                  <small>{t("set.logLevelHint")}</small>
                 </label>
                 <label>
-                  <span>Mux 并发数</span>
+                  <span>{t("set.muxConcurrency")}</span>
                   <input
                     type="number"
                     min="1"
@@ -1400,10 +1401,10 @@ export default function SettingsPage(props: SettingsProps) {
                     disabled={!settings().xrayMuxEnabled}
                     onInput={(event) => update("xrayMuxConcurrency", Number(event.currentTarget.value))}
                   />
-                  <small>写入 outbound.mux.concurrency，仅在 Mux 开启时生效。</small>
+                  <small>{t("set.muxConcurrencyHint")}</small>
                 </label>
                 <label>
-                  <span>API / 统计端口</span>
+                  <span>{t("set.apiPort")}</span>
                   <input
                     type="number"
                     min="1"
@@ -1412,15 +1413,15 @@ export default function SettingsPage(props: SettingsProps) {
                     disabled={!settings().xrayApiEnabled}
                     onInput={(event) => update("xrayApiPort", Number(event.currentTarget.value))}
                   />
-                  <small>仅监听 127.0.0.1，不能和本地 SOCKS/HTTP 端口相同。</small>
+                  <small>{t("set.apiPortHint")}</small>
                 </label>
               </div>
 
               <div class="core-switch-grid">
                 <label class="switch-row">
                   <span>
-                    <strong>启用 Mux</strong>
-                    <small>减少握手次数，但可能影响大流量吞吐。</small>
+                    <strong>{t("set.enableMux")}</strong>
+                    <small>{t("set.enableMuxHint")}</small>
                   </span>
                   <span classList={{ "switch": true, on: settings().xrayMuxEnabled }}>
                     <input
@@ -1433,8 +1434,8 @@ export default function SettingsPage(props: SettingsProps) {
                 </label>
                 <label class="switch-row">
                   <span>
-                    <strong>启用流量嗅探</strong>
-                    <small>写入 inbound.sniffing，用于域名分流和协议识别。</small>
+                    <strong>{t("set.enableSniffing")}</strong>
+                    <small>{t("set.enableSniffingHint")}</small>
                   </span>
                   <span classList={{ "switch": true, on: settings().xraySniffing }}>
                     <input
@@ -1447,8 +1448,8 @@ export default function SettingsPage(props: SettingsProps) {
                 </label>
                 <label class="switch-row">
                   <span>
-                    <strong>启用 Xray API 与本地统计</strong>
-                    <small>启动本地 API、StatsService 和统计策略，为流量统计和内核管理功能提供支持。</small>
+                    <strong>{t("set.enableXrayApi")}</strong>
+                    <small>{t("set.enableXrayApiHint")}</small>
                   </span>
                   <span classList={{ "switch": true, on: settings().xrayApiEnabled }}>
                     <input
@@ -1464,56 +1465,56 @@ export default function SettingsPage(props: SettingsProps) {
 
             <div class="setting-block core-advanced-block">
               <div class="setting-label">
-                <strong>Xray 高级网络参数</strong>
-                <small>直接写入 Xray 的 DNS、路由和 TUN 配置，修改后重新启动代理生效。</small>
+                <strong>{t("set.xrayAdvanced")}</strong>
+                <small>{t("set.xrayAdvancedHint")}</small>
               </div>
               <div class="core-param-grid">
                 <label>
-                  <span>DNS 服务器</span>
+                  <span>{t("set.dnsServers")}</span>
                   <input value={settings().xrayDnsServers} onInput={(event) => update("xrayDnsServers", event.currentTarget.value)} placeholder="1.1.1.1,8.8.8.8" />
-                  <small>逗号或换行分隔，写入 dns.servers。</small>
+                  <small>{t("set.dnsServersHint")}</small>
                 </label>
                 <label>
-                  <span>DNS 查询策略</span>
+                  <span>{t("set.dnsStrategy")}</span>
                   <select value={settings().xrayDnsStrategy} onChange={(event) => update("xrayDnsStrategy", event.currentTarget.value)}>
-                    {dnsStrategies.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                    {dnsStrategies().map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
                   </select>
-                  <small>写入 dns.queryStrategy。</small>
+                  <small>{t("set.dnsStrategyHint")}</small>
                 </label>
                 <label>
-                  <span>路由域名策略</span>
+                  <span>{t("set.domainStrategy")}</span>
                   <select value={settings().xrayDomainStrategy} onChange={(event) => update("xrayDomainStrategy", event.currentTarget.value)}>
-                    {domainStrategies.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                    {domainStrategies().map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
                   </select>
-                  <small>写入 routing.domainStrategy。</small>
+                  <small>{t("set.domainStrategyHint")}</small>
                 </label>
                 <label>
-                  <span>TUN MTU</span>
+                  <span>{t("set.tunMtu")}</span>
                   <input type="number" min="576" max="9000" value={settings().xrayTunMtu} onInput={(event) => update("xrayTunMtu", Number(event.currentTarget.value))} />
-                  <small>写入 TUN inbound 的 MTU，默认 1500。</small>
+                  <small>{t("set.tunMtuHint")}</small>
                 </label>
               </div>
               <div class="core-path-row">
-                <span>Xray 内核路径</span>
-                <code>{core()?.path || "未安装"}</code>
+                <span>{t("set.corePath")}</span>
+                <code>{core()?.path || t("set.notInstalled")}</code>
               </div>
             </div>
             <div class="setting-block transport-advanced-block">
               <div class="setting-label">
-                <strong>传输层 FinalMask / Sockopt</strong>
-                <small>写入当前 outbound 的 streamSettings。Sockopt 高级 JSON 会覆盖上方同名参数；FinalMask 为空时不生成。</small>
+                <strong>{t("set.transportAdvanced")}</strong>
+                <small>{t("set.transportAdvancedHint")}</small>
               </div>
 
               <div class="core-switch-grid">
                 <label class="switch-row">
-                  <span><strong>TCP Fast Open</strong><small>写入 sockopt.tcpFastOpen。</small></span>
+                  <span><strong>TCP Fast Open</strong><small>{t("set.tfoHint")}</small></span>
                   <span classList={{ "switch": true, on: settings().xraySockoptTfo }}>
                     <input type="checkbox" checked={settings().xraySockoptTfo} onChange={(event) => update("xraySockoptTfo", event.currentTarget.checked)} />
                     <span class="switch-track"><span class="switch-thumb" /></span>
                   </span>
                 </label>
                 <label class="switch-row">
-                  <span><strong>TCP MPTCP</strong><small>写入 sockopt.tcpMptcp，系统支持时启用。</small></span>
+                  <span><strong>TCP MPTCP</strong><small>{t("set.mptcpHint")}</small></span>
                   <span classList={{ "switch": true, on: settings().xraySockoptMptcp }}>
                     <input type="checkbox" checked={settings().xraySockoptMptcp} onChange={(event) => update("xraySockoptMptcp", event.currentTarget.checked)} />
                     <span class="switch-track"><span class="switch-thumb" /></span>
@@ -1523,92 +1524,92 @@ export default function SettingsPage(props: SettingsProps) {
 
               <div class="core-param-grid">
                 <label>
-                  <span>KeepAlive Idle</span>
+                  <span>{t("set.keepAliveIdle")}</span>
                   <input type="number" min="0" value={settings().xraySockoptKeepIdle} onInput={(event) => update("xraySockoptKeepIdle", Number(event.currentTarget.value))} />
-                  <small>秒，0 表示不写入。</small>
+                  <small>{t("set.keepAliveHint")}</small>
                 </label>
                 <label>
-                  <span>KeepAlive Interval</span>
+                  <span>{t("set.keepAliveInterval")}</span>
                   <input type="number" min="0" value={settings().xraySockoptKeepIntvl} onInput={(event) => update("xraySockoptKeepIntvl", Number(event.currentTarget.value))} />
-                  <small>秒，0 表示不写入。</small>
+                  <small>{t("set.keepAliveHint")}</small>
                 </label>
                 <label>
-                  <span>TCP User Timeout</span>
+                  <span>{t("set.userTimeout")}</span>
                   <input type="number" min="0" value={settings().xraySockoptUserTimeout} onInput={(event) => update("xraySockoptUserTimeout", Number(event.currentTarget.value))} />
-                  <small>毫秒，0 表示不写入。</small>
+                  <small>{t("set.userTimeoutHint")}</small>
                 </label>
                 <label>
-                  <span>TCP Congestion</span>
-                  <input value={settings().xraySockoptCongestion} onInput={(event) => update("xraySockoptCongestion", event.currentTarget.value)} placeholder="例如 bbr / cubic" />
-                  <small>写入 sockopt.tcpCongestion。</small>
+                  <span>{t("set.congestion")}</span>
+                  <input value={settings().xraySockoptCongestion} onInput={(event) => update("xraySockoptCongestion", event.currentTarget.value)} placeholder={t("set.congestionPlaceholder")} />
+                  <small>{t("set.congestionHint")}</small>
                 </label>
                 <label>
-                  <span>Sockopt Domain Strategy</span>
+                  <span>{t("set.sockoptDomainStrategy")}</span>
                   <select value={settings().xraySockoptDomainStrategy} onChange={(event) => update("xraySockoptDomainStrategy", event.currentTarget.value)}>
-                    {sockoptDomainStrategies.map((item) => <option value={item.value}>{item.label}</option>)}
+                    {sockoptDomainStrategies().map((item) => <option value={item.value}>{item.label}</option>)}
                   </select>
-                  <small>写入 sockopt.domainStrategy。</small>
+                  <small>{t("set.sockoptDomainStrategyHint")}</small>
                 </label>
               </div>
 
               <div class="advanced-json-grid">
                 <label>
-                  <span>Sockopt 高级 JSON</span>
+                  <span>{t("set.sockoptJson")}</span>
                   <textarea value={settings().xraySockoptJson} onInput={(event) => update("xraySockoptJson", event.currentTarget.value)} spellcheck={false} placeholder={'{\n  "acceptProxyProtocol": false\n}'} />
-                  <small>与上方 Sockopt 字段合并，同名键以 JSON 为准。</small>
+                  <small>{t("set.sockoptJsonHint")}</small>
                 </label>
                 <label>
-                  <span>FinalMask JSON</span>
+                  <span>{t("set.finalMaskJson")}</span>
                   <textarea value={settings().xrayFinalMaskJson} onInput={(event) => update("xrayFinalMaskJson", event.currentTarget.value)} spellcheck={false} placeholder={'{\n  "tcp": [\n    { "type": "fragment", "settings": { "packets": "tlshello" } }\n  ]\n}'} />
-                  <small>完整 finalmask 对象，写入 streamSettings.finalmask。</small>
+                  <small>{t("set.finalMaskJsonHint")}</small>
                 </label>
               </div>
 
               <div class="core-actions">
                 <button class="btn secondary" type="button" onClick={() => update("xrayFinalMaskJson", finalMaskTemplate)}>
-                  <Icon name="plus" size={14} /> 插入 Fragment 模板
+                  <Icon name="plus" size={14} /> {t("set.insertFragment")}
                 </button>
                 <button class="btn ghost" type="button" onClick={() => update("xrayFinalMaskJson", "")}>
-                  清空 FinalMask
+                  {t("set.clearFinalMask")}
                 </button>
               </div>
             </div>
             <div class="geodata-block">
               <div class="setting-label">
-                <strong>GeoData 资源</strong>
-                <small>路由中的 geoip/geosite 规则依赖这些资源。FastV 会通过 XRAY_LOCATION_ASSET 指向内核目录。</small>
+                <strong>{t("set.geoData")}</strong>
+                <small>{t("set.geoDataHint")}</small>
               </div>
               <div class="geodata-files">
                 <div class="geodata-file">
                   <span>GeoIP</span>
-                  <strong>{geoData()?.geoIp ? "已安装" : "缺失"}</strong>
-                  <small>{geoData()?.geoIp ? `${formatBytes(geoData()!.geoIp!.size)} · ${geoData()!.geoIp!.name}` : "geoip.dat"}</small>
+                  <strong>{geoData()?.geoIp ? t("set.installed") : t("set.missing")}</strong>
+                  <small>{geoData()?.geoIp ? `${formatBytes(geoData()!.geoIp!.size)} · ${geoData()!.geoIp!.name}` : t("set.geoIpFile")}</small>
                 </div>
                 <div class="geodata-file">
-                  <span>GeoSite</span>
-                  <strong>{geoData()?.geoSite ? "已安装" : "缺失"}</strong>
-                  <small>{geoData()?.geoSite ? `${formatBytes(geoData()!.geoSite!.size)} · ${geoData()!.geoSite!.name}` : "geosite.dat"}</small>
+                  <span>{t("set.geoSite")}</span>
+                  <strong>{geoData()?.geoSite ? t("set.installed") : t("set.missing")}</strong>
+                  <small>{geoData()?.geoSite ? `${formatBytes(geoData()!.geoSite!.size)} · ${geoData()!.geoSite!.name}` : t("set.geoSiteFile")}</small>
                 </div>
                 <div class="geodata-file">
-                  <span>资源文件</span>
+                  <span>{t("set.resourceFiles")}</span>
                   <strong>{geoData()?.files?.length ?? 0}</strong>
-                  <small>{geoData()?.directory ?? "内核目录"}</small>
+                  <small>{geoData()?.directory ?? t("set.coreDirectory")}</small>
                 </div>
               </div>
               <div class="core-actions">
                 <button class="btn secondary" type="button" onClick={refreshGeoData} disabled={geoBusy() !== ""}>
-                  <Icon name="refresh" size={14} /> {geoBusy() === "refresh" ? "刷新中..." : "刷新状态"}
+                  <Icon name="refresh" size={14} /> {geoBusy() === "refresh" ? t("set.refreshing") : t("set.refreshStatus")}
                 </button>
                 <button class="btn primary" type="button" onClick={updateGeoData} disabled={geoBusy() !== ""}>
-                  <Icon name="external" size={14} /> {geoBusy() === "update" ? "更新中..." : "下载/更新 GeoData"}
+                  <Icon name="external" size={14} /> {geoBusy() === "update" ? t("set.updating") : t("set.updateGeoData")}
                 </button>
               </div>
-              <p class="core-message">支持 geoip.dat、geosite.dat 以及额外的 .dat 资源文件；更新 GeoData 不会替换 Xray 可执行文件。</p>
+              <p class="core-message">{t("set.geoDataNote")}</p>
             </div>
             <label class="switch-row">
               <span>
-                <strong>自动检查并下载 Xray 内核更新</strong>
-                <small>启动后检查新版本，并在可用时自动下载安装。</small>
+                <strong>{t("set.coreAutoUpdate")}</strong>
+                <small>{t("set.coreAutoUpdateHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().coreAutoUpdate }}>
                 <input
@@ -1636,16 +1637,16 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon"><Icon name="route" size={17} /></span>
               <div>
-                <h3>智能选路</h3>
-                <span>自动选路、故障切换与多节点负载均衡</span>
+                <h3>{t("set.smartRouting")}</h3>
+                <span>{t("set.smartRoutingHint")}</span>
               </div>
             </div>
             <span class="settings-section-meta">
               <Show when={settings().loadBalanceEnabled}>
-                <span class="tag success">负载均衡已开启</span>
+                <span class="tag success">{t("set.loadBalanceOn")}</span>
               </Show>
               <span classList={{ "tag": true, success: settings().autoSelectEnabled, neutral: !settings().autoSelectEnabled }}>
-                {settings().autoSelectEnabled ? "自动选路已开启" : "自动选路已关闭"}
+                {settings().autoSelectEnabled ? t("set.autoSelectOn") : t("set.autoSelectOff")}
               </span>
               <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
             </span>
@@ -1653,8 +1654,8 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
             <label class="switch-row">
               <span>
-                <strong>自动选择最优节点</strong>
-                <small>按选路间隔对所有节点做 URL 延迟测速，自动切换到延迟最低的可用节点。</small>
+                <strong>{t("set.autoSelect")}</strong>
+                <small>{t("set.autoSelectHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().autoSelectEnabled }}>
                 <input
@@ -1669,13 +1670,13 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={settings().loadBalanceEnabled}>
               <div class="settings-inline-warning">
                 <Icon name="alert" size={13} />
-                <span>负载均衡已开启：代理启动时自动选路与故障切换会暂停；需要继续使用自动选路时，请先关闭负载均衡。</span>
+                <span>{t("set.loadBalancePauseWarning")}</span>
               </div>
             </Show>
 
             <div class="settings-grid">
               <label>
-                <span>选路间隔（分钟）</span>
+                <span>{t("set.selectInterval")}</span>
                 <input
                   type="number"
                   min={autoSelectIntervalRange.min}
@@ -1684,10 +1685,10 @@ export default function SettingsPage(props: SettingsProps) {
                   value={settings().autoSelectIntervalMinutes}
                   onInput={(event) => update("autoSelectIntervalMinutes", Number(event.currentTarget.value))}
                 />
-                <small>允许范围 {autoSelectIntervalRange.min}-{autoSelectIntervalRange.max} 分钟，间隔越短切换越及时，测速开销也越大。</small>
+                <small>{t("set.selectIntervalHint", { min: autoSelectIntervalRange.min, max: autoSelectIntervalRange.max })}</small>
               </label>
               <label>
-                <span>切换容差（毫秒）</span>
+                <span>{t("set.switchTolerance")}</span>
                 <input
                   type="number"
                   min={autoSelectToleranceRange.min}
@@ -1696,14 +1697,14 @@ export default function SettingsPage(props: SettingsProps) {
                   value={settings().autoSelectToleranceMs}
                   onInput={(event) => update("autoSelectToleranceMs", Number(event.currentTarget.value))}
                 />
-                <small>允许范围 {autoSelectToleranceRange.min}-{autoSelectToleranceRange.max} 毫秒，新节点需要快出容差值才会切换，避免频繁抖动。</small>
+                <small>{t("set.switchToleranceHint", { min: autoSelectToleranceRange.min, max: autoSelectToleranceRange.max })}</small>
               </label>
             </div>
 
             <label class="switch-row">
               <span>
-                <strong>故障自动切换</strong>
-                <small>代理健康检查失败时，自动切换到延迟最低的可用节点。</small>
+                <strong>{t("set.failover")}</strong>
+                <small>{t("set.failoverHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().failoverEnabled }}>
                 <input
@@ -1717,19 +1718,19 @@ export default function SettingsPage(props: SettingsProps) {
 
             <p class="settings-note">
               <Icon name="alert" size={13} />
-              <span>自动选路需要 URL 测速；TUN 模式开启时会暂停自动选路。保存设置后重启代理生效。</span>
+              <span>{t("set.autoSelectNote")}</span>
             </p>
 
             <div class="setting-block">
               <div class="setting-label">
-                <strong>负载均衡</strong>
-                <small>把全部启用节点交给 Xray 的 balancer，每条连接按策略选择节点，而不是只使用一个活动节点。</small>
+                <strong>{t("set.loadBalance")}</strong>
+                <small>{t("set.loadBalanceHint")}</small>
               </div>
 
               <label class="switch-row">
                 <span>
-                  <strong>启用负载均衡</strong>
-                  <small>对全部启用节点做多出站负载均衡；需要至少 2 个启用节点，不足 2 个时自动回退单节点。开启时自动选路与故障切换暂停，TUN 模式暂回退单节点。</small>
+                  <strong>{t("set.enableLoadBalance")}</strong>
+                  <small>{t("set.enableLoadBalanceHint")}</small>
                 </span>
                 <span classList={{ "switch": true, on: settings().loadBalanceEnabled }}>
                   <input
@@ -1743,11 +1744,11 @@ export default function SettingsPage(props: SettingsProps) {
 
               <div class="settings-grid compact">
                 <label>
-                  <span>负载均衡策略</span>
+                  <span>{t("set.loadBalanceMode")}</span>
                   <select value={settings().loadBalanceMode} onChange={(event) => update("loadBalanceMode", event.currentTarget.value)}>
-                    {loadBalanceModes.map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
+                    {loadBalanceModes().map((item) => <option value={item.value}>{item.label} · {item.hint}</option>)}
                   </select>
-                  <small>仅支持 leastPing、leastLoad、roundRobin 三种策略；保存时后端会做同样的校验，前端会先拦截非法值。</small>
+                  <small>{t("set.loadBalanceModeHint")}</small>
                 </label>
               </div>
 
@@ -1755,20 +1756,20 @@ export default function SettingsPage(props: SettingsProps) {
                 <Show when={settings().autoSelectEnabled || settings().failoverEnabled}>
                   <div class="settings-inline-warning">
                     <Icon name="alert" size={13} />
-                    <span>负载均衡与自动选路/故障切换互斥：保存并启用后，代理启动时会暂停自动选路和故障切换，节点选择完全交给负载均衡；关闭负载均衡即可恢复。</span>
+                    <span>{t("set.loadBalanceConflictWarning")}</span>
                   </div>
                 </Show>
 
                 <Show when={settings().tunMode}>
                   <div class="settings-inline-warning">
                     <Icon name="alert" size={13} />
-                    <span>当前已开启 TUN 模式：TUN 暂不支持多出站负载均衡，启动代理时会自动回退为单节点，并写入内核日志。</span>
+                    <span>{t("set.loadBalanceTunWarning")}</span>
                   </div>
                 </Show>
 
                 <p class="settings-note">
                   <Icon name="route" size={13} />
-                  <span>负载均衡同样要求至少 2 个启用节点；需要保存设置并重启代理后生效，实际使用的策略和回退原因会写入内核日志。</span>
+                  <span>{t("set.loadBalanceNote")}</span>
                 </p>
               </Show>
             </div>
@@ -1788,13 +1789,13 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon"><Icon name="speed" size={17} /></span>
               <div>
-                <h3>流量统计</h3>
-                <span>通过 Xray API 采集实时速率与累计流量</span>
+                <h3>{t("set.stats")}</h3>
+                <span>{t("set.statsHint")}</span>
               </div>
             </div>
             <span class="settings-section-meta">
               <span classList={{ "tag": true, success: settings().statsEnabled, neutral: !settings().statsEnabled }}>
-                {settings().statsEnabled ? "统计已开启" : "统计已关闭"}
+                {settings().statsEnabled ? t("set.statsOn") : t("set.statsOff")}
               </span>
               <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
             </span>
@@ -1802,8 +1803,8 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
             <label class="switch-row">
               <span>
-                <strong>启用流量统计</strong>
-                <small>启动代理后通过 Xray API 的 StatsService 轮询上/下行流量，用于仪表盘实时速率与累计流量。</small>
+                <strong>{t("set.enableStats")}</strong>
+                <small>{t("set.enableStatsHint")}</small>
               </span>
               <span classList={{ "switch": true, on: settings().statsEnabled }}>
                 <input
@@ -1818,13 +1819,13 @@ export default function SettingsPage(props: SettingsProps) {
             <Show when={!settings().xrayApiEnabled}>
               <div class="settings-inline-warning">
                 <Icon name="alert" size={13} />
-                <span>流量统计需要先在内核设置中开启「Xray API 与本地统计」，当前 API 端口为 {settings().xrayApiPort}。</span>
+                <span>{t("set.statsApiWarning", { port: settings().xrayApiPort })}</span>
               </div>
             </Show>
 
             <p class="settings-note">
               <Icon name="speed" size={13} />
-              <span>Xray API 端口（当前 {settings().xrayApiPort}）用于统计采样；关闭统计后仪表盘不再显示实时流量，但不影响代理转发。</span>
+              <span>{t("set.statsNote", { port: settings().xrayApiPort })}</span>
             </p>
           </div>
         </details>
@@ -1842,13 +1843,13 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon"><Icon name="maximize" size={17} /></span>
               <div>
-                <h3>系统集成</h3>
-                <span>开机自启、托盘行为与应用更新</span>
+                <h3>{t("set.integration")}</h3>
+                <span>{t("set.integrationHint")}</span>
               </div>
             </div>
             <span class="settings-section-meta">
               <span classList={{ "tag": true, success: autostartEnabled(), neutral: !autostartEnabled() }}>
-                {autostartEnabled() ? "开机自启已开启" : "开机自启已关闭"}
+                {autostartEnabled() ? t("set.autostartOn") : t("set.autostartOff")}
               </span>
               <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
             </span>
@@ -1856,8 +1857,8 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
             <label class="switch-row">
               <span>
-                <strong>开机自启</strong>
-                <small>{autostartEnabled() ? "已在当前用户的开机启动项（HKCU Run）中注册 FastV。" : "FastV 不会随 Windows 登录自动启动。"}</small>
+                <strong>{t("set.autostart")}</strong>
+                <small>{autostartEnabled() ? t("set.autostartEnabledHint") : t("set.autostartDisabledHint")}</small>
               </span>
               <span classList={{ "switch": true, on: autostartEnabled() }}>
                 <input
@@ -1871,7 +1872,7 @@ export default function SettingsPage(props: SettingsProps) {
             </label>
 
             <Show when={autostartBusy()}>
-              <p class="settings-note"><Icon name="refresh" size={13} /><span>正在更新开机启动项...</span></p>
+              <p class="settings-note"><Icon name="refresh" size={13} /><span>{t("set.autostartBusy")}</span></p>
             </Show>
 
             <Show when={autostartError()}>
@@ -1882,18 +1883,18 @@ export default function SettingsPage(props: SettingsProps) {
 
             <p class="settings-note">
               <Icon name="external" size={13} />
-              <span>开机自启按当前 FastV.exe 路径注册；移动或重命名程序后需要重新开启一次。</span>
+              <span>{t("set.autostartNote")}</span>
             </p>
 
             <div class="setting-block">
               <div class="setting-label">
-                <strong>全局快捷键</strong>
-                <small>在任意应用中都能触发代理操作；点击「录制」后按下组合键，修改开关或组合后需要保存设置才会生效。</small>
+                <strong>{t("set.hotkeys")}</strong>
+                <small>{t("set.hotkeysHint")}</small>
               </div>
               <label class="switch-row">
                 <span>
-                  <strong>启用全局快捷键</strong>
-                  <small>关闭后快捷键立即失效；若启动 FastV 时处于关闭状态，重新开启后需要重启应用才会重新注册。</small>
+                  <strong>{t("set.enableHotkeys")}</strong>
+                  <small>{t("set.enableHotkeysHint")}</small>
                 </span>
                 <span classList={{ "switch": true, on: settings().hotkeysEnabled }}>
                   <input
@@ -1912,8 +1913,8 @@ export default function SettingsPage(props: SettingsProps) {
                 </span>
               </label>
 
-              <ul classList={{ "hotkey-list": true, disabled: !settings().hotkeysEnabled }} aria-label="全局快捷键列表">
-                <For each={globalHotkeyActions}>
+              <ul classList={{ "hotkey-list": true, disabled: !settings().hotkeysEnabled }} aria-label={t("set.hotkeyListAria")}>
+                <For each={hotkeyActions()}>
                   {(item) => {
                     const keys = () => hotkeyDisplayKeys(settings()[item.field]);
                     const isRecording = () => recordingHotkey() === item.field;
@@ -1923,7 +1924,7 @@ export default function SettingsPage(props: SettingsProps) {
                         <span class="hotkey-row-main">
                           <span class="hotkey-action">{item.action}</span>
                           <span classList={{ "hotkey-keys": true, empty: keys().length === 0 }}>
-                            <Show when={keys().length > 0} fallback={<span class="hotkey-empty">未设置</span>}>
+                            <Show when={keys().length > 0} fallback={<span class="hotkey-empty">{t("set.hotkeyNotSet")}</span>}>
                               <For each={keys()}>
                                 {(key, index) => (
                                   <>
@@ -1942,27 +1943,27 @@ export default function SettingsPage(props: SettingsProps) {
                             type="button"
                             classList={{ "btn": true, "hotkey-record-btn": true, recording: isRecording() }}
                             aria-pressed={isRecording()}
-                            aria-label={isRecording() ? `正在录制${item.action}快捷键` : `录制${item.action}快捷键`}
+                            aria-label={isRecording() ? t("set.hotkeyRecordingAria", { action: item.action }) : t("set.hotkeyRecordAria", { action: item.action })}
                             disabled={!settings().hotkeysEnabled}
                             onClick={() => {
                               if (isRecording()) cancelHotkeyRecording();
                               else startHotkeyRecording(item.field);
                             }}
                           >
-                            {isRecording() ? "按下快捷键…" : "录制"}
+                            {isRecording() ? t("set.hotkeyPress") : t("set.hotkeyRecord")}
                           </button>
                           <button
                             type="button"
                             class="btn ghost compact hotkey-clear-btn"
-                            aria-label={`清除${item.action}快捷键`}
+                            aria-label={t("set.hotkeyClearAria", { action: item.action })}
                             disabled={!settings().hotkeysEnabled || (!settings()[item.field] && !isRecording())}
                             onClick={() => clearHotkey(item.field)}
                           >
-                            清除
+                            {t("set.hotkeyClear")}
                           </button>
                         </span>
                         <Show when={isRecording()}>
-                          <span class="hotkey-row-hint" role="status" aria-live="polite">{hotkeyRecordingHint}</span>
+                          <span class="hotkey-row-hint" role="status" aria-live="polite">{hotkeyRecordingHint()}</span>
                         </Show>
                         <Show when={rowError()}>
                           <span class="hotkey-row-error" role="alert">{rowError()}</span>
@@ -1975,19 +1976,19 @@ export default function SettingsPage(props: SettingsProps) {
 
               <p class="settings-note">
                 <Icon name="alert" size={13} />
-                <span>快捷键全局生效；若被其他程序占用会注册失败，可在日志页查看原因。修改开关需保存后生效；启动时若为关闭状态，重新开启后需要重启 FastV 才会注册。</span>
+                <span>{t("set.hotkeyNote")}</span>
               </p>
             </div>
 
             <div class="setting-block">
               <div class="setting-label">
-                <strong>窗口行为</strong>
-                <small>控制标题栏关闭和最小化按钮的行为，保存后立即生效。</small>
+                <strong>{t("set.windowBehavior")}</strong>
+                <small>{t("set.windowBehaviorHint")}</small>
               </div>
               <label class="switch-row">
                 <span>
-                  <strong>关闭窗口时最小化到托盘</strong>
-                  <small>开启后点击窗口关闭按钮不会退出 FastV，而是隐藏到系统托盘；可在托盘菜单重新打开窗口或退出应用。</small>
+                  <strong>{t("set.closeToTray")}</strong>
+                  <small>{t("set.closeToTrayHint")}</small>
                 </span>
                 <span classList={{ "switch": true, on: settings().closeToTray }}>
                   <input
@@ -2000,8 +2001,8 @@ export default function SettingsPage(props: SettingsProps) {
               </label>
               <label class="switch-row">
                 <span>
-                  <strong>最小化时隐藏到托盘</strong>
-                  <small>开启后最小化窗口会隐藏到系统托盘。Windows 没有可拦截的最小化事件，FastV 会在原生最小化后立即隐藏窗口，可能短暂看到最小化动画（best effort）。</small>
+                  <strong>{t("set.minimizeToTray")}</strong>
+                  <small>{t("set.minimizeToTrayHint")}</small>
                 </span>
                 <span classList={{ "switch": true, on: settings().minimizeToTray }}>
                   <input
@@ -2014,19 +2015,19 @@ export default function SettingsPage(props: SettingsProps) {
               </label>
               <p class="settings-note">
                 <Icon name="alert" size={13} />
-                <span>两个开关都依赖系统托盘；托盘不可用（例如资源管理器异常）时，关闭窗口仍会退出应用。</span>
+                <span>{t("set.trayNote")}</span>
               </p>
             </div>
 
             <div class="setting-block">
               <div class="setting-label">
-                <strong>应用更新</strong>
-                <small>通过 GitHub Release 检查 FastV 自身的新版本，需要网络连接；检查失败只提示，不影响代理使用。</small>
+                <strong>{t("set.appUpdate")}</strong>
+                <small>{t("set.appUpdateHint")}</small>
               </div>
               <label class="switch-row">
                 <span>
-                  <strong>启动时自动检查更新</strong>
-                  <small>应用启动后在后台请求 GitHub 最新 Release，结果会广播到本页展示。</small>
+                  <strong>{t("set.autoCheckUpdate")}</strong>
+                  <small>{t("set.autoCheckUpdateHint")}</small>
                 </span>
                 <span classList={{ "switch": true, on: settings().autoCheckUpdate }}>
                   <input
@@ -2045,12 +2046,12 @@ export default function SettingsPage(props: SettingsProps) {
                   onClick={checkUpdate}
                   disabled={updateBusy() || updateDownloadBusy() || updateInstallBusy()}
                 >
-                  <Icon name="refresh" size={14} /> {updateBusy() ? "检查中..." : "立即检查更新"}
+                  <Icon name="refresh" size={14} /> {updateBusy() ? t("set.checking") : t("set.checkUpdateNow")}
                 </button>
                 <Show when={updateInfo()?.url}>
                   {(url) => (
                     <button class="btn ghost" type="button" onClick={() => { void openReleasePage(url()); }}>
-                      <Icon name="external" size={14} /> 打开发布页面
+                      <Icon name="external" size={14} /> {t("set.openReleasePage")}
                     </button>
                   )}
                 </Show>
@@ -2072,16 +2073,16 @@ export default function SettingsPage(props: SettingsProps) {
                 {(info) => (
                   <div class="backup-result">
                     <div class="backup-result-grid">
-                      <div><span>当前版本</span><strong>{info().currentVersion || "未知"}</strong></div>
-                      <div><span>最新版本</span><strong>{info().latestVersion || "未获取"}</strong></div>
-                      <div><span>状态</span><strong>{updateStatusLabel(info())}</strong></div>
+                      <div><span>{t("set.currentVersion")}</span><strong>{info().currentVersion || t("set.unknown")}</strong></div>
+                      <div><span>{t("set.latestVersion")}</span><strong>{info().latestVersion || t("set.notFetched")}</strong></div>
+                      <div><span>{t("set.status")}</span><strong>{updateStatusLabel(info())}</strong></div>
                     </div>
                     <Show when={info().notes}>
-                      <p class="backup-result-hint" style="white-space: pre-wrap;">更新说明：{info().notes}</p>
+                      <p class="backup-result-hint" style="white-space: pre-wrap;">{t("set.updateNotes", { notes: info().notes ?? "" })}</p>
                     </Show>
                     <Show when={info().url}>
                       <div class="core-path-row">
-                        <span>发布页面</span>
+                        <span>{t("set.releasePage")}</span>
                         <code>{info().url}</code>
                       </div>
                     </Show>
@@ -2090,18 +2091,18 @@ export default function SettingsPage(props: SettingsProps) {
                       <Show when={!info().assetUrl}>
                         <div class="settings-inline-warning">
                           <Icon name="alert" size={13} />
-                          <span>该版本暂未提供 Windows 安装包，无法在应用内自动下载安装；请打开上方的发布页面手动下载。</span>
+                          <span>{t("set.updateNoInstaller")}</span>
                         </div>
                       </Show>
 
                       <Show when={info().assetUrl && !info().downloadedPath}>
                         <p class="backup-result-hint">
-                          安装包：{info().assetName || "未命名安装包"} · {formatAssetSize(info().assetSize)}。下载可能需要数十秒，期间请保持网络连接。
+                          {t("set.installerInfo", { name: info().assetName || t("set.unnamedInstaller"), size: formatAssetSize(info().assetSize) })}
                         </p>
                         <Show when={updateDownloadBusy()}>
                           <p class="settings-note">
                             <Icon name="refresh" size={13} />
-                            <span>正在从 GitHub 下载并解压安装包，可能需要数十秒，请勿关闭 FastV。</span>
+                            <span>{t("set.updateDownloadingNote")}</span>
                           </p>
                         </Show>
                         <div class="core-actions">
@@ -2111,7 +2112,7 @@ export default function SettingsPage(props: SettingsProps) {
                             onClick={downloadUpdate}
                             disabled={updateDownloadBusy() || updateInstallBusy() || updateBusy()}
                           >
-                            <Icon name="external" size={14} /> {updateDownloadBusy() ? "正在下载更新…" : "下载更新"}
+                            <Icon name="external" size={14} /> {updateDownloadBusy() ? t("set.updateDownloading") : t("set.updateDownload")}
                           </button>
                         </div>
                       </Show>
@@ -2119,19 +2120,19 @@ export default function SettingsPage(props: SettingsProps) {
                       <Show when={info().downloadedPath}>
                         <div class="backup-result-head" style="margin-top: 10px;">
                           <Icon name="check" size={14} />
-                          <strong>更新已下载</strong>
+                          <strong>{t("set.updateDownloaded")}</strong>
                         </div>
                         <p class="backup-result-hint">
-                          安装包：{info().assetName || "FastV 安装包"} · {formatAssetSize(info().assetSize)}。点击「立即重启并安装」后 FastV 会退出并自动替换程序文件。
+                          {t("set.installerReady", { name: info().assetName || t("set.fastvInstaller"), size: formatAssetSize(info().assetSize) })}
                         </p>
                         <div class="core-path-row">
-                          <span>下载位置</span>
+                          <span>{t("set.downloadLocation")}</span>
                           <code>{info().downloadedPath}</code>
                         </div>
                         <Show when={proxyRunning()}>
                           <div class="settings-inline-warning">
                             <Icon name="alert" size={13} />
-                            <span>代理正在运行：安装更新会退出 FastV 并短暂中断网络，建议先停止代理再安装。</span>
+                            <span>{t("set.updateProxyWarning")}</span>
                           </div>
                         </Show>
                         <div class="core-actions">
@@ -2141,20 +2142,20 @@ export default function SettingsPage(props: SettingsProps) {
                             onClick={installUpdate}
                             disabled={updateInstallBusy() || updateDownloadBusy() || updateBusy()}
                           >
-                            <Icon name="refresh" size={14} /> {updateInstallBusy() ? "正在重启并安装…" : "立即重启并安装"}
+                            <Icon name="refresh" size={14} /> {updateInstallBusy() ? t("set.installingUpdate") : t("set.restartAndInstall")}
                           </button>
                         </div>
                         <Show when={updateInstallBusy()}>
                           <p class="settings-note">
                             <Icon name="refresh" size={13} />
-                            <span>正在退出 FastV 并替换程序文件，请勿手动启动应用；安装完成后 FastV 会自动重新启动。</span>
+                            <span>{t("set.updateInstallingNote")}</span>
                           </p>
                         </Show>
                       </Show>
                     </Show>
 
                     <p class="backup-result-hint">
-                      上次检查：{formatCheckedAt(info().checkedAt)}
+                      {t("set.lastChecked", { time: formatCheckedAt(info().checkedAt) })}
                       {updateHint(info())}
                     </p>
                   </div>
@@ -2163,7 +2164,7 @@ export default function SettingsPage(props: SettingsProps) {
               <Show when={!updateInfo()}>
                 <p class="settings-note">
                   <Icon name="refresh" size={13} />
-                  <span>尚未获取更新检查结果；点击「立即检查更新」。</span>
+                  <span>{t("set.updateEmpty")}</span>
                 </p>
               </Show>
             </div>
@@ -2183,8 +2184,8 @@ export default function SettingsPage(props: SettingsProps) {
             <div class="heading-with-icon">
               <span class="heading-icon"><Icon name="subscription" size={17} /></span>
               <div>
-                <h3>备份与恢复</h3>
-                <span>本地导出或导入完整配置，也可通过 WebDAV 备份到云端</span>
+                <h3>{t("set.backup")}</h3>
+                <span>{t("set.backupHint")}</span>
               </div>
             </div>
             <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
@@ -2192,10 +2193,10 @@ export default function SettingsPage(props: SettingsProps) {
           <div class="settings-section-body">
             <div class="backup-actions">
               <button class="btn secondary" type="button" onClick={exportBackup} disabled={backupBusy() !== ""}>
-                <Icon name="external" size={14} /> {backupBusy() === "export" ? "导出中..." : "导出备份"}
+                <Icon name="external" size={14} /> {backupBusy() === "export" ? t("set.exporting") : t("set.exportBackup")}
               </button>
               <button class="btn secondary" type="button" onClick={() => backupFileInput?.click()} disabled={backupBusy() !== ""}>
-                <Icon name="plus" size={14} /> {backupBusy() === "import" ? "导入中..." : "导入备份"}
+                <Icon name="plus" size={14} /> {backupBusy() === "import" ? t("set.importing") : t("set.importBackup")}
               </button>
               <input
                 ref={(element) => { backupFileInput = element; }}
@@ -2226,27 +2227,27 @@ export default function SettingsPage(props: SettingsProps) {
                 <div class="backup-result">
                   <div class="backup-result-head">
                     <Icon name="check" size={14} />
-                    <strong>备份已恢复</strong>
+                    <strong>{t("set.backupRestored")}</strong>
                   </div>
                   <div class="backup-result-grid">
-                    <div><span>订阅</span><strong>{result().restoredSubscriptions}</strong></div>
-                    <div><span>节点</span><strong>{result().restoredNodes}</strong></div>
-                    <div><span>路由规则</span><strong>{result().restoredRules}</strong></div>
+                    <div><span>{t("set.subscriptions")}</span><strong>{result().restoredSubscriptions}</strong></div>
+                    <div><span>{t("set.nodes")}</span><strong>{result().restoredNodes}</strong></div>
+                    <div><span>{t("set.rules")}</span><strong>{result().restoredRules}</strong></div>
                   </div>
-                  <p class="backup-result-hint">导入已覆盖当前配置；代理不会自动重启，请重启代理后生效。</p>
+                  <p class="backup-result-hint">{t("set.importOverwriteHint")}</p>
                 </div>
               )}
             </Show>
 
             <div class="webdav-backup">
               <div class="webdav-heading">
-                <strong>WebDAV 云备份</strong>
-                <small>把完整配置备份到 WebDAV 服务器，或从云端备份恢复；地址、账号与路径随「保存设置」一并保存。</small>
+                <strong>{t("set.webdav")}</strong>
+                <small>{t("set.webdavHint")}</small>
               </div>
 
               <div class="settings-grid webdav-grid">
                 <label>
-                  <span>服务器地址</span>
+                  <span>{t("set.webdavUrl")}</span>
                   <input
                     value={settings().webdavUrl}
                     onInput={(event) => update("webdavUrl", event.currentTarget.value)}
@@ -2254,32 +2255,32 @@ export default function SettingsPage(props: SettingsProps) {
                     spellcheck={false}
                     autocomplete="off"
                   />
-                  <small>WebDAV 根目录，必须以 http:// 或 https:// 开头。</small>
+                  <small>{t("set.webdavUrlHint")}</small>
                 </label>
                 <label>
-                  <span>用户名</span>
+                  <span>{t("set.webdavUsername")}</span>
                   <input
                     value={settings().webdavUsername}
                     onInput={(event) => update("webdavUsername", event.currentTarget.value)}
-                    placeholder="WebDAV 账号"
+                    placeholder={t("set.webdavUsernamePlaceholder")}
                     spellcheck={false}
                     autocomplete="off"
                   />
-                  <small>使用 Basic 认证；部分服务器允许匿名访问。</small>
+                  <small>{t("set.webdavUsernameHint")}</small>
                 </label>
                 <label>
-                  <span>密码 / 应用专用密码</span>
+                  <span>{t("set.webdavPassword")}</span>
                   <input
                     type="password"
                     value={settings().webdavPassword}
                     onInput={(event) => update("webdavPassword", event.currentTarget.value)}
-                    placeholder="建议填写应用专用密码"
+                    placeholder={t("set.webdavPasswordPlaceholder")}
                     autocomplete="new-password"
                   />
-                  <small>凭据随设置保存在本地配置文件中，请勿使用主账号密码。</small>
+                  <small>{t("set.webdavPasswordHint")}</small>
                 </label>
                 <label>
-                  <span>远端备份路径</span>
+                  <span>{t("set.webdavPath")}</span>
                   <input
                     value={settings().webdavPath}
                     onInput={(event) => update("webdavPath", event.currentTarget.value)}
@@ -2287,19 +2288,19 @@ export default function SettingsPage(props: SettingsProps) {
                     spellcheck={false}
                     autocomplete="off"
                   />
-                  <small>相对服务器地址的路径，父目录不存在时会自动创建。</small>
+                  <small>{t("set.webdavPathHint")}</small>
                 </label>
               </div>
 
               <div class="webdav-actions">
                 <button class="btn secondary" type="button" onClick={testWebdav} disabled={webdavBusy() !== ""}>
-                  <Icon name="refresh" size={14} /> {webdavBusy() === "test" ? "测试中..." : "测试连接"}
+                  <Icon name="refresh" size={14} /> {webdavBusy() === "test" ? t("set.testing") : t("set.testConnection")}
                 </button>
                 <button class="btn secondary" type="button" onClick={uploadWebdav} disabled={webdavBusy() !== ""}>
-                  <Icon name="external" size={14} /> {webdavBusy() === "upload" ? "上传中..." : "上传到云端"}
+                  <Icon name="external" size={14} /> {webdavBusy() === "upload" ? t("set.uploading") : t("set.uploadCloud")}
                 </button>
                 <button class="btn secondary" type="button" onClick={restoreWebdav} disabled={webdavBusy() !== ""}>
-                  <Icon name="subscription" size={14} /> {webdavBusy() === "download" ? "恢复中..." : "从云端恢复"}
+                  <Icon name="subscription" size={14} /> {webdavBusy() === "download" ? t("set.restoring") : t("set.restoreCloud")}
                 </button>
               </div>
 
@@ -2315,7 +2316,7 @@ export default function SettingsPage(props: SettingsProps) {
               </Show>
               <Show when={webdavRemoteUrl()}>
                 <div class="webdav-remote-url">
-                  <span>远端地址</span>
+                  <span>{t("set.webdavRemoteUrl")}</span>
                   <code>{webdavRemoteUrl()}</code>
                 </div>
               </Show>
@@ -2324,27 +2325,27 @@ export default function SettingsPage(props: SettingsProps) {
                   <div class="backup-result webdav-restore-result">
                     <div class="backup-result-head">
                       <Icon name="check" size={14} />
-                      <strong>云端备份已恢复</strong>
+                      <strong>{t("set.cloudRestored")}</strong>
                     </div>
                     <div class="backup-result-grid">
-                      <div><span>订阅</span><strong>{result().restoredSubscriptions}</strong></div>
-                      <div><span>节点</span><strong>{result().restoredNodes}</strong></div>
-                      <div><span>路由规则</span><strong>{result().restoredRules}</strong></div>
+                      <div><span>{t("set.subscriptions")}</span><strong>{result().restoredSubscriptions}</strong></div>
+                      <div><span>{t("set.nodes")}</span><strong>{result().restoredNodes}</strong></div>
+                      <div><span>{t("set.rules")}</span><strong>{result().restoredRules}</strong></div>
                     </div>
-                    <p class="backup-result-hint">已覆盖当前配置；代理不会自动重启，请重启代理后生效。</p>
+                    <p class="backup-result-hint">{t("set.cloudRestoreHint")}</p>
                   </div>
                 )}
               </Show>
 
               <p class="settings-note">
                 <Icon name="alert" size={13} />
-                <span>WebDAV 凭据保存在本地配置文件中，建议使用应用专用密码并优先填写 HTTPS 地址；修改服务器地址、账号或路径后，需先点击「保存设置」，再执行测试、上传或恢复。</span>
+                <span>{t("set.webdavNote")}</span>
               </p>
             </div>
 
             <p class="settings-note">
               <Icon name="alert" size={13} />
-              <span>备份文件包含节点凭据（UUID、密码等），请妥善保管，不要上传到公开位置；导入会覆盖当前配置。</span>
+              <span>{t("set.backupNote")}</span>
             </p>
           </div>
         </details>
@@ -2357,24 +2358,24 @@ export default function SettingsPage(props: SettingsProps) {
         </Show>
 
         <div class="settings-actions">
-          <button class="btn ghost" type="button" onClick={reset} disabled={saving()}>恢复默认</button>
+          <button class="btn ghost" type="button" onClick={reset} disabled={saving()}>{t("set.reset")}</button>
           <button class="btn primary" type="submit" disabled={saving()}>
-            <Icon name="check" size={15} /> {saving() ? "保存中..." : "保存设置"}
+            <Icon name="check" size={15} /> {saving() ? t("set.saving") : t("set.save")}
           </button>
         </div>
 
         <section class="panel about-panel">
           <div class="panel-heading">
             <div>
-              <h3>应用信息</h3>
+              <h3>{t("set.about")}</h3>
               <span>ABOUT</span>
             </div>
           </div>
           <div class="about-grid">
-            <div><span>应用</span><strong>FastV</strong></div>
-            <div><span>版本</span><strong>0.1.0</strong></div>
-            <div><span>界面</span><strong>Wails v3 + SolidJS</strong></div>
-            <div><span>数据目录</span><strong>%APPDATA%\FastV</strong></div>
+            <div><span>{t("set.aboutApp")}</span><strong>FastV</strong></div>
+            <div><span>{t("set.aboutVersion")}</span><strong>0.1.0</strong></div>
+            <div><span>{t("set.aboutUI")}</span><strong>Wails v3 + SolidJS</strong></div>
+            <div><span>{t("set.aboutDataDir")}</span><strong>%APPDATA%\FastV</strong></div>
           </div>
         </section>
       </Show>

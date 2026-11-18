@@ -9,6 +9,7 @@ import { SettingsService } from "../bindings/github.com/MardukPrime/Fast-V/inter
 import type { AppInfo, CoreInfo, ProxyState, ProxyTestResult, Settings } from "../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
+import { language, setLanguage, t } from "./i18n";
 import DashboardPage from "./pages/DashboardPage";
 import LogsPage from "./pages/LogsPage";
 import NetworkPage from "./pages/NetworkPage";
@@ -19,27 +20,29 @@ import SubscriptionsPage from "./pages/SubscriptionsPage";
 
 type PageKey = "dashboard" | "servers" | "subscriptions" | "routing" | "speedtest" | "logs" | "settings";
 
-const navigation: Array<{ key: PageKey; label: string; caption: string; icon: IconName }> = [
-  { key: "dashboard", label: "概览", caption: "运行状态", icon: "dashboard" },
-  { key: "servers", label: "服务器", caption: "节点列表", icon: "server" },
-  { key: "subscriptions", label: "订阅", caption: "远程配置", icon: "subscription" },
-  { key: "routing", label: "路由", caption: "分流规则", icon: "route" },
-  { key: "speedtest", label: "网络诊断", caption: "IP 与质量", icon: "speed" },
-  { key: "logs", label: "日志", caption: "运行记录", icon: "logs" },
-  { key: "settings", label: "设置", caption: "应用偏好", icon: "settings" },
+// Navigation and page metadata are accessors, not module-level constants, so a
+// language switch immediately re-renders every translated label.
+const navigation = (): Array<{ key: PageKey; label: string; caption: string; icon: IconName }> => [
+  { key: "dashboard", label: t("shell.nav.dashboard"), caption: t("shell.nav.dashboardCaption"), icon: "dashboard" },
+  { key: "servers", label: t("shell.nav.servers"), caption: t("shell.nav.serversCaption"), icon: "server" },
+  { key: "subscriptions", label: t("shell.nav.subscriptions"), caption: t("shell.nav.subscriptionsCaption"), icon: "subscription" },
+  { key: "routing", label: t("shell.nav.routing"), caption: t("shell.nav.routingCaption"), icon: "route" },
+  { key: "speedtest", label: t("shell.nav.speedtest"), caption: t("shell.nav.speedtestCaption"), icon: "speed" },
+  { key: "logs", label: t("shell.nav.logs"), caption: t("shell.nav.logsCaption"), icon: "logs" },
+  { key: "settings", label: t("shell.nav.settings"), caption: t("shell.nav.settingsCaption"), icon: "settings" },
 ];
 
-const dockNavigation = navigation;
+const dockNavigation = () => navigation();
 
-const pageMeta: Record<PageKey, { title: string; subtitle: string }> = {
-  dashboard: { title: "概览", subtitle: "FastV 当前状态与快捷操作" },
-  servers: { title: "服务器", subtitle: "查看节点、切换当前节点和测试连通性" },
-  subscriptions: { title: "订阅", subtitle: "导入、更新和查看订阅节点" },
-  routing: { title: "路由", subtitle: "按顺序编辑域名、IP、端口和网络规则" },
-  speedtest: { title: "网络诊断", subtitle: "检测出口 IP、归属地、延迟和下载速度" },
-  logs: { title: "日志", subtitle: "查看、筛选和复制 Xray 运行日志" },
-  settings: { title: "设置", subtitle: "客户端与内核参数分开管理" },
-};
+const pageMeta = (): Record<PageKey, { title: string; subtitle: string }> => ({
+  dashboard: { title: t("shell.nav.dashboard"), subtitle: t("shell.page.dashboardSubtitle") },
+  servers: { title: t("shell.nav.servers"), subtitle: t("shell.page.serversSubtitle") },
+  subscriptions: { title: t("shell.nav.subscriptions"), subtitle: t("shell.page.subscriptionsSubtitle") },
+  routing: { title: t("shell.nav.routing"), subtitle: t("shell.page.routingSubtitle") },
+  speedtest: { title: t("shell.nav.speedtest"), subtitle: t("shell.page.speedtestSubtitle") },
+  logs: { title: t("shell.nav.logs"), subtitle: t("shell.page.logsSubtitle") },
+  settings: { title: t("shell.nav.settings"), subtitle: t("shell.page.settingsSubtitle") },
+});
 
 function applyTheme(theme: string) {
   const resolved = theme === "system"
@@ -59,10 +62,10 @@ function applyAccent(accent: string | undefined) {
 
 // Proxy mode quick switch in the global topbar. Values must stay in sync with
 // the backend validation used by the settings page.
-const proxyModes: Array<{ value: string; label: string; title: string }> = [
-  { value: "rule", label: "规则", title: "规则分流：按路由规则决定流量直连还是走代理" },
-  { value: "global", label: "全局", title: "全局代理：所有流量都经由当前节点转发" },
-  { value: "direct", label: "直连", title: "直连：所有流量都不经过代理节点" },
+const proxyModes = (): Array<{ value: string; label: string; title: string }> => [
+  { value: "rule", label: t("shell.proxyModeRule"), title: t("shell.proxyModeRuleTitle") },
+  { value: "global", label: t("shell.proxyModeGlobal"), title: t("shell.proxyModeGlobalTitle") },
+  { value: "direct", label: t("shell.proxyModeDirect"), title: t("shell.proxyModeDirectTitle") },
 ];
 
 function normalizeProxyMode(mode: string | undefined) {
@@ -70,12 +73,16 @@ function normalizeProxyMode(mode: string | undefined) {
 }
 
 function proxyModeTitle(mode: string) {
-  return proxyModes.find((item) => item.value === mode)?.title ?? "代理模式";
+  return proxyModes().find((item) => item.value === mode)?.title ?? t("shell.proxyMode");
 }
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
+
+// Keep the untranslated backend error separate from the translation key so the
+// banner re-renders correctly after a language switch.
+type ProxyModeError = { kind: "restart" | "switch"; detail: string };
 
 export default function App() {
   const [active, setActive] = createSignal<PageKey>("dashboard");
@@ -87,9 +94,10 @@ export default function App() {
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
   const [proxyModeBusy, setProxyModeBusy] = createSignal(false);
-  const [proxyModeError, setProxyModeError] = createSignal("");
+  const [proxyModeError, setProxyModeError] = createSignal<ProxyModeError | null>(null);
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
+  const activeMeta = () => pageMeta()[active()];
   let dockNavElement: HTMLDivElement | undefined;
   const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
 
@@ -99,7 +107,7 @@ export default function App() {
       return;
     }
     const buttons = dockNavElement.querySelectorAll<HTMLButtonElement>(".liquid-nav-item");
-    const index = dockNavigation.findIndex((item) => item.key === active());
+    const index = dockNavigation().findIndex((item) => item.key === active());
     const button = buttons[index];
     if (!button) {
       setDockIndicator((current) => ({ ...current, visible: false }));
@@ -111,6 +119,8 @@ export default function App() {
   createEffect(() => {
     active();
     layoutMode();
+    // Dock labels change width with the language, so re-measure the indicator.
+    language();
     requestAnimationFrame(updateDockIndicator);
   });
 
@@ -159,6 +169,7 @@ export default function App() {
       setDockTransparency(loadedSettings.dockTransparency || 28);
       applyTheme(loadedSettings.theme);
       applyAccent(loadedSettings.accentColor);
+      setLanguage(loadedSettings.language);
     } catch (error) {
       console.error("Failed to load application state", error);
     }
@@ -181,6 +192,7 @@ export default function App() {
       setDockTransparency(next.dockTransparency || 28);
       applyTheme(next.theme);
       applyAccent(next.accentColor);
+      setLanguage(next.language);
     });
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const handleSystemTheme = () => {
@@ -243,7 +255,7 @@ export default function App() {
     const current = settings();
     if (!current || current.proxyMode === mode || proxyModeBusy()) return;
     setProxyModeBusy(true);
-    setProxyModeError("");
+    setProxyModeError(null);
     try {
       const saved = await SettingsService.Save({ ...current, proxyMode: mode });
       setSettings(saved);
@@ -251,11 +263,11 @@ export default function App() {
         try {
           setProxy(await ProxyService.Restart());
         } catch (error) {
-          setProxyModeError(`代理模式已保存，但重启代理失败：${errorMessage(error)}`);
+          setProxyModeError({ kind: "restart", detail: errorMessage(error) });
         }
       }
     } catch (error) {
-      setProxyModeError(`切换代理模式失败：${errorMessage(error)}`);
+      setProxyModeError({ kind: "switch", detail: errorMessage(error) });
     } finally {
       setProxyModeBusy(false);
     }
@@ -266,8 +278,9 @@ export default function App() {
     setDockTransparency(next.dockTransparency || 28);
     applyTheme(next.theme);
     applyAccent(next.accentColor);
+    setLanguage(next.language);
     // A successful full save makes any earlier quick-switch error stale.
-    setProxyModeError("");
+    setProxyModeError(null);
   };
 
   const dockGlassStyle = () => {
@@ -309,13 +322,13 @@ export default function App() {
         </div>
         <div class="titlebar-drag" />
         <div class="window-controls">
-          <button type="button" class="window-control" aria-label="最小化" onClick={() => AppWindow.Minimise()}>
+          <button type="button" class="window-control" aria-label={t("shell.windowMinimize")} onClick={() => AppWindow.Minimise()}>
             <Icon name="minimize" size={11} />
           </button>
-          <button type="button" class="window-control" aria-label="最大化或还原" onClick={toggleMaximise}>
+          <button type="button" class="window-control" aria-label={t("shell.windowMaximizeOrRestore")} onClick={toggleMaximise}>
             <Icon name="maximize" size={10} />
           </button>
-          <button type="button" class="window-control close" aria-label="关闭" onClick={() => AppWindow.Close()}>
+          <button type="button" class="window-control close" aria-label={t("shell.windowClose")} onClick={() => AppWindow.Close()}>
             <Icon name="close" size={11} />
           </button>
         </div>
@@ -328,13 +341,13 @@ export default function App() {
             <div class="brand-mark">F</div>
             <div>
               <div class="brand-name">FastV</div>
-              <div class="brand-caption">Proxy Client</div>
+              <div class="brand-caption">{t("shell.brandTagline")}</div>
             </div>
           </div>
 
-          <div class="nav-section-label">工作区</div>
+          <div class="nav-section-label">{t("shell.workspace")}</div>
           <nav class="nav">
-            {navigation.map((item) => (
+            {navigation().map((item) => (
               <button
                 classList={{ "nav-item": true, active: active() === item.key }}
                 onClick={() => setActive(item.key)}
@@ -355,8 +368,8 @@ export default function App() {
             <div class="footer-status">
               <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
               <div>
-                <strong>{core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}</strong>
-                <small>{core()?.installed ? "内核已就绪" : "可在设置中下载"}</small>
+                <strong>{core()?.installed ? t("shell.xrayVersion", { version: core()?.version ?? "" }) : t("shell.coreMissing")}</strong>
+                <small>{core()?.installed ? t("shell.coreReady") : t("shell.coreHint")}</small>
               </div>
             </div>
             <div class="footer-version">v{info()?.version ?? "0.1.0"}</div>
@@ -367,14 +380,14 @@ export default function App() {
         <main class="content">
           <header class="topbar">
             <div class="topbar-title">
-              <span class="breadcrumb">FastV / {pageMeta[active()].title}</span>
-              <h1>{pageMeta[active()].title}</h1>
-              <p>{pageMeta[active()].subtitle}</p>
+              <span class="breadcrumb">FastV / {activeMeta().title}</span>
+              <h1>{activeMeta().title}</h1>
+              <p>{activeMeta().subtitle}</p>
             </div>
             <div class="topbar-actions">
-              <div classList={{ "topbar-mode": true, switching: proxyModeBusy() }} role="group" aria-label="代理模式">
+              <div classList={{ "topbar-mode": true, switching: proxyModeBusy() }} role="group" aria-label={t("shell.proxyMode")}>
                 <div class="topbar-mode-switch">
-                  <For each={proxyModes}>
+                  <For each={proxyModes()}>
                     {(option) => (
                       <button
                         type="button"
@@ -392,35 +405,39 @@ export default function App() {
                 </div>
                 <select
                   class="topbar-mode-select"
-                  aria-label="代理模式"
+                  aria-label={t("shell.proxyMode")}
                   title={proxyModeTitle(currentProxyMode())}
                   value={currentProxyMode()}
                   disabled={proxyModeBusy() || !settings()}
                   onChange={(event) => { void handleProxyModeChange(event.currentTarget.value); }}
                 >
-                  <For each={proxyModes}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                  <For each={proxyModes()}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
               </div>
-              <span class="status-chip"><span class="status-dot online" />本地数据已就绪</span>
+              <span class="status-chip"><span class="status-dot online" />{t("shell.localDataReady")}</span>
               <span classList={{ "status-chip": true, muted: !core()?.installed }}>
                 <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
-                {core()?.installed ? `Xray ${core()?.version}` : "Xray 未安装"}
+                {core()?.installed ? t("shell.xrayVersion", { version: core()?.version ?? "" }) : t("shell.coreMissing")}
               </span>
               <span classList={{ "status-chip": true, "proxy-running": proxy().status === "running" }}>
                 <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
-                {proxy().status === "running" ? `代理 ${proxy().localAddr}` : proxy().status === "starting" ? "代理启动中" : proxy().status === "error" ? "代理异常" : "代理未启动"}
+                {proxy().status === "running" ? t("shell.proxyRunning", { addr: proxy().localAddr }) : proxy().status === "starting" ? t("shell.proxyStarting") : proxy().status === "error" ? t("shell.proxyError") : t("shell.proxyStopped")}
               </span>
             </div>
           </header>
 
           <Show when={proxyModeError()}>
-            <div class="topbar-mode-error" role="alert">
-              <Icon name="alert" size={13} />
-              <span>{proxyModeError()}</span>
-              <button type="button" class="topbar-mode-error-dismiss" aria-label="关闭提示" onClick={() => setProxyModeError("")}>
-                <Icon name="close" size={11} />
-              </button>
-            </div>
+            {(modeError) => (
+              <div class="topbar-mode-error" role="alert">
+                <Icon name="alert" size={13} />
+                <span>{modeError().kind === "restart"
+                  ? t("shell.error.restartAfterMode", { error: modeError().detail })
+                  : t("shell.error.switchMode", { error: modeError().detail })}</span>
+                <button type="button" class="topbar-mode-error-dismiss" aria-label={t("shell.dismissNotice")} onClick={() => setProxyModeError(null)}>
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+            )}
           </Show>
 
           <Show when={active() === "dashboard"}>
@@ -453,7 +470,7 @@ export default function App() {
             <LogsPage proxyState={proxy()} />
           </Show>
           <Show when={active() === "settings"}>
-            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewDockTransparency={setDockTransparency} />
+            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewLanguage={setLanguage} onPreviewDockTransparency={setDockTransparency} />
           </Show>
 
         </main>
@@ -462,7 +479,7 @@ export default function App() {
           <nav
             class="liquid-dock"
             style={dockGlassStyle()}
-            aria-label="底部快捷导航"
+            aria-label={t("shell.dockNav")}
             onPointerMove={(event) => {
               const rect = event.currentTarget.getBoundingClientRect();
               event.currentTarget.style.setProperty("--liquid-x", `${event.clientX - rect.left}px`);
@@ -471,7 +488,7 @@ export default function App() {
           >
             <div class="liquid-dock-nav" ref={(element) => (dockNavElement = element)}>
               <span class="liquid-nav-indicator" aria-hidden="true" style={{ transform: `translateX(${dockIndicator().left}px)`, width: `${dockIndicator().width}px`, opacity: dockIndicator().visible ? 1 : 0 }} />
-              <For each={dockNavigation}>
+              <For each={dockNavigation()}>
                 {(item) => (
                   <button type="button" classList={{ "liquid-nav-item": true, active: active() === item.key }} onClick={() => setActive(item.key)}>
                     <Icon name={item.icon} size={16} />
@@ -486,23 +503,23 @@ export default function App() {
             <div class="liquid-dock-status">
               <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
               <div>
-                <strong>{proxy().status === "running" ? "代理运行中" : proxy().status === "starting" ? "正在启动" : "代理未启动"}</strong>
-                <small>{proxy().status === "running" ? proxy().localAddr : "本地 SOCKS/HTTP 入口"}</small>
+                <strong>{proxy().status === "running" ? t("shell.dockRunning") : proxy().status === "starting" ? t("shell.dockStarting") : t("shell.dockStopped")}</strong>
+                <small>{proxy().status === "running" ? proxy().localAddr : t("shell.dockEntry")}</small>
               </div>
             </div>
 
             <div class="liquid-dock-node">
-              <span>当前节点</span>
-              <strong title={proxy().nodeName || "未选择节点"}>{proxy().nodeName || "未选择节点"}</strong>
+              <span>{t("shell.currentNode")}</span>
+              <strong title={proxy().nodeName || t("shell.noNode")}>{proxy().nodeName || t("shell.noNode")}</strong>
             </div>
 
             <div class="liquid-dock-actions">
               <button class="liquid-action" type="button" onClick={handleTestProxy} disabled={proxyBusy() || proxy().status !== "running"}>
-                <Icon name="speed" size={14} /> 测试
+                <Icon name="speed" size={14} /> {t("shell.test")}
               </button>
               <button classList={{ "liquid-action": true, primary: proxy().status !== "running" }} type="button" onClick={proxy().status === "running" ? handleStopProxy : handleStartProxy} disabled={proxyBusy() || proxy().status === "starting" || proxy().status === "stopping"}>
                 <Icon name={proxy().status === "running" ? "stop" : "play"} size={14} />
-                {proxyBusy() ? "处理中" : proxy().status === "running" ? "停止" : "启动"}
+                {proxyBusy() ? t("shell.working") : proxy().status === "running" ? t("shell.stop") : t("shell.start")}
               </button>
             </div>
           </nav>

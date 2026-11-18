@@ -56,9 +56,6 @@ func (s *DashboardService) Summary() model.DashboardSummary {
 
 	coreInfo := s.core.Info()
 	coreVersion := coreInfo.Version
-	if coreVersion == "" {
-		coreVersion = "未安装"
-	}
 
 	var activeNode *model.NodeView
 	if node, ok := s.store.ActiveNode(); ok {
