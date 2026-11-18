@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (for example v0.2.0-pre.1)"
+        description: "Release tag (for example v0.3.0-pre.1)"
         required: true
         type: string
       prerelease:
@@ -19,38 +19,67 @@ on:
 permissions:
   contents: write
 
+env:
+  CGO_ENABLED: "0"
+
 jobs:
-  windows-x64:
-    name: Build Windows x64
-    runs-on: windows-latest
-
+  meta:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Resolve release metadata
+      - name: Resolve tag and version
         id: meta
-        shell: pwsh
         env:
           TAG_INPUT: ${{ inputs.tag }}
           PRERELEASE_INPUT: ${{ inputs.prerelease }}
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          $tag = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:TAG_INPUT } else { $env:REF_NAME }
-          if ([string]::IsNullOrWhiteSpace($tag)) { throw "release tag is required" }
-          $tag = $tag.Trim()
-          if (-not $tag.StartsWith('v')) { throw "release tag must start with 'v': $tag" }
-          $version = $tag.Substring(1)
-          if ($version -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
-            throw "invalid semver in tag: $version"
-          }
-          $prerelease = $version.Contains('-') -or ($env:PRERELEASE_INPUT -eq 'true')
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "prerelease=$($prerelease.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${TAG_INPUT}"
+          else
+            tag="${REF_NAME}"
+          fi
+          tag="$(printf '%s' "${tag}" | tr -d '[:space:]')"
+          if [ -z "${tag}" ]; then
+            echo "release tag is required" >&2
+            exit 1
+          fi
+          case "${tag}" in
+            v*) ;;
+            *) echo "release tag must start with 'v': ${tag}" >&2; exit 1 ;;
+          esac
+          version="${tag#v}"
+          if ! printf '%s' "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+            echo "invalid semver in tag: ${version}" >&2
+            exit 1
+          fi
+          prerelease=false
+          case "${version}" in
+            *-*) prerelease=true ;;
+          esac
+          if [ "${PRERELEASE_INPUT}" = "true" ]; then
+            prerelease=true
+          fi
+          {
+            echo "tag=${tag}"
+            echo "version=${version}"
+            echo "prerelease=${prerelease}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag} version=${version} prerelease=${prerelease}"
+
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    needs: meta
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -72,77 +101,265 @@ jobs:
         working-directory: frontend
         run: pnpm build
 
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  windows-x64:
+    name: Windows x64
+    needs: [meta, frontend]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
       - name: Build Windows executable
         shell: pwsh
         env:
-          CGO_ENABLED: 0
-          APP_VERSION: ${{ steps.meta.outputs.version }}
+          APP_VERSION: ${{ needs.meta.outputs.version }}
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
           $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-          $commit = $env:GITHUB_SHA
           $ldflags = @(
             '-w', '-s', '-H', 'windowsgui',
             "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.Version=$env:APP_VERSION",
-            "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=$commit",
+            "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=$env:GITHUB_SHA",
             "-X", "github.com/MardukPrime/Fast-V/internal/buildinfo.BuildDate=$buildDate"
           ) -join ' '
           go build -tags production -trimpath -buildvcs=false -ldflags="$ldflags" -o dist/Fast-V.exe .
           if (-not (Test-Path dist/Fast-V.exe)) { throw "build did not produce dist/Fast-V.exe" }
           Write-Host ("Built Fast-V.exe: {0:N1} MB" -f ((Get-Item dist/Fast-V.exe).Length / 1MB))
 
-      - name: Package release assets
+      - name: Package Windows asset
         shell: pwsh
         env:
-          APP_VERSION: ${{ steps.meta.outputs.version }}
+          APP_VERSION: ${{ needs.meta.outputs.version }}
         run: |
-          $zip = "dist/FastV-$env:APP_VERSION-windows-amd64.zip"
-          Compress-Archive -Path dist/Fast-V.exe, LICENSE, README.md -DestinationPath $zip -Force
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  $(Split-Path $zip -Leaf)" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          Compress-Archive -Path dist/Fast-V.exe, LICENSE, README.md -DestinationPath "dist/FastV-$env:APP_VERSION-windows-amd64.zip" -Force
           Get-ChildItem dist | Format-Table Name, Length
 
-      - name: Build webview2 / app metadata summary
-        shell: pwsh
-        env:
-          APP_VERSION: ${{ steps.meta.outputs.version }}
-        run: |
-          @(
-            "version=$env:APP_VERSION",
-            "commit=$env:GITHUB_SHA",
-            "runner=$env:RUNNER_OS-$env:RUNNER_ARCH",
-            "requires=Windows 10/11 x64 + Microsoft Edge WebView2 Runtime"
-          ) | Set-Content dist/release-info.txt -Encoding ascii
-
-      - name: Upload build artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FastV-${{ steps.meta.outputs.version }}-windows-x64
+          name: windows-x64
           path: dist/*
           if-no-files-found: error
+
+  macos:
+    name: macOS (arm64 + amd64)
+    needs: [meta, frontend]
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Build macOS icon
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/icon.iconset"
+          for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
+            size="${spec%% *}"
+            name="${spec#* }"
+            sips -z "${size}" "${size}" assets/appicon.png --out "${RUNNER_TEMP}/icon.iconset/${name}.png" >/dev/null
+          done
+          iconutil -c icns "${RUNNER_TEMP}/icon.iconset" -o "${RUNNER_TEMP}/appicon.icns"
+          ls -la "${RUNNER_TEMP}/appicon.icns"
+
+      - name: Build and package macOS apps
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          for arch in arm64 amd64; do
+            rm -rf stage
+            mkdir -p "stage/FastV.app/Contents/MacOS" "stage/FastV.app/Contents/Resources"
+            GOOS=darwin GOARCH="${arch}" go build -tags "production purego" -trimpath -buildvcs=false \
+              -ldflags "-w -s -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=${APP_VERSION} -X github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=${GITHUB_SHA} -X github.com/MardukPrime/Fast-V/internal/buildinfo.BuildDate=${build_date}" \
+              -o "stage/FastV.app/Contents/MacOS/Fast-V" .
+            cp LICENSE README.md stage/
+            cp "${RUNNER_TEMP}/appicon.icns" "stage/FastV.app/Contents/Resources/appicon.icns"
+            cat > "stage/FastV.app/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key><string>en</string>
+            <key>CFBundleDisplayName</key><string>FastV</string>
+            <key>CFBundleExecutable</key><string>Fast-V</string>
+            <key>CFBundleIconFile</key><string>appicon</string>
+            <key>CFBundleIdentifier</key><string>com.mardukprime.fastv</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>FastV</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
+            <key>CFBundleVersion</key><string>${GITHUB_SHA}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>NSPrincipalClass</key><string>NSApplication</string>
+          </dict>
+          </plist>
+          PLIST
+            codesign --force --deep --sign - "stage/FastV.app" >/dev/null 2>&1 || true
+            (cd stage && zip -q -r -X "../dist/FastV-${APP_VERSION}-macos-${arch}.zip" FastV.app LICENSE README.md)
+            echo "packaged macos/${arch}"
+          done
+          ls -la dist
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux (amd64 + arm64)
+    needs: [meta, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Build and package Linux assets
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            rm -rf stage
+            mkdir -p "stage/share/icons/hicolor/256x256/apps"
+            GOOS=linux GOARCH="${arch}" go build -tags "production purego" -trimpath -buildvcs=false \
+              -ldflags "-w -s -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=${APP_VERSION} -X github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=${GITHUB_SHA} -X github.com/MardukPrime/Fast-V/internal/buildinfo.BuildDate=${build_date}" \
+              -o stage/FastV .
+            cp LICENSE README.md stage/
+            cp assets/appicon.png "stage/share/icons/hicolor/256x256/apps/fastv.png"
+            cat > stage/fastv.desktop <<DESKTOP
+          [Desktop Entry]
+          Type=Application
+          Name=FastV
+          Comment=Xray proxy client
+          Exec=FastV
+          Icon=fastv
+          Terminal=false
+          Categories=Network;
+          DESKTOP
+            tar -czf "dist/FastV-${APP_VERSION}-linux-${arch}.tar.gz" -C stage .
+            echo "packaged linux/${arch}"
+          done
+          ls -la dist
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [meta, windows-x64, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums and release info
+        env:
+          APP_VERSION: ${{ needs.meta.outputs.version }}
+          APP_TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          {
+            echo "version=${APP_VERSION}"
+            echo "tag=${APP_TAG}"
+            echo "commit=${GITHUB_SHA}"
+            echo ""
+            echo "Platforms:"
+            echo "- windows-amd64: Windows 10/11 x64 + Microsoft Edge WebView2 Runtime"
+            echo "- macos-arm64: macOS 11+ (Apple Silicon), unsigned build - right-click > Open on first launch"
+            echo "- macos-amd64: macOS 11+ (Intel), unsigned build - right-click > Open on first launch"
+            echo "- linux-amd64 / linux-arm64: requires GTK3 and WebKitGTK 4.1 (libwebkit2gtk-4.1)"
+            echo ""
+            echo "In-app self update currently supports Windows only; macOS/Linux users should download the new package manually."
+          } > release-info.txt
+          ls -la
+          cat SHA256SUMS.txt
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ needs.meta.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: FastV ${{ steps.meta.outputs.tag }}
-          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          name: FastV v${{ needs.meta.outputs.version }}
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
           body: |
-            FastV ${{ steps.meta.outputs.tag }} — automated Windows build.
+            FastV v${{ needs.meta.outputs.version }} — automated multi-platform build.
 
-            - Portable build: `FastV-${{ steps.meta.outputs.version }}-windows-amd64.zip` (extract and run `Fast-V.exe`)
-            - Requires Windows 10/11 x64 with the Microsoft Edge WebView2 Runtime
+            | Platform | Asset | Requirements |
+            |---|---|---|
+            | Windows x64 | `FastV-${{ needs.meta.outputs.version }}-windows-amd64.zip` | Windows 10/11 + WebView2 Runtime |
+            | macOS Apple Silicon | `FastV-${{ needs.meta.outputs.version }}-macos-arm64.zip` | macOS 11+ (unsigned: right-click > Open) |
+            | macOS Intel | `FastV-${{ needs.meta.outputs.version }}-macos-amd64.zip` | macOS 11+ (unsigned: right-click > Open) |
+            | Linux x64 | `FastV-${{ needs.meta.outputs.version }}-linux-amd64.tar.gz` | GTK3 + WebKitGTK 4.1 |
+            | Linux arm64 | `FastV-${{ needs.meta.outputs.version }}-linux-arm64.tar.gz` | GTK3 + WebKitGTK 4.1 |
+
             - SHA-256 checksums: `SHA256SUMS.txt`
-            - Self-update: keep `Fast-V.exe` unlocked; in-app updater restarts it after replacing
+            - `release-info.txt` lists platform notes
+            - In-app self update currently supports Windows; macOS/Linux users should download manually
           files: |
-            dist/FastV-${{ steps.meta.outputs.version }}-windows-amd64.zip
+            dist/*.zip
+            dist/*.tar.gz
             dist/SHA256SUMS.txt
             dist/release-info.txt

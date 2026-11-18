@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -60,16 +61,26 @@ type releaseAsset struct {
 	Size               int64  `json:"size"`
 }
 
-// Asset selection ranks. Higher is better; zero means the asset is not a usable
-// Windows update package.
+// Asset selection ranks. Higher is better; zero means the asset is not a
+// usable update package for the current platform.
 const (
-	// assetRankFastVExe is the fallback: a FastV installer executable.
-	assetRankFastVExe = 1
-	// assetRankWindowsZip is a Windows archive without an explicit amd64 tag.
-	assetRankWindowsZip = 2
-	// assetRankWindowsZipAMD64 is the preferred package: Windows zip built for
-	// the amd64/x64 architecture this application is distributed for.
-	assetRankWindowsZipAMD64 = 3
+	// assetRankFallback is a platform-specific fallback package (an .exe on
+	// Windows) that does not match the release archive convention.
+	assetRankFallback = 1
+	// assetRankPlatform is an archive for the current platform without an
+	// explicit architecture marker (for example a "universal" macOS build).
+	assetRankPlatform = 2
+	// assetRankExact is the preferred package: archive for the current
+	// platform and CPU architecture.
+	assetRankExact = 3
+)
+
+// Legacy Windows-specific rank aliases, kept so older call sites and tests
+// keep their meaning while asset ranking became platform-aware.
+const (
+	assetRankFastVExe        = assetRankFallback
+	assetRankWindowsZip      = assetRankPlatform
+	assetRankWindowsZipAMD64 = assetRankExact
 )
 
 // Check fetches the latest published release and compares it with
@@ -93,7 +104,7 @@ func (c *Checker) Check(ctx context.Context, currentVersion string) (model.Updat
 	info.URL = strings.TrimSpace(latest.HTMLURL)
 	info.Available = CompareVersions(info.LatestVersion, info.CurrentVersion) > 0
 
-	// A missing Windows asset is not an error: the release may only publish
+	// A missing platform asset is not an error: the release may only publish
 	// source archives, in which case AssetURL stays empty and the UI keeps
 	// showing the release page instead of a download button.
 	if asset, ok := selectReleaseAsset(latest.Assets); ok {
@@ -104,13 +115,17 @@ func (c *Checker) Check(ctx context.Context, currentVersion string) (model.Updat
 	return info, nil
 }
 
-// selectReleaseAsset picks the best Windows update package from the release
-// assets. The second result is false when none of the assets is usable.
+// selectReleaseAsset picks the best update package for the current runtime
+// (GOOS/GOARCH) from the release assets. The second result is false when none
+// of the assets is usable on this platform.
 func selectReleaseAsset(assets []releaseAsset) (releaseAsset, bool) {
 	selected := releaseAsset{}
 	selectedRank := 0
 	for _, asset := range assets {
-		rank := assetRank(asset)
+		rank := assetRankFor(runtime.GOOS, runtime.GOARCH, asset.Name)
+		if strings.TrimSpace(asset.BrowserDownloadURL) == "" {
+			rank = 0
+		}
 		if rank > selectedRank {
 			selected = asset
 			selectedRank = rank
@@ -119,26 +134,97 @@ func selectReleaseAsset(assets []releaseAsset) (releaseAsset, bool) {
 	return selected, selectedRank > 0
 }
 
-// assetRank scores one release asset; zero means "not a Windows update
-// package". The name checks are case-insensitive and tolerant of how release
-// workflows order their architecture markers.
+// assetRank scores one release asset for the current platform. Kept as a thin
+// wrapper so existing call sites and tests stay valid.
 func assetRank(asset releaseAsset) int {
-	name := strings.ToLower(strings.TrimSpace(asset.Name))
-	if name == "" || strings.TrimSpace(asset.BrowserDownloadURL) == "" {
+	if strings.TrimSpace(asset.BrowserDownloadURL) == "" {
 		return 0
 	}
-	// Requiring the .zip suffix also steers clear of signature/checksum sidecar
-	// assets such as "FastV-windows-amd64.zip.sha256".
-	if strings.Contains(name, "windows") && strings.HasSuffix(name, ".zip") {
-		if isAMD64AssetName(name) {
-			return assetRankWindowsZipAMD64
+	return assetRankFor(runtime.GOOS, runtime.GOARCH, asset.Name)
+}
+
+// assetRankFor scores one release asset for an explicit GOOS/GOARCH pair; zero
+// means "not an update package for that platform". Names are matched
+// case-insensitively and tolerate the usual architecture markers.
+func assetRankFor(goos, goarch, assetName string) int {
+	name := strings.ToLower(strings.TrimSpace(assetName))
+	if name == "" {
+		return 0
+	}
+
+	amd64Markers := []string{"amd64", "x64", "x86_64", "x86-64", "intel"}
+	arm64Markers := []string{"arm64", "aarch64"}
+	otherArchMarkers := []string{"386", "armv7", "armv6", "ppc64le", "ppc64", "riscv64", "s390x"}
+
+	// A marker for a different architecture means the asset is not for this
+	// build, even if the platform matches.
+	switch goarch {
+	case "amd64":
+		if containsAny(name, arm64Markers) || containsAny(name, otherArchMarkers) {
+			return 0
 		}
-		return assetRankWindowsZip
+	case "arm64":
+		if containsAny(name, amd64Markers) || containsAny(name, otherArchMarkers) {
+			return 0
+		}
+	default:
+		if containsAny(name, amd64Markers) || containsAny(name, arm64Markers) {
+			return 0
+		}
 	}
-	if isFastVExecutableName(name) {
-		return assetRankFastVExe
+
+	archRank := func() int {
+		if strings.Contains(name, "universal") {
+			return assetRankPlatform
+		}
+		ownMarkers := amd64Markers
+		if goarch == "arm64" {
+			ownMarkers = arm64Markers
+		}
+		if containsAny(name, ownMarkers) {
+			return assetRankExact
+		}
+		return assetRankPlatform
 	}
-	return 0
+
+	switch goos {
+	case "windows":
+		if strings.Contains(name, "windows") && strings.HasSuffix(name, ".zip") {
+			return archRank()
+		}
+		if strings.HasSuffix(name, ".exe") && isFastVExecutableName(name) {
+			return assetRankFallback
+		}
+		return 0
+	case "darwin":
+		if !strings.Contains(name, "macos") && !strings.Contains(name, "darwin") && !strings.Contains(name, "mac") {
+			return 0
+		}
+		if !strings.HasSuffix(name, ".zip") {
+			return 0
+		}
+		return archRank()
+	case "linux":
+		if !strings.Contains(name, "linux") {
+			return 0
+		}
+		if !strings.HasSuffix(name, ".tar.gz") && !strings.HasSuffix(name, ".tgz") && !strings.HasSuffix(name, ".zip") {
+			return 0
+		}
+		return archRank()
+	default:
+		return 0
+	}
+}
+
+// containsAny reports whether name contains at least one marker.
+func containsAny(name string, markers []string) bool {
+	for _, marker := range markers {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // isAMD64AssetName reports whether a release asset name names the amd64/x64

@@ -68,3 +68,52 @@ jobs:
           name: FastV-ci-windows-x64
           path: dist/Fast-V.exe
           if-no-files-found: error
+
+  verify-crossplatform:
+    name: Verify cross-platform builds
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cross-compile (macOS / Linux, wails purego backend)
+        env:
+          CGO_ENABLED: 0
+        run: |
+          set -euo pipefail
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            echo "Building ${goos}/${goarch}"
+            GOOS="${goos}" GOARCH="${goarch}" go build -tags "production purego" -trimpath -buildvcs=false \
+              -ldflags "-w -s" -o "${RUNNER_TEMP}/fastv-${goos}-${goarch}" .
+          done
+          ls -la "${RUNNER_TEMP}"/fastv-*
+

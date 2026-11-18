@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -445,7 +446,7 @@ func TestAssetRank(t *testing.T) {
 		{name: "windows amd64 zip", asset: releaseAsset{Name: "FastV-windows-amd64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZipAMD64},
 		{name: "windows x64 zip", asset: releaseAsset{Name: "FastV-windows-x64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZipAMD64},
 		{name: "windows zip", asset: releaseAsset{Name: "FastV-windows.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZip},
-		{name: "windows arm64 zip", asset: releaseAsset{Name: "FastV-windows-arm64.zip", BrowserDownloadURL: "u"}, want: assetRankWindowsZip},
+		{name: "windows arm64 zip", asset: releaseAsset{Name: "FastV-windows-arm64.zip", BrowserDownloadURL: "u"}, want: 0},
 		{name: "checksum sidecar", asset: releaseAsset{Name: "FastV-windows-amd64.zip.sha256", BrowserDownloadURL: "u"}, want: 0},
 		{name: "fastv exe", asset: releaseAsset{Name: "FastV.exe", BrowserDownloadURL: "u"}, want: assetRankFastVExe},
 		{name: "fast-v exe", asset: releaseAsset{Name: "fast-v-setup.EXE", BrowserDownloadURL: "u"}, want: assetRankFastVExe},
@@ -460,5 +461,54 @@ func TestAssetRank(t *testing.T) {
 				t.Errorf("assetRank(%+v) = %d, want %d", testCase.asset, got, testCase.want)
 			}
 		})
+	}
+}
+
+func TestAssetRankForPlatforms(t *testing.T) {
+	cases := []struct {
+		goos   string
+		goarch string
+		name   string
+		want   int
+	}{
+		{"windows", "amd64", "FastV-0.3.0-windows-amd64.zip", assetRankExact},
+		{"windows", "amd64", "FastV-0.3.0-windows.zip", assetRankPlatform},
+		{"windows", "amd64", "FastV-setup.exe", assetRankFallback},
+		{"windows", "amd64", "FastV-0.3.0-windows-amd64.zip.sha256", 0},
+		{"darwin", "arm64", "FastV-0.3.0-macos-arm64.zip", assetRankExact},
+		{"darwin", "amd64", "FastV-0.3.0-macos-amd64.zip", assetRankExact},
+		{"darwin", "arm64", "FastV-0.3.0-macos-amd64.zip", 0},
+		{"darwin", "arm64", "FastV-0.3.0-macos-universal.zip", assetRankPlatform},
+		{"darwin", "arm64", "FastV-0.3.0-windows-amd64.zip", 0},
+		{"linux", "amd64", "FastV-0.3.0-linux-amd64.tar.gz", assetRankExact},
+		{"linux", "arm64", "FastV-0.3.0-linux-arm64.tar.gz", assetRankExact},
+		{"linux", "arm64", "FastV-0.3.0-linux-amd64.tar.gz", 0},
+		{"linux", "amd64", "FastV-0.3.0-macos-arm64.zip", 0},
+	}
+	for _, tc := range cases {
+		if got := assetRankFor(tc.goos, tc.goarch, tc.name); got != tc.want {
+			t.Errorf("assetRankFor(%q, %q, %q) = %d, want %d", tc.goos, tc.goarch, tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestSelectReleaseAssetPrefersCurrentPlatform(t *testing.T) {
+	assets := []releaseAsset{
+		{Name: "FastV-0.3.0-windows-amd64.zip", BrowserDownloadURL: "https://example.com/windows.zip"},
+		{Name: "FastV-0.3.0-macos-arm64.zip", BrowserDownloadURL: "https://example.com/macos.zip"},
+		{Name: "FastV-0.3.0-linux-amd64.tar.gz", BrowserDownloadURL: "https://example.com/linux.tar.gz"},
+	}
+	selected, ok := selectReleaseAsset(assets)
+	if !ok {
+		t.Fatal("selectReleaseAsset() = false, want true")
+	}
+	if runtime.GOOS == "windows" && selected.Name != "FastV-0.3.0-windows-amd64.zip" {
+		t.Fatalf("selected %q on windows, want windows asset", selected.Name)
+	}
+	if runtime.GOOS == "darwin" && !strings.Contains(selected.Name, "macos") {
+		t.Fatalf("selected %q on darwin, want macos asset", selected.Name)
+	}
+	if runtime.GOOS == "linux" && !strings.Contains(selected.Name, "linux") {
+		t.Fatalf("selected %q on linux, want linux asset", selected.Name)
 	}
 }

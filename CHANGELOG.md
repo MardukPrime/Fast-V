@@ -6,6 +6,8 @@ All notable changes to FastV are documented here.
 
 ### Added
 
+- 多平台构建与发布：GitHub Actions 矩阵构建 Windows x64、macOS arm64/amd64（`FastV.app`）与 Linux amd64/arm64（tar.gz），统一生成 SHA-256 校验与平台说明；CI 增加跨平台编译校验（Wails purego 后端）。
+- 应用内更新检查按当前平台/架构选择 release 资产；自动安装仍仅限 Windows。
 - 分享链接导入 / 导出、剪贴板批量导入、手动节点、收藏、排序与批量启用/禁用/删除。
 - 节点与订阅二维码（Go 端生成 PNG data URL）。
 - 订阅格式兼容：分享链接、Base64 与 Clash / Meta YAML（vmess / vless / trojan / ss），不支持类型逐条跳过。

@@ -4,22 +4,25 @@
 
 仓库内置 `.github/workflows/release.yml`：推送 `v*` 标签（或在 Actions 页面手动 `workflow_dispatch` 填写 tag）即可自动完成构建与发布。
 
-```powershell
+```bash
 # 1. 确认工作区干净、CI 通过
 git status
 # 2. 打标签并推送（标签里的版本号会注入 buildinfo.Version）
-git tag -a v0.2.0-pre.1 -m "FastV v0.2.0-pre.1"
+git tag -a v0.3.0-pre.1 -m "FastV v0.3.0-pre.1"
 git push origin main
-git push origin v0.2.0-pre.1
+git push origin v0.3.0-pre.1
 ```
 
-工作流行为：
+工作流行为（多平台矩阵）：
 
-- Windows x64 构建（`windows-latest`，CGO 关闭，`-tags production -H windowsgui`）。
-- 版本号从 tag 去掉前缀 `v` 得到；含 `-pre`/`-beta`/`-rc` 等后缀自动标记为 **pre-release**。
-- 产物：`FastV-<version>-windows-amd64.zip`（含 `Fast-V.exe`、LICENSE、README）、`SHA256SUMS.txt`、`release-info.txt`，同时上传 Actions artifact。
-- 发布说明自动生成（`generate_release_notes`），并附带便携版运行要求。
-- 应用内「检查更新」按 release 资产名（含 `windows` 且以 `.zip` 结尾）选择更新包，因此资产命名不可随意更改。
+- `frontend`：ubuntu-latest 上安装依赖并构建前端，产物作为 artifact 供所有平台复用。
+- `windows-x64`：windows-latest，CGO 关闭，`-tags production -H windowsgui`，产物 `FastV-<version>-windows-amd64.zip`。
+- `macos`：macos-14 上分别交叉编译 arm64 与 amd64（`-tags "production purego"`、CGO 关闭），生成带 Info.plist 与图标的 `FastV.app`，打包为 `FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`（ad-hoc 签名，未做开发者签名/公证）。
+- `linux`：ubuntu-latest 上交叉编译 amd64 与 arm64，打包为 `FastV-<version>-linux-<arch>.tar.gz`（含桌面文件与图标；运行时需 GTK3 + WebKitGTK 4.1）。
+- `release`：汇总全部 artifact，生成合并的 `SHA256SUMS.txt` 与 `release-info.txt`，创建 GitHub Release；版本号含 `-pre`/`-beta`/`-rc` 等后缀自动标记为 **pre-release**。
+- 应用内「检查更新」按当前平台与架构选择资产（Windows zip / macOS zip / Linux tar.gz）；自动安装目前仅 Windows 可用，macOS/Linux 会提示手动下载。
+
+> macOS/Linux 使用 Wails v3 的 CGO-free（purego）后端；需要 WebKitGTK/GTK 运行时库。Windows 专属能力（TUN、系统代理、自启、托盘菜单、应用内更新）在其他平台不可用。
 
 ## 手动发布步骤（备用）
 

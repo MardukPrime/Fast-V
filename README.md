@@ -4,11 +4,11 @@
 
 **一个现代、轻量、专注桌面体验的代理客户端**
 
-Windows 10/11 · Wails v3 · Xray-core · SolidJS
+Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-0.2.0--pre.2-5B8DEF)
+![Version](https://img.shields.io/badge/version-0.3.0--pre.1-5B8DEF)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-2F6FED)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
 ![License](https://img.shields.io/badge/license-GPL--3.0-718096)
 
@@ -191,11 +191,14 @@ TUN 模式需要：
 
 ## 下载
 
-首个预发布版本（`v0.2.0-pre.2`，pre-release）由 GitHub Actions 自动构建：
+最新预发布版本由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
-- Windows x64 便携包：`FastV-<version>-windows-amd64.zip`，解压后运行 `Fast-V.exe`
-- 完整性校验：同页 `SHA256SUMS.txt`；运行要求：Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
+- **Windows x64**：`FastV-<version>-windows-amd64.zip`，解压后运行 `Fast-V.exe`；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
+- **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
+- **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz`，解压后运行 `FastV`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
+- 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
+- 应用内自动更新当前仅支持 Windows；macOS/Linux 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)
 
 ## 快速开始
@@ -294,6 +297,8 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 全局快捷键（设置页可录制自定义组合，默认 Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换模式、Ctrl+Shift+N 下一个节点）
 - WebDAV 云备份与恢复（兼容 Basic Auth，测试连接 / 上传 / 恢复）
 - 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
+
+- 多平台构建：Windows x64、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用
 
 当前仅支持 Xray-core。
 

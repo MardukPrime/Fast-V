@@ -33,8 +33,12 @@ const updateDownloadTimeout = 10 * time.Minute
 const updateEventName = "app:update"
 
 // noUpdateAssetMessage is returned by DownloadUpdate when the latest release
-// does not publish a usable Windows package.
-const noUpdateAssetMessage = "该版本没有可用的 Windows 更新包"
+// does not publish a package for the current platform/architecture.
+const noUpdateAssetMessage = "该版本没有适用于当前平台的更新包"
+
+// errAutoUpdateUnsupported is returned when the in-app installer is asked to
+// run on a platform where it cannot safely replace the running application.
+const errAutoUpdateUnsupported = "当前平台暂不支持应用内自动更新，请前往 GitHub Releases 下载对应安装包"
 
 // updateChecker is the subset of update.Checker used by AppService. It is an
 // interface so tests can replace the network call with a fake.
@@ -182,6 +186,11 @@ func (s *AppService) DownloadUpdate() (model.UpdateInfo, error) {
 		info.Error = err.Error()
 		return info, err
 	}
+	if runtime.GOOS != "windows" {
+		err := errors.New(errAutoUpdateUnsupported)
+		info.Error = err.Error()
+		return info, err
+	}
 
 	destDir := filepath.Join(s.store.DataDir(), "updates", versionDirName(info.LatestVersion))
 	executablePath, err := s.downloadPackage(ctx, info, destDir)
@@ -203,6 +212,9 @@ func (s *AppService) DownloadUpdate() (model.UpdateInfo, error) {
 func (s *AppService) ApplyUpdate() error {
 	if s == nil {
 		return errors.New("应用服务不可用")
+	}
+	if runtime.GOOS != "windows" {
+		return errors.New(errAutoUpdateUnsupported)
 	}
 
 	info, ok := s.pendingDownload()
