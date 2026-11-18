@@ -421,6 +421,19 @@ export interface Settings {
 }
 
 /**
+ * SnapshotInfo describes one local configuration snapshot that can be restored
+ * later. Snapshots are cheap copies of the complete data document kept in the
+ * application data directory.
+ */
+export interface SnapshotInfo {
+    "id": string;
+    "label": string;
+    "createdAt": string;
+    "size": number;
+    "automatic": boolean;
+}
+
+/**
  * SubscriptionInput is the payload for adding a subscription.
  */
 export interface SubscriptionInput {

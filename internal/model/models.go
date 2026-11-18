@@ -189,6 +189,17 @@ type BackupResult struct {
 	RestoredRules         int `json:"restoredRules"`
 }
 
+// SnapshotInfo describes one local configuration snapshot that can be restored
+// later. Snapshots are cheap copies of the complete data document kept in the
+// application data directory.
+type SnapshotInfo struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	CreatedAt string `json:"createdAt"`
+	Size      int64  `json:"size"`
+	Automatic bool   `json:"automatic"`
+}
+
 // UpdateInfo describes the result of an application update check.
 type UpdateInfo struct {
 	CurrentVersion string `json:"currentVersion"`

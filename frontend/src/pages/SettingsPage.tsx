@@ -7,7 +7,7 @@ import { Service as BackupService } from "../../bindings/github.com/MardukPrime/
 import { CoreService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/core";
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import { SettingsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/settings";
-import type { BackupResult, CoreInfo, GeoDataInfo, ProxyState, Settings, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
+import type { BackupResult, CoreInfo, GeoDataInfo, ProxyState, Settings, SnapshotInfo, UpdateInfo } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import { LANGUAGES, t } from "../i18n";
 
@@ -222,6 +222,17 @@ const proxyModes = () => [
   { value: "direct", label: t("set.proxyModeDirect"), hint: t("set.proxyModeDirectHint") },
 ];
 
+// System proxy takeover modes. Values must stay in sync with the backend
+// whitelist in internal/service/settings: "system" (fixed WinINet proxy),
+// "off" (leave the registry untouched) and "pac" (Windows-only: FastV writes
+// fastv.pac and points AutoConfigURL at it). The port is passed in because the
+// hint mirrors the local inbound port shown by the rest of the section.
+const systemProxyModes = (port: number) => [
+  { value: "off", label: t("set.proxyMode.off"), hint: t("set.proxyMode.offHint") },
+  { value: "system", label: t("set.proxyMode.system"), hint: t("set.systemProxyPointsTo", { port }) },
+  { value: "pac", label: t("set.proxyMode.pac"), hint: t("set.proxyMode.pacHint") },
+];
+
 const coreTypes = () => [
   { value: "xray", label: "Xray-core", hint: t("set.coreXrayHint") },
   { value: "singbox", label: "sing-box", hint: t("set.coreSingboxHint") },
@@ -332,6 +343,18 @@ function formatCheckedAt(value: string) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// ListSnapshots already returns the newest snapshot first; sorting again keeps
+// the list stable if the backend order ever changes, and invalid timestamps are
+// pushed to the end instead of breaking the comparison.
+function snapshotTimeValue(value: string) {
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function sortSnapshots(list: SnapshotInfo[]) {
+  return [...list].sort((left, right) => snapshotTimeValue(right.createdAt) - snapshotTimeValue(left.createdAt));
+}
+
 // The self-update panel reports the release asset size in MB; the backend
 // returns 0 when GitHub does not expose a size for the asset.
 function formatAssetSize(size: number) {
@@ -419,6 +442,13 @@ export default function SettingsPage(props: SettingsProps) {
   const [webdavError, setWebdavError] = createSignal("");
   const [webdavRemoteUrl, setWebdavRemoteUrl] = createSignal("");
   const [webdavRestoreResult, setWebdavRestoreResult] = createSignal<BackupResult | null>(null);
+  // Local configuration snapshots: the list plus one shared busy flag
+  // ("load" | "create" | "restore:<id>" | "delete:<id>") so two operations can
+  // never race on the same snapshot directory.
+  const [snapshots, setSnapshots] = createSignal<SnapshotInfo[]>([]);
+  const [snapshotsBusy, setSnapshotsBusy] = createSignal("");
+  const [snapshotsMessage, setSnapshotsMessage] = createSignal("");
+  const [snapshotsError, setSnapshotsError] = createSignal("");
   const [updateBusy, setUpdateBusy] = createSignal(false);
   const [updateInfo, setUpdateInfo] = createSignal<UpdateInfo | null>(null);
   const [updateError, setUpdateError] = createSignal("");
@@ -896,6 +926,100 @@ export default function SettingsPage(props: SettingsProps) {
     }
   };
 
+  // Snapshots are sorted newest first for display; the backend already returns
+  // them in that order but sorting again keeps the UI deterministic.
+  const snapshotRows = () => sortSnapshots(snapshots());
+
+  // Fetch the snapshot list without touching the shared busy flag; the load
+  // button and every operation that changes the list reuse it.
+  const refreshSnapshots = async () => {
+    const list = await BackupService.ListSnapshots();
+    setSnapshots(list ?? []);
+  };
+
+  const loadSnapshots = async () => {
+    if (snapshotsBusy()) return;
+    setSnapshotsBusy("load");
+    setSnapshotsError("");
+    try {
+      await refreshSnapshots();
+    } catch (err) {
+      setSnapshotsError(t("set.snapshots.loadError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  // A window.prompt keeps the creation flow minimal; an empty name is sent as
+  // an empty string so the backend assigns its default label.
+  const createSnapshot = async () => {
+    if (snapshotsBusy()) return;
+    const label = window.prompt(t("set.snapshots.createPrompt"), "");
+    if (label === null) return;
+    setSnapshotsBusy("create");
+    setSnapshotsMessage("");
+    setSnapshotsError("");
+    try {
+      await BackupService.CreateSnapshot(label.trim());
+      await refreshSnapshots();
+      setSnapshotsMessage(t("set.snapshots.createDone"));
+    } catch (err) {
+      setSnapshotsError(t("set.snapshots.createError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  const restoreSnapshot = async (snapshot: SnapshotInfo) => {
+    if (snapshotsBusy()) return;
+    if (!window.confirm(t("set.snapshots.restoreConfirm", { label: snapshot.label }))) return;
+    setSnapshotsBusy(`restore:${snapshot.id}`);
+    setSnapshotsMessage("");
+    setSnapshotsError("");
+    try {
+      await BackupService.RestoreSnapshot(snapshot.id);
+      await refreshSnapshots();
+      setSnapshotsMessage(t("set.snapshots.restoreDone"));
+      // The rollback replaced the persisted settings; reload the form exactly
+      // like the import path does so it does not keep showing old values.
+      try {
+        const restored = await SettingsService.Get();
+        setSettings(restored);
+        setProxyModeDirty(false);
+        props.onSaved(restored);
+      } catch {
+        // The rollback already succeeded; a stale form is better than a false error.
+      }
+    } catch (err) {
+      setSnapshotsError(t("set.snapshots.restoreError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  const deleteSnapshot = async (snapshot: SnapshotInfo) => {
+    if (snapshotsBusy()) return;
+    if (!window.confirm(t("set.snapshots.deleteConfirm", { label: snapshot.label }))) return;
+    setSnapshotsBusy(`delete:${snapshot.id}`);
+    setSnapshotsMessage("");
+    setSnapshotsError("");
+    try {
+      await BackupService.DeleteSnapshot(snapshot.id);
+      await refreshSnapshots();
+      setSnapshotsMessage(t("set.snapshots.deleteDone"));
+    } catch (err) {
+      setSnapshotsError(t("set.snapshots.deleteError", { error: errorMessage(err) }));
+    } finally {
+      setSnapshotsBusy("");
+    }
+  };
+
+  // Snapshots live outside the settings document, so they are loaded once on
+  // mount instead of as part of load(); reading the list is cheap.
+  onMount(() => {
+    void loadSnapshots();
+  });
+
   const refreshGeoData = async () => {
     setGeoBusy("refresh");
     setError("");
@@ -1172,16 +1296,30 @@ export default function SettingsPage(props: SettingsProps) {
               <strong>{t("set.systemProxy")}</strong>
               <small>{t("set.systemProxyHint")}</small>
             </div>
-            <label class="switch-row">
-              <span>
-                <strong>{t("set.autoSystemProxy")}</strong>
-                <small>{settings().tunMode ? t("set.systemProxySkippedTun") : t("set.systemProxyPointsTo", { port: settings().xrayLocalPort })}</small>
-              </span>
-              <span classList={{ "switch": true, on: settings().systemProxyMode === "system" }}>
-                <input type="checkbox" checked={settings().systemProxyMode === "system"} onChange={(event) => update("systemProxyMode", event.currentTarget.checked ? "system" : "off")} />
-                <span class="switch-track"><span class="switch-thumb" /></span>
-              </span>
-            </label>
+            <div class="mode-options">
+              {systemProxyModes(settings().xrayLocalPort).map((item) => (
+                <button
+                  type="button"
+                  classList={{ "mode-option": true, active: settings().systemProxyMode === item.value }}
+                  onClick={() => update("systemProxyMode", item.value)}
+                >
+                  <strong>{item.label}</strong>
+                  <small>{item.hint}</small>
+                </button>
+              ))}
+            </div>
+            <Show when={settings().systemProxyMode === "pac"}>
+              <div class="settings-inline-warning">
+                <Icon name="alert" size={13} />
+                <span>{t("set.proxyMode.pacNote")}</span>
+              </div>
+            </Show>
+            <Show when={settings().tunMode}>
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>{t("set.systemProxySkippedTun")}</span>
+              </p>
+            </Show>
           </div>
 <div class="setting-block">
             <div class="setting-label">
@@ -2378,6 +2516,78 @@ export default function SettingsPage(props: SettingsProps) {
                 </div>
               )}
             </Show>
+
+            <div class="webdav-backup">
+              <div class="webdav-heading">
+                <strong>{t("set.snapshots.title")}</strong>
+                <small>{t("set.snapshots.hint")}</small>
+              </div>
+
+              <div class="backup-actions" style="margin-top: 12px;">
+                <button class="btn secondary" type="button" onClick={() => void createSnapshot()} disabled={snapshotsBusy() !== ""}>
+                  <Icon name="plus" size={14} /> {snapshotsBusy() === "create" ? t("set.snapshots.creating") : t("set.snapshots.create")}
+                </button>
+                <button class="btn ghost compact" type="button" onClick={() => void loadSnapshots()} disabled={snapshotsBusy() !== ""}>
+                  <Icon name="refresh" size={13} /> {snapshotsBusy() === "load" ? t("set.snapshots.loading") : t("set.snapshots.refresh")}
+                </button>
+              </div>
+
+              <Show when={snapshotsMessage()}>
+                <div class="alert success settings-inline-alert">
+                  <span class="alert-message"><Icon name="check" size={15} /> {snapshotsMessage()}</span>
+                </div>
+              </Show>
+              <Show when={snapshotsError()}>
+                <div class="alert error settings-inline-alert">
+                  <span class="alert-message"><Icon name="alert" size={15} /> {snapshotsError()}</span>
+                </div>
+              </Show>
+
+              <Show
+                when={snapshotRows().length > 0}
+                fallback={
+                  <p class="settings-note">
+                    <Icon name="subscription" size={13} />
+                    <span>{t("set.snapshots.empty")}</span>
+                  </p>
+                }
+              >
+                <ul class="hotkey-list" aria-label={t("set.snapshots.title")}>
+                  <For each={snapshotRows()}>
+                    {(snapshot) => (
+                      <li class="hotkey-row">
+                        <span class="hotkey-row-main">
+                          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                            <span style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                              <strong style="overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap;">{snapshot.label}</strong>
+                              <Show when={snapshot.automatic}>
+                                <span class="tag neutral" style="flex-shrink: 0;">{t("set.snapshots.automatic")}</span>
+                              </Show>
+                            </span>
+                            <small style="color: var(--faint); font-size: 10px; line-height: 1.5;">
+                              {t("set.snapshots.createdAt")} {formatCheckedAt(snapshot.createdAt)} · {t("set.snapshots.size")} {formatBytes(snapshot.size)}
+                            </small>
+                          </span>
+                        </span>
+                        <span class="hotkey-row-controls">
+                          <button class="btn secondary compact" type="button" onClick={() => void restoreSnapshot(snapshot)} disabled={snapshotsBusy() !== ""}>
+                            <Icon name="refresh" size={13} /> {snapshotsBusy() === `restore:${snapshot.id}` ? t("set.snapshots.restoring") : t("set.snapshots.restore")}
+                          </button>
+                          <button class="btn danger compact" type="button" onClick={() => void deleteSnapshot(snapshot)} disabled={snapshotsBusy() !== ""}>
+                            <Icon name="trash" size={13} /> {snapshotsBusy() === `delete:${snapshot.id}` ? t("set.snapshots.deleting") : t("set.snapshots.delete")}
+                          </button>
+                        </span>
+                      </li>
+                    )}
+                  </For>
+                </ul>
+              </Show>
+
+              <p class="settings-note">
+                <Icon name="alert" size={13} />
+                <span>{t("set.snapshots.note")}</span>
+              </p>
+            </div>
 
             <div class="webdav-backup">
               <div class="webdav-heading">

@@ -22,6 +22,10 @@
 | WebDAVTest | - | - | 测试已保存的 WebDAV 连接与写入权限 |
 | WebDAVUpload | - | string | 上传备份并返回远端 URL |
 | WebDAVDownload | - | BackupResult | 下载云端备份并恢复（Restore 校验后落盘） |
+| CreateSnapshot | label | SnapshotInfo | 创建本地配置快照（手动；最多保留 20 个） |
+| ListSnapshots | - | []SnapshotInfo | 快照列表（最新在前，损坏文件跳过） |
+| RestoreSnapshot | id | BackupResult | 回滚到指定快照（回滚前自动创建安全快照） |
+| DeleteSnapshot | id | - | 删除快照（id 做白名单校验） |
 
 ## HistoryService
 
@@ -162,6 +166,7 @@
 |---|---|---|---|
 | Check | mode, includeSpeed | NetworkProbe | 检测直连或本地代理出口的 IP、归属地和网络质量 |
 | ExportReport | - | string | 在数据目录生成脱敏诊断报告 ZIP，返回文件路径 |
+| DNSAudit | - | DNSAuditResult | 对比系统 DNS / Xray DNS 配置并实测多解析器 A 记录、延迟与风险提示 |
 
 ## RescueService
 
@@ -213,7 +218,7 @@
 | xraySockoptDomainStrategy | sockopt.domainStrategy |
 | xraySockoptJson | 高级 sockopt JSON，覆盖同名字段 |
 | xrayFinalMaskJson | outbound.streamSettings.finalmask JSON 对象 |
-| systemProxyMode | Windows 系统代理：system（自动设置/恢复）或 off |
+| systemProxyMode | Windows 系统代理：system（自动设置/恢复）、pac（生成本地 PAC 并设置 AutoConfigURL）或 off |
 | statsEnabled | 启用 Xray StatsService 实时流量统计（默认开启） |
 | allowLan | 本地入站监听 0.0.0.0（局域网共享） |
 | inboundAuthEnabled | SOCKS 入站用户名/密码认证 |

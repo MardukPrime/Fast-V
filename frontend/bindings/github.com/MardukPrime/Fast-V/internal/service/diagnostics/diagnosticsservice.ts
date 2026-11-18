@@ -14,8 +14,25 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // @ts-ignore: Unused imports
 import * as model$0 from "../../model/models.js";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as $models from "./models.js";
+
 export function Check(mode: string, includeSpeed: boolean): $CancellablePromise<model$0.NetworkProbe> {
     return $Call.ByID(2073455101, mode, includeSpeed);
+}
+
+/**
+ * DNSAudit reads the system DNS servers, the configured Xray DNS servers and
+ * probes each of them (plus a public fallback resolver) with real UDP DNS
+ * queries, then derives user-facing warnings.
+ * 
+ * Failures are reported as probe entries and warnings instead of a returned
+ * error: an unreadable system DNS configuration (for example on non-Windows
+ * platforms) must not prevent the remaining checks from running.
+ */
+export function DNSAudit(): $CancellablePromise<$models.DNSAuditResult> {
+    return $Call.ByID(1301263849);
 }
 
 /**

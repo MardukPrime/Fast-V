@@ -108,6 +108,43 @@ func TestRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+// TestSystemProxyModeValidation covers the supported system proxy modes:
+// "system" (fixed WinINet proxy), "off" and "pac" (generated PAC script).
+func TestSystemProxyModeValidation(t *testing.T) {
+	service := newService(t)
+
+	for _, mode := range []string{"system", "off", "pac"} {
+		input := validSettings()
+		input.SystemProxyMode = mode
+		saved, err := service.Save(input)
+		if err != nil {
+			t.Fatalf("%q: expected the mode to be accepted: %v", mode, err)
+		}
+		if saved.SystemProxyMode != mode {
+			t.Fatalf("%q: saved mode = %q", mode, saved.SystemProxyMode)
+		}
+	}
+
+	// Surrounding whitespace is normalized away like the other trimmed fields.
+	padded := validSettings()
+	padded.SystemProxyMode = "  pac  "
+	saved, err := service.Save(padded)
+	if err != nil {
+		t.Fatalf("expected a padded mode to be normalized: %v", err)
+	}
+	if saved.SystemProxyMode != "pac" {
+		t.Fatalf("padded mode saved as %q, want pac", saved.SystemProxyMode)
+	}
+
+	for _, mode := range []string{"", "proxy", "PAC", "auto", "system,pac"} {
+		input := validSettings()
+		input.SystemProxyMode = mode
+		if _, err := service.Save(input); err == nil || !strings.Contains(err.Error(), "系统代理模式") {
+			t.Fatalf("%q: expected a Chinese system proxy mode error, got %v", mode, err)
+		}
+	}
+}
+
 func TestSmartRoutingValues(t *testing.T) {
 	service := newService(t)
 

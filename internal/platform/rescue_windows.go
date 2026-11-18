@@ -21,6 +21,9 @@ type SystemProxyState struct {
 	Enabled  bool
 	Server   string
 	Override string
+	// AutoConfigURL is the PAC script URL (file:// or http://) configured for
+	// the current user, or an empty string when no PAC is set.
+	AutoConfigURL string
 }
 
 // ReadSystemProxyState reads the WinINet proxy configuration of the current
@@ -48,6 +51,9 @@ func ReadSystemProxyState() (SystemProxyState, error) {
 	}
 	if value, _, readErr := key.GetStringValue("ProxyOverride"); readErr == nil {
 		state.Override = strings.TrimSpace(value)
+	}
+	if value, _, readErr := key.GetStringValue("AutoConfigURL"); readErr == nil {
+		state.AutoConfigURL = strings.TrimSpace(value)
 	}
 	return state, nil
 }

@@ -68,8 +68,11 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}
 
-	if input.SystemProxyMode != "system" && input.SystemProxyMode != "off" {
-		return model.Settings{}, errors.New("invalid system proxy mode")
+	input.SystemProxyMode = strings.TrimSpace(input.SystemProxyMode)
+	switch input.SystemProxyMode {
+	case "system", "off", "pac":
+	default:
+		return model.Settings{}, errors.New("系统代理模式必须是 system、off 或 pac")
 	}
 	if input.DockTransparency < 5 || input.DockTransparency > 90 {
 		return model.Settings{}, errors.New("dock transparency must be between 5 and 90")

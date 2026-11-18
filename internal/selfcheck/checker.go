@@ -416,14 +416,16 @@ func (c *Checker) checkSystemProxy(_ context.Context) (string, string, string) {
 	switch mode {
 	case "off", "none":
 		return StatusOK, "系统代理模式已关闭，不会修改 Windows 系统代理", ""
-	case "system":
-		// Handled below.
+	case "system", "pac":
+		// Handled below. Both modes make the application own the WinINet
+		// proxy configuration: "system" writes a fixed ProxyServer while "pac"
+		// writes AutoConfigURL pointing at the generated fastv.pac script.
 	default:
-		return StatusWarn, fmt.Sprintf("未知的系统代理模式: %q", settings.SystemProxyMode), "在「设置 → 网络接管」中选择系统代理或关闭"
+		return StatusWarn, fmt.Sprintf("未知的系统代理模式: %q", settings.SystemProxyMode), "在「设置 → 网络接管」中选择系统代理、PAC 或关闭"
 	}
 
 	if settings.TunMode {
-		return StatusOK, "TUN 模式接管系统流量，无需设置 Windows 系统代理", ""
+		return StatusOK, "TUN 模式接管系统流量，无需设置 Windows 系统代理或 PAC", ""
 	}
 
 	state := c.proxyState()
@@ -436,7 +438,11 @@ func (c *Checker) checkSystemProxy(_ context.Context) (string, string, string) {
 		if address == "" {
 			address = "本地代理端口"
 		}
-		return StatusOK, "代理正在运行，Windows 系统代理由系统代理模块指向 " + address + "（此处不直接读取注册表）", ""
+		detail := "代理正在运行，Windows 系统代理由系统代理模块指向 " + address + "（此处不直接读取注册表）"
+		if mode == "pac" {
+			detail = "代理正在运行，PAC 模式由 FastV 生成的 fastv.pac 接管，脚本将代理流量指向 " + address + "（此处不直接读取注册表）"
+		}
+		return StatusOK, detail, ""
 	case "starting":
 		return StatusOK, "代理正在启动，系统代理会在代理就绪后自动设置", ""
 	default:

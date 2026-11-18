@@ -29,6 +29,7 @@ export type {
     RoutingRule,
     RuleSet,
     Settings,
+    SnapshotInfo,
     SubscriptionInput,
     SubscriptionView,
     TrafficStats,

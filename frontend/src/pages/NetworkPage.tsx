@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 
 
 import { DiagnosticsService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
+import type { DNSAuditResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/diagnostics";
 import { Service as HistoryService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/history";
 import { Service as RescueService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
 import type { RescueReport, RescueResult } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/rescue";
@@ -181,6 +182,9 @@ export default function NetworkPage(props: NetworkPageProps) {
   const [reportBusy, setReportBusy] = createSignal(false);
   const [reportPath, setReportPath] = createSignal("");
   const [reportError, setReportError] = createSignal("");
+  const [dnsAudit, setDnsAudit] = createSignal<DNSAuditResult | null>(null);
+  const [dnsBusy, setDnsBusy] = createSignal(false);
+  const [dnsError, setDnsError] = createSignal("");
 
   const loadLatencies = async () => {
     setLatencyLoading(true);
@@ -323,6 +327,24 @@ export default function NetworkPage(props: NetworkPageProps) {
     }
   };
 
+  // The DNS audit sends real UDP queries to every visible resolver, so a broken
+  // network may take a few seconds to time out. Per-resolver problems are
+  // reported as warnings/probe errors instead of an error return; only a failed
+  // RPC lands in dnsError, and that must never block the other panels.
+  const runDnsAudit = async () => {
+    if (dnsBusy()) return;
+    setDnsBusy(true);
+    setDnsError("");
+    try {
+      const audit = await DiagnosticsService.DNSAudit();
+      setDnsAudit(audit);
+    } catch (err) {
+      setDnsError(t("net.dns.error", { error: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setDnsBusy(false);
+    }
+  };
+
   const proxyAvailable = () => props.proxyState.status === "running";
 
   const checkMode = async (mode: "direct" | "proxy") => {
@@ -360,6 +382,12 @@ export default function NetworkPage(props: NetworkPageProps) {
   // affects the regular diagnostics probes.
   onMount(() => {
     void inspectRescue();
+  });
+
+  // Like the rescue inspection, the DNS audit runs once on load so the panel is
+  // populated without an extra click; the button re-runs it on demand.
+  onMount(() => {
+    void runDnsAudit();
   });
 
   const sameExit = () => Boolean(direct()?.ip && proxied()?.ip && direct()!.ip === proxied()!.ip);
@@ -578,6 +606,154 @@ export default function NetworkPage(props: NetworkPageProps) {
             <code title={reportPath()}>{reportPath()}</code>
           </div>
           <p class="settings-note"><Icon name="check" size={13} /><span>{t("net.report.privacy")}</span></p>
+        </Show>
+      </section>
+
+      <section class="glass-panel selfcheck-panel">
+        <div class="panel-heading">
+          <div>
+            <h3>{t("net.dns.title")}</h3>
+            <span>{t("net.dns.subtitle")}</span>
+          </div>
+          <div class="selfcheck-actions">
+            <Show when={dnsAudit()}>
+              <span class="selfcheck-timestamp">{t("net.dns.lastAt", { time: formatSampleTime(dnsAudit()!.checkedAt) })}</span>
+            </Show>
+            <button class="btn glass" onClick={() => { void runDnsAudit(); }} disabled={dnsBusy()}>
+              <Icon name={dnsBusy() ? "refresh" : "search"} size={14} />
+              {dnsBusy() ? t("net.dns.checking") : dnsAudit() ? t("net.dns.rerun") : t("net.dns.check")}
+            </button>
+          </div>
+        </div>
+
+        <Show when={dnsError()}>
+          <div class="alert error selfcheck-alert">
+            <span class="alert-message"><Icon name="alert" size={15} /> {dnsError()}</span>
+            <button class="btn ghost" onClick={() => { void runDnsAudit(); }}>{t("net.retry")}</button>
+          </div>
+          <p class="settings-note"><Icon name="alert" size={13} /><span>{t("net.dns.errorHint")}</span></p>
+        </Show>
+
+        <Show
+          when={dnsBusy() && !dnsAudit()}
+          fallback={
+            <Show
+              when={dnsAudit()}
+              fallback={
+                <div class="empty-state">
+                  <div class="empty-icon"><Icon name="search" size={22} /></div>
+                  <strong>{t("net.dns.emptyTitle")}</strong>
+                  <span>{t("net.dns.emptyBody")}</span>
+                </div>
+              }
+            >
+              {(audit) => (
+                <>
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px;">
+                    <div>
+                      <span class="selfcheck-name">{t("net.dns.systemServers")}</span>
+                      <div class="selfcheck-summary" style="margin-top: 6px; gap: 6px;">
+                        <For each={audit().systemServers ?? []}>
+                          {(server) => <span class="selfcheck-chip">{server}</span>}
+                        </For>
+                        <Show when={(audit().systemServers ?? []).length === 0}>
+                          <span class="selfcheck-chip warn">{t("net.dns.noServers")}</span>
+                        </Show>
+                      </div>
+                    </div>
+                    <div>
+                      <span class="selfcheck-name">{t("net.dns.xrayServers")}</span>
+                      <div class="selfcheck-summary" style="margin-top: 6px; gap: 6px;">
+                        <For each={audit().xrayServers ?? []}>
+                          {(server) => <span class="selfcheck-chip">{server}</span>}
+                        </For>
+                        <Show when={(audit().xrayServers ?? []).length === 0}>
+                          <span class="selfcheck-chip warn">{t("net.dns.noServers")}</span>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="panel-heading" style="margin-top: 18px;">
+                    <div>
+                      <h3>{t("net.dns.probesTitle")}</h3>
+                      <span>{t("net.dns.probesSubtitle")}</span>
+                    </div>
+                  </div>
+                  <Show
+                    when={(audit().probes ?? []).length > 0}
+                    fallback={<div class="network-note warning"><Icon name="alert" size={12} /> {t("net.dns.probesEmpty")}</div>}
+                  >
+                    <div class="node-table-wrap" style="padding: 0;">
+                      <table class="node-table">
+                        <thead>
+                          <tr>
+                            <th>{t("net.dns.col.server")}</th>
+                            <th>{t("net.dns.col.query")}</th>
+                            <th>{t("net.dns.col.ips")}</th>
+                            <th>{t("net.dns.col.latency")}</th>
+                            <th>{t("net.dns.col.error")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <For each={audit().probes ?? []}>
+                            {(probe) => (
+                              <tr>
+                                <td>{probe.server}</td>
+                                <td>{probe.query}</td>
+                                <td>
+                                  <Show when={(probe.ips ?? []).length > 0} fallback={<span>—</span>}>
+                                    <div class="selfcheck-summary" style="margin-top: 0; gap: 4px;">
+                                      <For each={probe.ips ?? []}>
+                                        {(ip) => <span class="tag neutral">{ip}</span>}
+                                      </For>
+                                    </div>
+                                  </Show>
+                                </td>
+                                <td>
+                                  <span class={`latency ${latencyTone(probe.latencyMs)}`}>
+                                    {probe.latencyMs > 0 ? `${probe.latencyMs} ms` : "—"}
+                                  </span>
+                                </td>
+                                <td>
+                                  <Show when={probe.error} fallback={<span>—</span>}>
+                                    <span class="text-danger" title={probe.error}>{probe.error}</span>
+                                  </Show>
+                                </td>
+                              </tr>
+                            )}
+                          </For>
+                        </tbody>
+                      </table>
+                    </div>
+                  </Show>
+
+                  <div class="panel-heading" style="margin-top: 18px;">
+                    <div>
+                      <h3>{t("net.dns.warningsTitle")}</h3>
+                      <span>{t("net.dns.warningsSubtitle")}</span>
+                    </div>
+                  </div>
+                  <Show
+                    when={(audit().warnings ?? []).length > 0}
+                    fallback={<p class="settings-note"><Icon name="check" size={13} /><span>{t("net.dns.warningsEmpty")}</span></p>}
+                  >
+                    <For each={audit().warnings ?? []}>
+                      {(warning) => (
+                        <div class="network-note warning"><Icon name="alert" size={12} /> {warning}</div>
+                      )}
+                    </For>
+                  </Show>
+                </>
+              )}
+            </Show>
+          }
+        >
+          <div class="selfcheck-loading">
+            <span class="network-pulse" />
+            <strong>{t("net.dns.loading")}</strong>
+            <span>{t("net.dns.loadingHint")}</span>
+          </div>
         </Show>
       </section>
 

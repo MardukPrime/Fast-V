@@ -64,6 +64,48 @@ func (s *Service) Import(data string) (model.BackupResult, error) {
 	return result, nil
 }
 
+// CreateSnapshot stores the current configuration as a manually created local
+// snapshot and returns its metadata for the snapshot list.
+func (s *Service) CreateSnapshot(label string) (model.SnapshotInfo, error) {
+	info, err := s.store.CreateSnapshot(label, false)
+	if err != nil {
+		return model.SnapshotInfo{}, err
+	}
+	return info, nil
+}
+
+// ListSnapshots returns the stored local snapshots, newest first. Damaged
+// snapshot files are skipped by the store instead of failing the list.
+func (s *Service) ListSnapshots() ([]model.SnapshotInfo, error) {
+	snapshots, err := s.store.ListSnapshots()
+	if err != nil {
+		return nil, err
+	}
+	if snapshots == nil {
+		snapshots = []model.SnapshotInfo{}
+	}
+	return snapshots, nil
+}
+
+// RestoreSnapshot rolls the configuration back to the given snapshot. The store
+// takes a safety snapshot of the current configuration first, so the rollback
+// itself can be undone. A successful rollback may contain different settings, so
+// the settings:changed event is emitted exactly like Import does.
+func (s *Service) RestoreSnapshot(id string) (model.BackupResult, error) {
+	result, err := s.store.RestoreSnapshot(id)
+	if err != nil {
+		return result, err
+	}
+	s.notifySettingsChanged()
+	return result, nil
+}
+
+// DeleteSnapshot removes one stored snapshot. The id is validated by the store,
+// so only existing snapshot files inside the snapshot directory can be deleted.
+func (s *Service) DeleteSnapshot(id string) error {
+	return s.store.DeleteSnapshot(id)
+}
+
 // notifySettingsChanged tells the rest of the app (tray, global hotkeys, top
 // bar) that the restored configuration may contain different settings. Restore
 // bypasses SettingsService, so the event is emitted here.

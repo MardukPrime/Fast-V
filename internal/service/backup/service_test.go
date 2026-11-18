@@ -822,3 +822,111 @@ func TestBackupServiceWebDAVRejectsUnsafeRemotePath(t *testing.T) {
 		t.Fatalf("unsafe remote path reached the server: %v", methods)
 	}
 }
+
+func TestBackupServiceSnapshotLifecycle(t *testing.T) {
+	st := newTestStore(t)
+	seedConfiguration(t, st)
+	service := New(st)
+
+	info, err := service.CreateSnapshot("  发布前  ")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	if info.ID == "" || info.Label != "发布前" || info.Automatic || info.Size <= 0 {
+		t.Fatalf("unexpected snapshot info: %+v", info)
+	}
+
+	snapshots, err := service.ListSnapshots()
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0] != info {
+		t.Fatalf("ListSnapshots = %+v, want [%+v]", snapshots, info)
+	}
+
+	// Replace the configuration, then roll it back through the service. The app
+	// instance is nil in tests, so the settings:changed broadcast must be skipped
+	// without panicking or failing the rollback.
+	if err := st.SaveSettings(store.DefaultSettings()); err != nil {
+		t.Fatalf("save default settings: %v", err)
+	}
+	if err := st.DeleteSubscription("sub-1"); err != nil {
+		t.Fatalf("delete subscription: %v", err)
+	}
+	if nodes := st.ListNodes(); len(nodes) != 1 {
+		t.Fatalf("expected only the manual node before the rollback, got %+v", nodes)
+	}
+
+	result, err := service.RestoreSnapshot(info.ID)
+	if err != nil {
+		t.Fatalf("RestoreSnapshot: %v", err)
+	}
+	if result.RestoredSubscriptions != 1 || result.RestoredNodes != 3 || result.RestoredRules != 1 {
+		t.Fatalf("unexpected restore result: %+v", result)
+	}
+	if settings := st.Settings(); settings.Theme != "dark" || settings.Language != "en-US" || settings.XrayLocalPort != 20808 {
+		t.Fatalf("settings were not rolled back through the service: %+v", settings)
+	}
+	if active, ok := st.ActiveNode(); !ok || active.ID != "node-2" {
+		t.Fatalf("active node was not rolled back: %+v (ok=%v)", active, ok)
+	}
+
+	// The automatic pre-restore safety snapshot is exposed like any other.
+	snapshots, err = service.ListSnapshots()
+	if err != nil {
+		t.Fatalf("ListSnapshots after rollback: %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Fatalf("expected the manual and the safety snapshot, got %+v", snapshots)
+	}
+	if !snapshots[0].Automatic || snapshots[0].Label != "回滚前快照" {
+		t.Fatalf("newest snapshot is not the safety snapshot: %+v", snapshots[0])
+	}
+
+	if err := service.DeleteSnapshot(info.ID); err != nil {
+		t.Fatalf("DeleteSnapshot: %v", err)
+	}
+	if snapshots, err = service.ListSnapshots(); err != nil {
+		t.Fatalf("ListSnapshots after delete: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].ID == info.ID {
+		t.Fatalf("snapshot was not deleted: %+v", snapshots)
+	}
+}
+
+func TestBackupServiceSnapshotErrors(t *testing.T) {
+	st := newTestStore(t)
+	service := New(st)
+
+	// A fresh store has no snapshots and an empty (non-nil) list.
+	snapshots, err := service.ListSnapshots()
+	if err != nil {
+		t.Fatalf("ListSnapshots: %v", err)
+	}
+	if snapshots == nil || len(snapshots) != 0 {
+		t.Fatalf("fresh store snapshots = %#v, want an empty slice", snapshots)
+	}
+
+	// An empty label uses the manual default.
+	info, err := service.CreateSnapshot("")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	if info.Label != "手动快照" || info.Automatic {
+		t.Fatalf("unexpected default snapshot: %+v", info)
+	}
+
+	// Invalid and unknown ids are forwarded with the store's Chinese errors.
+	if _, err := service.RestoreSnapshot("../data"); err == nil || !strings.Contains(err.Error(), "无效") {
+		t.Fatalf("RestoreSnapshot with a traversal id = %v", err)
+	}
+	if err := service.DeleteSnapshot(""); err == nil || !strings.Contains(err.Error(), "无效") {
+		t.Fatalf("DeleteSnapshot with an empty id = %v", err)
+	}
+	if _, err := service.RestoreSnapshot("snap-20260101-000000-9999"); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("RestoreSnapshot with a missing id = %v", err)
+	}
+	if err := service.DeleteSnapshot("snap-20260101-000000-9999"); err == nil || !strings.Contains(err.Error(), "不存在") {
+		t.Fatalf("DeleteSnapshot with a missing id = %v", err)
+	}
+}

@@ -18,6 +18,9 @@ type SystemProxyState struct {
 	Enabled  bool
 	Server   string
 	Override string
+	// AutoConfigURL mirrors the Windows PAC script URL field; it is always
+	// empty on other platforms.
+	AutoConfigURL string
 }
 
 // ReadSystemProxyState is unsupported outside Windows.

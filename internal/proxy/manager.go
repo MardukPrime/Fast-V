@@ -633,18 +633,17 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	if autoRestart && m.userStopRequested() {
 		return m.abortAutoRestart(cmd, done, job)
 	}
-	if settings.SystemProxyMode == "system" && !settings.TunMode {
-		cleanup, proxyErr := platform.EnableSystemProxy(state.LocalAddr)
-		if proxyErr != nil {
-			m.appendLog("warning", "system", "Windows 系统代理设置失败: "+proxyErr.Error()+"；代理仍会继续运行，请手动配置系统代理或使用 TUN 模式")
-		} else {
-			m.mu.Lock()
-			m.systemProxyCleanup = cleanup
-			m.mu.Unlock()
-			m.appendLog("info", "system", "Windows 系统代理已启用: "+state.LocalAddr)
+	if settings.TunMode {
+		if settings.SystemProxyMode == "system" || settings.SystemProxyMode == "pac" {
+			m.appendLog("info", "system", "TUN 模式已接管系统流量，跳过 Windows 系统代理")
 		}
-	} else if settings.TunMode && settings.SystemProxyMode == "system" {
-		m.appendLog("info", "system", "TUN 模式已接管系统流量，跳过 Windows 系统代理")
+	} else {
+		switch settings.SystemProxyMode {
+		case "system":
+			m.enableSystemProxy(state.LocalAddr)
+		case "pac":
+			m.enablePACSystemProxy(state.LocalAddr)
+		}
 	}
 	if settings.TunMode {
 		cleanup, routeErr := setupTunRoutes(tunInterfaceName, resolvedIP)
@@ -967,6 +966,47 @@ func (m *Manager) stopSystemProxy() {
 		_ = cleanup()
 		m.appendLog("info", "system", "Windows 系统代理已恢复")
 	}
+}
+
+// enableSystemProxy applies the fixed WinINet proxy and stores the restore
+// function so every stop path (manual stop, watchdog cleanup, failed start) can
+// revert it.
+func (m *Manager) enableSystemProxy(localAddr string) {
+	cleanup, proxyErr := platform.EnableSystemProxy(localAddr)
+	if proxyErr != nil {
+		m.appendLog("warning", "system", "Windows 系统代理设置失败: "+proxyErr.Error()+"；代理仍会继续运行，请手动配置系统代理或使用 TUN 模式")
+		return
+	}
+	m.mu.Lock()
+	m.systemProxyCleanup = cleanup
+	m.mu.Unlock()
+	m.appendLog("info", "system", "Windows 系统代理已启用: "+localAddr)
+}
+
+// enablePACSystemProxy writes the generated PAC script, points the WinINet
+// automatic proxy configuration at it and stores a restore function that also
+// deletes the script again. Like the fixed-proxy path, a failure is only a
+// warning: the local proxy keeps running.
+func (m *Manager) enablePACSystemProxy(localAddr string) {
+	pacPath, err := writePACFile(m.store.DataDir(), localAddr)
+	if err != nil {
+		m.appendLog("warning", "system", "PAC 系统代理准备失败: "+err.Error()+"；代理仍会继续运行，请手动配置系统代理或使用 TUN 模式")
+		return
+	}
+	cleanup, proxyErr := platform.EnableSystemProxyPAC(pacPath)
+	if proxyErr != nil {
+		removePACFile(pacPath)
+		m.appendLog("warning", "system", "PAC 系统代理设置失败: "+proxyErr.Error()+"；代理仍会继续运行，请手动配置系统代理或使用 TUN 模式")
+		return
+	}
+	m.mu.Lock()
+	m.systemProxyCleanup = func() error {
+		restoreErr := cleanup()
+		removePACFile(pacPath)
+		return restoreErr
+	}
+	m.mu.Unlock()
+	m.appendLog("info", "system", "PAC 系统代理已启用: "+localAddr+"（PAC 文件: "+pacPath+"）")
 }
 
 func (m *Manager) takeSystemProxyCleanup() func() error {

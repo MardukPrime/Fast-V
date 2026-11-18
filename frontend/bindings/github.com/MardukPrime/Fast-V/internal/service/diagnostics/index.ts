@@ -5,3 +5,8 @@ import * as DiagnosticsService from "./diagnosticsservice.js";
 export {
     DiagnosticsService
 };
+
+export type {
+    DNSAuditResult,
+    DNSProbeResult
+} from "./models.js";

@@ -18,6 +18,22 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as model$0 from "../../model/models.js";
 
 /**
+ * CreateSnapshot stores the current configuration as a manually created local
+ * snapshot and returns its metadata for the snapshot list.
+ */
+export function CreateSnapshot(label: string): $CancellablePromise<model$0.SnapshotInfo> {
+    return $Call.ByID(3254567133, label);
+}
+
+/**
+ * DeleteSnapshot removes one stored snapshot. The id is validated by the store,
+ * so only existing snapshot files inside the snapshot directory can be deleted.
+ */
+export function DeleteSnapshot(id: string): $CancellablePromise<void> {
+    return $Call.ByID(208814462, id);
+}
+
+/**
  * Export returns the complete FastV configuration as indented JSON. The frontend
  * uses the string to download or copy a backup file.
  */
@@ -32,6 +48,24 @@ export function Export(): $CancellablePromise<string> {
  */
 export function Import(data: string): $CancellablePromise<model$0.BackupResult> {
     return $Call.ByID(2988498396, data);
+}
+
+/**
+ * ListSnapshots returns the stored local snapshots, newest first. Damaged
+ * snapshot files are skipped by the store instead of failing the list.
+ */
+export function ListSnapshots(): $CancellablePromise<model$0.SnapshotInfo[] | null> {
+    return $Call.ByID(1246580270);
+}
+
+/**
+ * RestoreSnapshot rolls the configuration back to the given snapshot. The store
+ * takes a safety snapshot of the current configuration first, so the rollback
+ * itself can be undone. A successful rollback may contain different settings, so
+ * the settings:changed event is emitted exactly like Import does.
+ */
+export function RestoreSnapshot(id: string): $CancellablePromise<model$0.BackupResult> {
+    return $Call.ByID(1010162169, id);
 }
 
 /**
