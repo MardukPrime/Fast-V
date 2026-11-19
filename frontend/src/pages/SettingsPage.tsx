@@ -26,6 +26,7 @@ const defaults: Settings = {
   language: "zh-CN",
   accentColor: "sky",
   layoutMode: "dock",
+  liveWaveStyle: "wave",
   floatWindowEnabled: false,
   systemProxyMode: "system",
   dockTransparency: 28,

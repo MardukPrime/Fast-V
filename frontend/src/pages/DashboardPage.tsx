@@ -21,6 +21,7 @@ type DashboardProps = {
   onStopProxy: () => void;
   onTestProxy: () => void;
   onNavigate: (page: string) => void;
+  onLiveWaveStyleChange: (style: string) => void;
 };
 
 function proxyModeLabel(mode: string) {
@@ -233,6 +234,66 @@ function waveAreaPath(values: number[], maxValue: number) {
   return `${wavePath(values, maxValue)} L 100 26 L 0 26 Z`;
 }
 
+const TODAY_SAMPLES = 180;
+
+type WavePeak = { value: number; xPercent: number; yPercent: number };
+
+// wavePeak finds the highest sample so the dashboard can annotate the peak
+// value directly above the curve. Null means "no traffic recorded yet".
+function wavePeak(values: number[], maxValue: number): WavePeak | null {
+  if (values.length === 0) return null;
+  let value = 0;
+  let index = -1;
+  values.forEach((sample, i) => {
+    if (sample > value) {
+      value = sample;
+      index = i;
+    }
+  });
+  if (index < 0 || value <= 0) return null;
+  const count = values.length;
+  const xPercent = count === 1 ? 50 : (index / (count - 1)) * 100;
+  const ratio = Math.min(1, value / Math.max(1, maxValue));
+  return { value, xPercent, yPercent: Math.max(2, Math.min(92, (1 - ratio) * 100)) };
+}
+
+// troughRate returns the smallest positive sample, ignoring idle gaps.
+function troughRate(values: number[]) {
+  let trough = 0;
+  for (const value of values) {
+    if (value > 0 && (trough === 0 || value < trough)) trough = value;
+  }
+  return trough;
+}
+
+// waveBars builds one down/up bar pair per sample for the "bars" style.
+function waveBars(down: number[], up: number[], maxValue: number) {
+  const count = Math.max(down.length, up.length);
+  const safeMax = Math.max(1, maxValue);
+  const slot = 100 / Math.max(1, count);
+  const bars = [];
+  for (let i = 0; i < count; i += 1) {
+    const downHeight = (Math.min(1, Math.max(0, (down[i] ?? 0) / safeMax))) * 24;
+    const upHeight = (Math.min(1, Math.max(0, (up[i] ?? 0) / safeMax))) * 24;
+    bars.push({
+      x: i * slot + slot * 0.12,
+      width: slot * 0.46,
+      downHeight,
+      upX: i * slot + slot * 0.62,
+      upWidth: slot * 0.26,
+      upHeight,
+    });
+  }
+  return bars;
+}
+
+function formatCompactRate(value: number) {
+  const rate = Number.isFinite(value) && value > 0 ? value : 0;
+  if (rate >= 1024 ** 2) return `${(rate / 1024 ** 2).toFixed(1)}M/s`;
+  if (rate >= 1024) return `${(rate / 1024).toFixed(0)}K/s`;
+  return `${Math.round(rate)}B/s`;
+}
+
 export default function DashboardPage(props: DashboardProps) {
   const [summary, setSummary] = createSignal<DashboardSummary | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -244,6 +305,8 @@ export default function DashboardPage(props: DashboardProps) {
   const [historyError, setHistoryError] = createSignal("");
   const [waveDown, setWaveDown] = createSignal<number[]>([]);
   const [waveUp, setWaveUp] = createSignal<number[]>([]);
+  const [todayDown, setTodayDown] = createSignal<number[]>([]);
+  const [todayUp, setTodayUp] = createSignal<number[]>([]);
 
   // Traffic history failures are non-fatal: the live proxy keeps working and the
   // card keeps showing the last successfully loaded window.
@@ -341,9 +404,24 @@ export default function DashboardPage(props: DashboardProps) {
     const up = Math.max(0, stats.uplinkRate ?? 0);
     setWaveDown((prev) => [...prev, down].slice(-WAVE_SAMPLES));
     setWaveUp((prev) => [...prev, up].slice(-WAVE_SAMPLES));
+    // The "today" curve in the traffic panel keeps a longer window (about three
+    // minutes at the one-second sampling cadence) and is not cleared on stop, so
+    // the recent shape stays visible while the proxy is off.
+    setTodayDown((prev) => [...prev, down].slice(-TODAY_SAMPLES));
+    setTodayUp((prev) => [...prev, up].slice(-TODAY_SAMPLES));
   });
 
   const waveMax = createMemo(() => Math.max(1024, ...waveDown(), ...waveUp()));
+  const todayMax = createMemo(() => Math.max(1024, ...todayDown(), ...todayUp()));
+  const waveStyle = () => {
+    const style = props.settings?.liveWaveStyle;
+    return style === "bars" || style === "minimal" ? style : "wave";
+  };
+  const peakDown = createMemo(() => wavePeak(waveDown(), waveMax()));
+  const peakUp = createMemo(() => wavePeak(waveUp(), waveMax()));
+  const troughDown = createMemo(() => troughRate(waveDown()));
+  const waveBarsData = createMemo(() => waveBars(waveDown(), waveUp(), waveMax()));
+  const todayPeakDown = createMemo(() => wavePeak(todayDown(), todayMax()));
 
   // Persisted daily traffic: load once, then refresh every 30s while the proxy
   // runs because the backend keeps flushing live deltas into today's aggregate.
@@ -360,6 +438,7 @@ export default function DashboardPage(props: DashboardProps) {
   const trafficWindow = createMemo(() => buildTrafficWindow(trafficHistory()));
   const trafficWindowTotal = createMemo(() => trafficWindow().reduce((sum, day) => sum + day.totalBytes, 0));
   const trafficHasData = createMemo(() => trafficWindowTotal() > 0);
+  const todayTotalBytes = createMemo(() => trafficWindow().find((day) => day.today)?.totalBytes ?? 0);
 
   const totalSessionTraffic = () => sessionTotalBytes(traffic());
   const downlinkRateLabel = () => (isRunning() ? formatRate(traffic()?.downlinkRate ?? 0) : "—");
@@ -461,17 +540,79 @@ export default function DashboardPage(props: DashboardProps) {
           </Show>
         </div>
 
-        <div classList={{ "dash-live-wave": true, active: isRunning() }} aria-hidden="true">
+        <div classList={{ "dash-live-wave": true, active: isRunning(), minimal: waveStyle() === "minimal" }}>
           <div class="dash-live-wave-head">
             <span class="dash-live-dot" />
             <span>{isRunning() ? t("dash.liveTraffic") : t("dash.liveTrafficIdle")}</span>
+            <div class="dash-wave-style-switch" role="group" aria-label={t("dash.waveStyleAria")}>
+              <For each={[
+                { value: "wave", label: t("dash.waveStyleWave") },
+                { value: "bars", label: t("dash.waveStyleBars") },
+                { value: "minimal", label: t("dash.waveStyleMinimal") },
+              ]}>
+                {(item) => (
+                  <button
+                    type="button"
+                    classList={{ "dash-wave-style-btn": true, active: waveStyle() === item.value }}
+                    aria-pressed={waveStyle() === item.value}
+                    onClick={() => props.onLiveWaveStyleChange(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                )}
+              </For>
+            </div>
             <span class="dash-live-wave-rates">{isRunning() ? `↓ ${downlinkRateLabel()} · ↑ ${uplinkRateLabel()}` : "—"}</span>
           </div>
-          <svg class="dash-live-wave-chart" viewBox="0 0 100 26" preserveAspectRatio="none">
-            <path class="dash-wave-area" d={waveAreaPath(waveDown(), waveMax())} />
-            <path class="dash-wave-line down" d={wavePath(waveDown(), waveMax())} />
-            <path class="dash-wave-line up" d={wavePath(waveUp(), waveMax())} />
-          </svg>
+          <div class="dash-live-wave-body">
+            <Show when={waveStyle() === "bars"} fallback={
+              <svg classList={{ "dash-live-wave-chart": true, minimal: waveStyle() === "minimal" }} viewBox="0 0 100 26" preserveAspectRatio="none">
+                <Show when={waveStyle() === "wave"}>
+                  <defs>
+                    <linearGradient id="dashLiveWaveArea" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.26" />
+                      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path class="dash-wave-area" d={waveAreaPath(waveDown(), waveMax())} />
+                </Show>
+                <path class="dash-wave-line down" d={wavePath(waveDown(), waveMax())} />
+                <path class="dash-wave-line up" d={wavePath(waveUp(), waveMax())} />
+              </svg>
+            }>
+              <svg class="dash-live-wave-chart bars" viewBox="0 0 100 26" preserveAspectRatio="none">
+                <For each={waveBarsData()}>
+                  {(bar) => (
+                    <>
+                      <rect class="dash-wave-bar down" x={bar.x} y={25 - bar.downHeight} width={bar.width} height={bar.downHeight} rx="0.4" />
+                      <rect class="dash-wave-bar up" x={bar.upX} y={25 - bar.upHeight} width={bar.upWidth} height={bar.upHeight} rx="0.3" />
+                    </>
+                  )}
+                </For>
+              </svg>
+            </Show>
+            <Show when={isRunning() && waveStyle() !== "minimal" && peakDown()}>
+              <span class="dash-wave-peak-chip down" style={{ left: `${peakDown()!.xPercent}%`, top: `${peakDown()!.yPercent}%` }}>
+                ↓ {formatCompactRate(peakDown()!.value)}
+              </span>
+            </Show>
+            <Show when={isRunning() && waveStyle() !== "minimal" && peakUp() && peakUp()!.value >= Math.max(1024, waveMax() * 0.08)}>
+              <span class="dash-wave-peak-chip up" style={{ left: `${peakUp()!.xPercent}%`, top: `${peakUp()!.yPercent}%` }}>
+                ↑ {formatCompactRate(peakUp()!.value)}
+              </span>
+            </Show>
+          </div>
+          <div class="dash-wave-stats">
+            <Show when={peakDown()} fallback={<span class="dash-wave-stat">{t("dash.liveWaveWaiting")}</span>}>
+              <span class="dash-wave-stat down">{t("dash.peakDown", { rate: formatCompactRate(peakDown()!.value) })}</span>
+            </Show>
+            <Show when={peakUp() && peakUp()!.value > 0}>
+              <span class="dash-wave-stat up">{t("dash.peakUp", { rate: formatCompactRate(peakUp()!.value) })}</span>
+            </Show>
+            <Show when={troughDown() > 0}>
+              <span class="dash-wave-stat trough">{t("dash.troughDown", { rate: formatCompactRate(troughDown()) })}</span>
+            </Show>
+          </div>
         </div>
 
         <Show when={props.proxyError}>
@@ -590,6 +731,39 @@ export default function DashboardPage(props: DashboardProps) {
               <span class="traffic-legend-item"><i class="traffic-legend-dot downlink" /> {t("dash.legendDownlink")}</span>
               <span class="traffic-legend-item"><i class="traffic-legend-dot uplink" /> {t("dash.legendUplink")}</span>
             </div>
+          </div>
+        </div>
+
+        <div classList={{ "traffic-live": true, running: isRunning() }}>
+          <div class="traffic-live-head">
+            <div>
+              <strong>{t("dash.todayLiveTitle")}</strong>
+              <span>{t("dash.todayLiveHint")}</span>
+            </div>
+            <div class="traffic-live-meta">
+              <span class="traffic-live-total">{t("dash.todayTotal", { bytes: formatBytes(todayTotalBytes()) })}</span>
+              <Show when={todayPeakDown()}>
+                <span class="traffic-live-peak">{t("dash.peakDown", { rate: formatCompactRate(todayPeakDown()!.value) })}</span>
+              </Show>
+            </div>
+          </div>
+          <div class="traffic-live-body">
+            <svg class="traffic-live-chart" viewBox="0 0 100 26" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trafficLiveArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22" />
+                  <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <path class="traffic-live-area" d={waveAreaPath(todayDown(), todayMax())} />
+              <path class="traffic-live-line down" d={wavePath(todayDown(), todayMax())} />
+              <path class="traffic-live-line up" d={wavePath(todayUp(), todayMax())} />
+            </svg>
+            <Show when={todayPeakDown()}>
+              <span class="traffic-live-peak-chip" style={{ left: `${todayPeakDown()!.xPercent}%`, top: `${todayPeakDown()!.yPercent}%` }}>
+                ↓ {formatCompactRate(todayPeakDown()!.value)}
+              </span>
+            </Show>
           </div>
         </div>
 

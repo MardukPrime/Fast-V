@@ -20,7 +20,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 11
+const storeVersion = 12
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -105,6 +105,7 @@ func DefaultSettings() Settings {
 		AccentColor:                "sky",
 		LayoutMode:                 "dock",
 		DockTransparency:           28,
+		LiveWaveStyle:              "wave",
 		FloatWindowEnabled:         false,
 		AutoUpdate:                 false,
 		UpdateIntervalMinutes:      360,
@@ -279,6 +280,10 @@ func mergeStoreData(loaded storeData) storeData {
 	// v11 added the floating traffic ball, disabled by default for existing installs.
 	if loaded.Version < 11 {
 		loaded.Settings.FloatWindowEnabled = false
+	}
+	// v12 added the switchable live traffic waveform style (wave/bars/minimal).
+	if loaded.Version < 12 {
+		loaded.Settings.LiveWaveStyle = "wave"
 	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion

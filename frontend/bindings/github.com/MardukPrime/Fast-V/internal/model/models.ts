@@ -365,6 +365,7 @@ export interface Settings {
     "accentColor": string;
     "layoutMode": string;
     "dockTransparency": number;
+    "liveWaveStyle": string;
     "floatWindowEnabled": boolean;
     "autoUpdate": boolean;
     "updateIntervalMinutes": number;

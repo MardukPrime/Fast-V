@@ -506,6 +506,19 @@ export default function App() {
     ].join(";");
   };
 
+  // Persisted UI preference for the live traffic waveform style. The dashboard
+  // exposes it as a small segmented control; saving keeps it across restarts.
+  const handleLiveWaveStyleChange = async (style: string) => {
+    const current = settings();
+    if (!current || current.liveWaveStyle === style) return;
+    try {
+      const saved = await SettingsService.Save({ ...current, liveWaveStyle: style });
+      setSettings(saved);
+    } catch {
+      // The dashboard falls back to the previous style on failure.
+    }
+  };
+
   const toggleMaximise = async () => {
     if (await AppWindow.IsMaximised()) {
       await AppWindow.Restore();
@@ -683,6 +696,7 @@ export default function App() {
               onStopProxy={handleStopProxy}
               onTestProxy={handleTestProxy}
               onNavigate={(page) => setActive(page as PageKey)}
+              onLiveWaveStyleChange={(style) => { void handleLiveWaveStyleChange(style); }}
             />
           </Show>
           <Show when={active() === "servers"}>

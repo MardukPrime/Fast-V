@@ -111,6 +111,16 @@ func normalizeSettings(input model.Settings) (model.Settings, error) {
 		return model.Settings{}, errors.New("invalid layout mode")
 	}
 
+	input.LiveWaveStyle = strings.TrimSpace(input.LiveWaveStyle)
+	if input.LiveWaveStyle == "" {
+		input.LiveWaveStyle = "wave"
+	}
+	switch input.LiveWaveStyle {
+	case "wave", "bars", "minimal":
+	default:
+		return model.Settings{}, errors.New("实时波形样式必须是 wave、bars 或 minimal")
+	}
+
 	input.SystemProxyMode = strings.TrimSpace(input.SystemProxyMode)
 	switch input.SystemProxyMode {
 	case "system", "off", "pac":

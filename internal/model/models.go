@@ -25,6 +25,7 @@ type Settings struct {
 	AccentColor                string `json:"accentColor"`
 	LayoutMode                 string `json:"layoutMode"`
 	DockTransparency           int    `json:"dockTransparency"`
+	LiveWaveStyle              string `json:"liveWaveStyle"`
 	FloatWindowEnabled         bool   `json:"floatWindowEnabled"`
 	AutoUpdate                 bool   `json:"autoUpdate"`
 	UpdateIntervalMinutes      int    `json:"updateIntervalMinutes"`
