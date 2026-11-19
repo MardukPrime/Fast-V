@@ -9927,3 +9927,97 @@ textarea:focus {
     height: 50px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Layout polish: wide-screen centering, compact stats, debugger       */
+/* ------------------------------------------------------------------ */
+
+/* Keep pages from stretching uncomfortably on very wide monitors. */
+@media (min-width: 1440px) {
+  .content > .topbar,
+  .content > .page-stack {
+    width: 100%;
+    max-width: 1320px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* Denser summary strips on list pages (servers, routing, ...). */
+.mini-stats {
+  gap: 8px;
+}
+
+.mini-stat {
+  padding: 10px 14px;
+  border-radius: 11px;
+}
+
+.mini-stat strong {
+  font-size: 18px;
+}
+
+.mini-stat span,
+.mini-stat small {
+  font-size: 8.5px;
+}
+
+/* Network diagnostics hero: a compact bar instead of repeating the page title. */
+.network-hero {
+  align-items: center;
+  padding: 15px 20px;
+  gap: 16px;
+}
+
+.network-hero h2 {
+  margin: 3px 0 2px;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.network-hero p {
+  font-size: 11px;
+}
+
+/* Rule debugger collapses into a single summary row by default. */
+.routing-debug-panel > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.routing-debug-panel > summary::-webkit-details-marker,
+.routing-debug-panel > summary::marker {
+  display: none;
+  content: "";
+}
+
+.routing-debug-panel[open] > summary {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.routing-debug-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.routing-debug-badge {
+  padding: 2px 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.routing-debug-panel[open] .routing-debug-meta .settings-section-chevron {
+  transform: rotate(90deg);
+}
+
+.routing-debug-panel .settings-section-chevron {
+  display: inline-flex;
+  transition: transform 160ms ease;
+}

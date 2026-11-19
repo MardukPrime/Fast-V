@@ -1,6 +1,7 @@
 // Dictionary for the network diagnostics page.
 export const zh: Record<string, string> = {
   "net.eyebrow": "IP & NETWORK QUALITY",
+  "net.heroTitle": "出口质量",
   "net.title": "网络诊断",
   "net.subtitle": "检测直连出口和本地代理出口的公网 IP、归属地、ASN、Cloudflare 节点、延迟与下载速度。",
   "net.includeSpeed": "包含下载测速",
@@ -200,6 +201,7 @@ export const zh: Record<string, string> = {
 
 export const en: Record<string, string> = {
   "net.eyebrow": "IP & NETWORK QUALITY",
+  "net.heroTitle": "Exit quality",
   "net.title": "Network diagnostics",
   "net.subtitle": "Check the public IP, location, ASN, Cloudflare node, latency, and download speed of the direct and local proxy exits.",
   "net.includeSpeed": "Include download test",

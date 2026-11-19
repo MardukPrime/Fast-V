@@ -211,6 +211,7 @@ export const zh: Record<string, string> = {
   // Rule debugger: offline preview of the rule that decides one destination.
   "route.debug.panel.title": "规则调试器",
   "route.debug.panel.subtitle": "输入域名、IP、进程、端口或协议，离线预演命中的路由规则与出站",
+  "route.debug.panel.badge": "离线调试",
   "route.debug.note.hint": "调试结果由当前用户规则与规则集离线计算，不会启动或重启内核；GeoIP/GeoSite 规则仍需 Xray 在运行时结合 Geo 数据判定。",
   "route.debug.input.label": "调试目标",
   "route.debug.input.placeholder": "例如 example.org、1.2.3.4、chrome.exe、443、tcp",
@@ -454,6 +455,7 @@ export const en: Record<string, string> = {
   // Rule debugger: offline preview of the rule that decides one destination.
   "route.debug.panel.title": "Rule debugger",
   "route.debug.panel.subtitle": "Enter a domain, IP, process, port or protocol to preview the matched routing rule and outbound offline",
+  "route.debug.panel.badge": "Offline",
   "route.debug.note.hint": "The result is computed offline from the current custom rules and rule sets; the core is not started or restarted. GeoIP/GeoSite rules still need Xray to evaluate them with the Geo databases at runtime.",
   "route.debug.input.label": "Debug target",
   "route.debug.input.placeholder": "e.g. example.org, 1.2.3.4, chrome.exe, 443, tcp",

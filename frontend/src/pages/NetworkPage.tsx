@@ -523,7 +523,7 @@ export default function NetworkPage(props: NetworkPageProps) {
       <section class="glass-panel network-hero">
         <div>
           <span class="network-eyebrow"><Icon name="speed" size={13} /> {t("net.eyebrow")}</span>
-          <h2>{t("net.title")}</h2>
+          <h2>{t("net.heroTitle")}</h2>
           <p>{t("net.subtitle")}</p>
         </div>
         <div class="network-actions">

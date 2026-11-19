@@ -83,6 +83,27 @@ const DEBUG_SOURCE_LABELS: Record<string, string> = {
   default: "route.debug.source.default",
 };
 
+const RULE_DEBUG_OPEN_KEY = "fastv.routing.debugOpen";
+
+// The rule debugger is an advanced tool: collapse it by default so the rule
+// list (the page's primary content) is visible immediately, and remember the
+// user's choice between visits.
+function readRuleDebugOpen() {
+  try {
+    return localStorage.getItem(RULE_DEBUG_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function persistRuleDebugOpen(open: boolean) {
+  try {
+    localStorage.setItem(RULE_DEBUG_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    // Storage may be unavailable; the toggle still works for this session.
+  }
+}
+
 function debugKinds() {
   return DEBUG_KINDS.map((item) => ({ value: item.value, label: t(item.labelKey) }));
 }
@@ -305,6 +326,7 @@ export default function RoutingPage(props: RoutingPageProps) {
   const [debugError, setDebugError] = createSignal("");
   const [debugResult, setDebugResult] = createSignal<RuleDebugResult | null>(null);
   const [debugCandidatesOpen, setDebugCandidatesOpen] = createSignal(false);
+  const [debugOpen, setDebugOpen] = createSignal(readRuleDebugOpen());
   let importInput: HTMLInputElement | undefined;
 
   const load = async () => {
@@ -752,8 +774,16 @@ export default function RoutingPage(props: RoutingPageProps) {
       {/* Rule debugger: explain which rule decides one destination without
           starting the core. It sits above the rule tables because it is the
           query tool users reach for when traffic takes the wrong outbound. */}
-      <section class="panel routing-panel">
-        <div class="panel-heading node-heading">
+      <details
+        class="panel routing-panel routing-debug-panel"
+        open={debugOpen()}
+        onToggle={(event) => {
+          const open = event.currentTarget.open;
+          setDebugOpen(open);
+          persistRuleDebugOpen(open);
+        }}
+      >
+        <summary class="panel-heading node-heading routing-debug-summary">
           <div class="heading-with-icon">
             <span class="heading-icon cyan"><Icon name="search" size={17} /></span>
             <div>
@@ -761,7 +791,11 @@ export default function RoutingPage(props: RoutingPageProps) {
               <span>{t("route.debug.panel.subtitle")}</span>
             </div>
           </div>
-        </div>
+          <div class="routing-debug-meta">
+            <span class="routing-debug-badge">{t("route.debug.panel.badge")}</span>
+            <span class="settings-section-chevron"><Icon name="chevron" size={14} /></span>
+          </div>
+        </summary>
 
         <div class="routing-note">
           <Icon name="search" size={13} />
@@ -866,7 +900,7 @@ export default function RoutingPage(props: RoutingPageProps) {
             </article>
           )}
         </Show>
-      </section>
+      </details>
 
       <section class="panel routing-panel">
         <div class="panel-heading node-heading">
