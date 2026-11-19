@@ -14,6 +14,7 @@ import Icon from "../components/Icon";
 import { LANGUAGES, t } from "../i18n";
 
 type SettingsProps = {
+  android?: boolean;
   onSaved: (settings: Settings) => void;
   onPreviewTheme: (theme: string) => void;
   onPreviewAccent: (accent: string) => void;
@@ -237,10 +238,10 @@ const systemProxyModes = (port: number) => [
   { value: "pac", label: t("set.proxyMode.pac"), hint: t("set.proxyMode.pacHint") },
 ];
 
-const coreTypes = () => [
+const coreTypes = (android?: boolean) => [
   { value: "xray", label: "Xray-core", hint: t("set.coreXrayHint") },
   { value: "singbox", label: "sing-box", hint: t("set.coreSingboxHint") },
-];
+].filter((item) => !android || item.value === "xray");
 
 const sockoptDomainStrategies = () => [
   { value: "", label: t("set.defaultValue") },
@@ -785,6 +786,11 @@ export default function SettingsPage(props: SettingsProps) {
       }
       const saved = await SettingsService.Save(input);
       setSettings(saved);
+      try {
+        setCore(await CoreService.Info());
+      } catch {
+        // Keep the previous snapshot; the next core:state event refreshes it.
+      }
       setProxyModeDirty(false);
       setHotkeyErrors(createHotkeyErrors());
       setRecordingHotkey("");
@@ -809,6 +815,11 @@ export default function SettingsPage(props: SettingsProps) {
     try {
       const resetSettings = await SettingsService.Reset();
       setSettings(resetSettings);
+      try {
+        setCore(await CoreService.Info());
+      } catch {
+        // Keep the previous snapshot.
+      }
       setHotkeyErrors(createHotkeyErrors());
       setRecordingHotkey("");
       props.onSaved(resetSettings);
@@ -1666,7 +1677,7 @@ export default function SettingsPage(props: SettingsProps) {
               <small>{t("set.coreTypeHint")}</small>
             </div>
             <div class="core-type-options">
-              {coreTypes().map((item) => (
+              {coreTypes(props.android).map((item) => (
                 <button
                   type="button"
                   classList={{ "core-type-option": true, active: settings().coreType === item.value }}
@@ -1686,10 +1697,57 @@ export default function SettingsPage(props: SettingsProps) {
           </div>
 
           <Show when={settings().coreType === "xray"} fallback={
-            <div class="core-placeholder">
-              <div class="empty-icon"><Icon name="route" size={22} /></div>
-              <strong>{t("set.singboxNotReady")}</strong>
-              <span>{t("set.singboxNotReadyHint")}</span>
+            <div class="singbox-core-block">
+              <div class="core-summary">
+                <div class="core-version">
+                  <span>{t("set.currentVersion")}</span>
+                  <strong>{core()?.version || t("set.notInstalled")}</strong>
+                </div>
+                <div class="core-version">
+                  <span>{t("set.latestVersion")}</span>
+                  <strong>{core()?.latestVersion || t("set.notChecked")}</strong>
+                </div>
+                <div class="core-version">
+                  <span>{t("set.updateMethod")}</span>
+                  <strong>{settings().coreAutoUpdate ? t("set.autoDetect") : t("set.manualCheck")}</strong>
+                </div>
+              </div>
+              <p class="core-message">{core()?.message || t("set.coreMessageDefault")}</p>
+              <div class="core-actions">
+                <button class="btn secondary" type="button" onClick={checkCore} disabled={coreBusy() !== ""}>
+                  <Icon name="refresh" size={14} /> {coreBusy() === "checking" ? t("set.checking") : t("set.checkUpdate")}
+                </button>
+                <button class="btn primary" type="button" onClick={downloadCore} disabled={coreBusy() !== ""}>
+                  <Icon name="external" size={14} /> {coreBusy() === "downloading" ? t("set.downloading") : t("set.downloadLatest")}
+                </button>
+              </div>
+              <div class="core-params">
+                <div class="setting-label">
+                  <strong>{t("set.singboxRuntimeParams")}</strong>
+                  <small>{t("set.singboxRuntimeParamsHint")}</small>
+                </div>
+                <div class="core-param-grid">
+                  <label>
+                    <span>{t("set.localPort")}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={settings().xrayLocalPort}
+                      onInput={(event) => update("xrayLocalPort", Number(event.currentTarget.value))}
+                    />
+                    <small>{t("set.localPortHint")}</small>
+                  </label>
+                  <label>
+                    <span>{t("set.proxyMode")}</span>
+                    <strong>{t("set.singboxModeHint")}</strong>
+                  </label>
+                </div>
+              </div>
+              <div class="core-path-row">
+                <span>{t("set.corePath")}</span>
+                <code>{core()?.path || t("set.notInstalled")}</code>
+              </div>
             </div>
           }>
             <div class="core-summary">

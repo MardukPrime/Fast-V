@@ -6,6 +6,17 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.9.0-pre.1] - 2026-11-20
+
+### Added
+
+- **多内核支持**：设置 → 内核设置 可在 Xray-core 与 sing-box 之间切换，保存后顶部状态与内核设置页即时刷新。
+  - sing-box 独立安装目录 `cores/singbox`，自动检测版本、检查 GitHub 最新版、下载安装与自动更新（Windows zip，macOS/Linux tar.gz；安装时保留运行所需 DLL）。
+  - 新增 sing-box 配置生成：mixed SOCKS/HTTP 入站（含入站认证）、VMess / VLESS / Trojan / Shadowsocks 出站、TLS / REALITY、WebSocket / gRPC / HTTPUpgrade 传输，以及域名后缀/关键字/正则、IP、端口、网络、进程路由规则映射。
+  - 启动前执行 `sing-box check` 校验；支持启动/停止/重启/日志/系统代理/PAC，配置日志与运行状态复用现有代理页。
+  - 桌面实测：本地 sing-box 作为 Shadowsocks 服务端，FastV 选择 sing-box 内核启动代理，SOCKS 与 HTTP 入口均可取回 1 MB 测试数据（HTTP 200）。
+  - sing-box 暂不支持 TUN、负载均衡、实时流量统计和 GeoIP/GeoSite 规则（记录警告并跳过）；节点真实链路测速仍使用 Xray 内核。
+
 ## [1.8.0-pre.1] - 2026-11-19
 
 ### Added

@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Android 5.0+（预览） · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-1.8.0--pre.1-2F6FED)
+![Version](https://img.shields.io/badge/version-1.9.0--pre.1-2F6FED)
 ![Stable](https://img.shields.io/badge/stable-1.1.0-38A169)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-2F6FED)
@@ -53,9 +53,10 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - 保存并应用
 - 切换节点时自动重启正在运行的代理
 
-### Xray 内核管理
+### 内核管理（Xray-core / sing-box）
 
-- 自动检测本地 Xray-core
+- 双内核可选：Xray-core（默认）或 sing-box；切换后独立检测、下载、更新与运行
+- 自动检测本地 Xray-core / sing-box
 - 检查 GitHub 最新版本
 - 下载并安装 Xray-core
 - SHA-256 校验
@@ -70,6 +71,8 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - Xray DNS 服务器、DNS 查询策略、路由域名策略和 TUN MTU 配置
 - FinalMask 传输伪装和 Sockopt 底层网络参数
 - 本地 Xray API、StatsService 和统计策略配置
+- sing-box 配置生成（mixed SOCKS/HTTP、VMess/VLESS/Trojan/Shadowsocks、TLS/REALITY、WS/gRPC/HTTPUpgrade）
+- sing-box 启动前 `check` 校验、版本记录与自动更新；暂不支持 TUN/负载均衡/实时统计
 
 ### 本地代理与 TUN
 
@@ -208,7 +211,7 @@ TUN 模式需要：
 
 ## 下载
 
-最新预览版 **v1.8.0-pre.1**（包含 Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
+最新预览版 **v1.9.0-pre.1**（多内核 + Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
@@ -341,7 +344,6 @@ go build -tags "production,embeddedcore" -trimpath -o bin/fastv-embedded.exe .
 - **Android M3**：`VpnService` + JNI + tun2socks 基础 TCP，实现系统级代理
 - **Android M4**：UDP/DNS、分应用代理、绕过局域网、GeoIP/GeoSite 数据与内嵌流量统计
 - **Android M5**：正式签名 AAB、Play 内部/封闭测试轨道
-- sing-box 内核
 - Hysteria2 / TUIC 协议
 - 连接详情（连接级列表受 Xray API 限制，暂以流量/在线统计替代）
 - macOS 签名/公证，Linux 包管理与应用自更新
@@ -357,6 +359,7 @@ go build -tags "production,embeddedcore" -trimpath -o bin/fastv-embedded.exe .
 
 - [用户手册](docs/USER_GUIDE.md)
 - [Android Phase 2 计划](docs/product/ANDROID_PHASE2.md)
+- [sing-box 内核集成](docs/cores/singbox/README.md)
 - [常见问题 FAQ](docs/product/FAQ.md)
 - [节点配置编辑器](docs/cores/xray/node-editor.md)
 - [网络诊断](docs/network-diagnostics.md)

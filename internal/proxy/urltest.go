@@ -760,7 +760,11 @@ func URLTestNodes(ctx context.Context, core CoreInfoProvider, nodes []model.Node
 	}
 	corePath := ""
 	if core != nil {
-		corePath = strings.TrimSpace(core.Info().Path)
+		if xrayProvider, ok := core.(interface{ XrayInfo() model.CoreInfo }); ok {
+			corePath = strings.TrimSpace(xrayProvider.XrayInfo().Path)
+		} else {
+			corePath = strings.TrimSpace(core.Info().Path)
+		}
 	}
 	candidates := make([]model.Node, 0, len(selections))
 	for _, selection := range selections {

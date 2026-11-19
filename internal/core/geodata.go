@@ -51,6 +51,9 @@ func (m *Manager) GeoDataInfo() model.GeoDataInfo {
 
 // UpdateGeoData downloads the latest Xray release and updates only *dat assets.
 func (m *Manager) UpdateGeoData(ctx context.Context) (model.GeoDataInfo, error) {
+	if !m.spec.GeoData {
+		return model.GeoDataInfo{}, fmt.Errorf("%s 不使用 GeoData 文件", m.spec.DisplayName)
+	}
 	m.opMu.Lock()
 	defer m.opMu.Unlock()
 
@@ -58,7 +61,7 @@ func (m *Manager) UpdateGeoData(ctx context.Context) (model.GeoDataInfo, error) 
 	if err != nil {
 		return model.GeoDataInfo{}, err
 	}
-	asset, err := findReleaseAsset(release)
+	asset, err := findReleaseAssetFor(release, m.spec)
 	if err != nil {
 		return model.GeoDataInfo{}, err
 	}

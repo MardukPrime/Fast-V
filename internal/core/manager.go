@@ -22,6 +22,7 @@ const xrayReleaseAPI = "https://api.github.com/repos/XTLS/Xray-core/releases/lat
 type Manager struct {
 	mu         sync.RWMutex
 	opMu       sync.Mutex
+	spec       coreSpec
 	dir        string
 	client     *http.Client
 	releaseURL string
@@ -31,17 +32,27 @@ type Manager struct {
 }
 
 func NewManager(dataDir string) *Manager {
-	dir := filepath.Join(dataDir, "cores", "xray")
+	return NewManagerFor(KindXray, dataDir)
+}
+
+// NewManagerFor creates a core manager for one built-in core kind.
+func NewManagerFor(kind Kind, dataDir string) *Manager {
+	spec, err := specForKind(kind)
+	if err != nil {
+		spec = xraySpec()
+	}
+	dir := filepath.Join(dataDir, "cores", spec.DirName)
 	return &Manager{
-		dir: dir,
+		spec: spec,
+		dir:  dir,
 		client: &http.Client{
 			Timeout: 15 * time.Minute,
 		},
-		releaseURL: xrayReleaseAPI,
+		releaseURL: spec.ReleaseAPI,
 		info: model.CoreInfo{
-			Path:    filepath.Join(dir, coreBinaryName()),
+			Path:    filepath.Join(dir, spec.BinaryName),
 			Status:  "not_installed",
-			Message: "尚未安装 Xray-core",
+			Message: "尚未安装 " + spec.DisplayName,
 		},
 	}
 }
@@ -69,19 +80,19 @@ func (m *Manager) Info() model.CoreInfo {
 
 func (m *Manager) DetectInstalled(ctx context.Context) model.CoreInfo {
 	info := m.Info()
-	info.Path = filepath.Join(m.dir, coreBinaryName())
+	info.Path = filepath.Join(m.dir, m.spec.BinaryName)
 	info.AutoUpdate = m.autoUpdate
 
 	if _, err := os.Stat(info.Path); err != nil {
 		info.Installed = false
 		info.Version = ""
 		info.Status = "not_installed"
-		info.Message = "尚未安装 Xray-core"
+		info.Message = "尚未安装 " + m.spec.DisplayName
 		m.setInfo(info)
 		return info
 	}
 
-	version, err := readCoreVersion(ctx, info.Path)
+	version, err := m.spec.readVersion(ctx, info.Path)
 	if err != nil {
 		info.Installed = true
 		info.Status = "error"
@@ -93,7 +104,7 @@ func (m *Manager) DetectInstalled(ctx context.Context) model.CoreInfo {
 	info.Installed = true
 	info.Version = version
 	info.Status = "ready"
-	info.Message = "Xray-core 已就绪"
+	info.Message = m.spec.DisplayName + " 已就绪"
 	m.setInfo(info)
 	return info
 }
@@ -107,7 +118,7 @@ func (m *Manager) CheckLatest(ctx context.Context) (model.CoreInfo, error) {
 func (m *Manager) checkLatest(ctx context.Context) (model.CoreInfo, error) {
 	info := m.Info()
 	info.Status = "checking"
-	info.Message = "正在检查 Xray-core 更新"
+	info.Message = "正在检查 " + m.spec.DisplayName + " 更新"
 	m.setInfo(info)
 
 	release, err := m.fetchLatestRelease(ctx)
@@ -123,13 +134,13 @@ func (m *Manager) checkLatest(ctx context.Context) (model.CoreInfo, error) {
 	switch {
 	case !info.Installed:
 		info.Status = "not_installed"
-		info.Message = "Xray-core 尚未安装，可下载最新版本"
+		info.Message = m.spec.DisplayName + " 尚未安装，可下载最新版本"
 	case compareVersions(info.Version, info.LatestVersion) >= 0:
 		info.Status = "up_to_date"
-		info.Message = "Xray-core 已是最新版本"
+		info.Message = m.spec.DisplayName + " 已是最新版本"
 	default:
 		info.Status = "update_available"
-		info.Message = "发现 Xray-core 新版本"
+		info.Message = "发现 " + m.spec.DisplayName + " 新版本"
 	}
 	m.setInfo(info)
 	return info, nil
@@ -144,7 +155,7 @@ func (m *Manager) DownloadLatest(ctx context.Context) (model.CoreInfo, error) {
 func (m *Manager) downloadLatest(ctx context.Context) (model.CoreInfo, error) {
 	info := m.Info()
 	info.Status = "downloading"
-	info.Message = "正在下载 Xray-core"
+	info.Message = "正在下载 " + m.spec.DisplayName
 	m.setInfo(info)
 
 	release, err := m.fetchLatestRelease(ctx)
@@ -152,24 +163,24 @@ func (m *Manager) downloadLatest(ctx context.Context) (model.CoreInfo, error) {
 		return m.fail(info, err)
 	}
 
-	asset, err := findReleaseAsset(release)
+	asset, err := findReleaseAssetFor(release, m.spec)
 	if err != nil {
 		return m.fail(info, err)
 	}
 
-	stagingDir, err := os.MkdirTemp(filepath.Dir(m.dir), ".xray-staging-")
+	stagingDir, err := os.MkdirTemp(filepath.Dir(m.dir), ".core-staging-")
 	if err != nil {
 		if mkErr := os.MkdirAll(filepath.Dir(m.dir), 0o700); mkErr != nil {
 			return m.fail(info, mkErr)
 		}
-		stagingDir, err = os.MkdirTemp(filepath.Dir(m.dir), ".xray-staging-")
+		stagingDir, err = os.MkdirTemp(filepath.Dir(m.dir), ".core-staging-")
 		if err != nil {
 			return m.fail(info, err)
 		}
 	}
 	defer os.RemoveAll(stagingDir)
 
-	archivePath := filepath.Join(stagingDir, "xray.zip")
+	archivePath := filepath.Join(stagingDir, "core-archive")
 	checksum, err := downloadFile(ctx, m.client, asset.BrowserDownloadURL, archivePath)
 	if err != nil {
 		return m.fail(info, err)
@@ -179,12 +190,15 @@ func (m *Manager) downloadLatest(ctx context.Context) (model.CoreInfo, error) {
 	}
 
 	extractDir := filepath.Join(stagingDir, "extracted")
-	if err := extractZip(archivePath, extractDir); err != nil {
+	if err := extractArchive(archivePath, extractDir); err != nil {
 		return m.fail(info, err)
 	}
 
-	stagedBinary := filepath.Join(extractDir, coreBinaryName())
-	version, err := readCoreVersion(ctx, stagedBinary)
+	stagedBinary, err := m.spec.extractedBinary(extractDir)
+	if err != nil {
+		return m.fail(info, err)
+	}
+	version, err := m.spec.readVersion(ctx, stagedBinary)
 	if err != nil {
 		return m.fail(info, fmt.Errorf("downloaded core failed validation: %w", err))
 	}
@@ -192,7 +206,7 @@ func (m *Manager) downloadLatest(ctx context.Context) (model.CoreInfo, error) {
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return m.fail(info, err)
 	}
-	if err := installCoreFiles(extractDir, m.dir); err != nil {
+	if err := installCoreFiles(extractDir, m.dir, m.spec); err != nil {
 		return m.fail(info, err)
 	}
 	if err := writeCoreVersionRecord(m.dir, coreVersionRecord{
@@ -209,7 +223,7 @@ func (m *Manager) downloadLatest(ctx context.Context) (model.CoreInfo, error) {
 	info.AssetName = asset.Name
 	info.CheckedAt = model.NowRFC3339()
 	info.Status = "ready"
-	info.Message = "Xray-core 已更新到 " + version
+	info.Message = m.spec.DisplayName + " 已更新到 " + version
 	m.setInfo(info)
 	return info, nil
 }
@@ -226,7 +240,7 @@ func (m *Manager) AutoUpdate(ctx context.Context) (model.CoreUpdateResult, error
 		return model.CoreUpdateResult{
 			Updated: false,
 			Info:    info,
-			Message: "Xray-core 已是最新版本",
+			Message: m.spec.DisplayName + " 已是最新版本",
 		}, nil
 	}
 
@@ -237,7 +251,7 @@ func (m *Manager) AutoUpdate(ctx context.Context) (model.CoreUpdateResult, error
 	return model.CoreUpdateResult{
 		Updated: true,
 		Info:    updated,
-		Message: "Xray-core 已更新到 " + updated.Version,
+		Message: m.spec.DisplayName + " 已更新到 " + updated.Version,
 	}, nil
 }
 
@@ -251,19 +265,19 @@ func (m *Manager) fetchLatestRelease(ctx context.Context) (*releaseInfo, error) 
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check Xray-core release: %w", err)
+		return nil, fmt.Errorf("failed to check core release: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Xray-core release check returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("core release check returned HTTP %d", resp.StatusCode)
 	}
 
 	var release releaseInfo
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&release); err != nil {
-		return nil, fmt.Errorf("failed to decode Xray-core release: %w", err)
+		return nil, fmt.Errorf("failed to decode core release: %w", err)
 	}
 	if release.TagName == "" {
-		return nil, errors.New("Xray-core release has no tag")
+		return nil, errors.New("core release has no tag")
 	}
 	return &release, nil
 }

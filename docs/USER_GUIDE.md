@@ -673,9 +673,12 @@ Fast-V.exe "fastv://node?link=vless://..." "fastv://import?url=https://example.c
 
 ### 11.2 内核与 GeoData 更新
 
-- **设置 → 内核设置**：查看当前/最新 Xray-core 版本，检查更新、下载最新版；可开启「自动检查并下载 Xray 内核更新」。
-- 「GeoData 资源」区域可刷新状态、下载/更新 `geoip.dat` 与 `geosite.dat`；路由中的 GeoIP/GeoSite 规则依赖这些资源。
+- **设置 → 内核设置**：可选择 **Xray-core** 或 **sing-box** 内核；查看当前/最新版本，检查更新、下载最新版；可开启「自动检查并下载内核更新」。
+- 两个内核分别存放在数据目录的 `cores/xray` 与 `cores/singbox`，互不影响；切换内核后代理需重新启动。
+- **sing-box 支持范围**：VMess / VLESS / Trojan / Shadowsocks，TLS / REALITY，WebSocket / gRPC / HTTPUpgrade 传输，以及域名、IP、端口、网络、进程路由规则。TUN、负载均衡、实时流量统计与 GeoIP/GeoSite 规则暂未接入（相关规则会被跳过并记录警告）；节点真实链路测速仍使用 Xray 内核。
+- **Xray-core 专属**：「GeoData 资源」区域可刷新状态、下载/更新 `geoip.dat` 与 `geosite.dat`；路由中的 GeoIP/GeoSite 规则依赖这些资源。sing-box 不使用这两个文件。
 - 内核或 GeoData 更新后，重启代理生效。
+- Android 预览版内置 Xray 内核，不提供 sing-box 切换。
 
 ### 11.3 停止与退出
 

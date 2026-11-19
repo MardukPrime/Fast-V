@@ -338,7 +338,9 @@ export default function App() {
     const offSettings = Events.On("settings:changed", (event) => {
       const next = event.data as Settings;
       if (!next) return;
+      const coreChanged = next.coreType !== settings()?.coreType;
       setSettings(next);
+      if (coreChanged) void refreshCoreInfo();
       setDockTransparency(next.dockTransparency || 28);
       applyTheme(next.theme);
       applyAccent(next.accentColor);
@@ -483,8 +485,18 @@ export default function App() {
     }
   };
 
+  const refreshCoreInfo = async () => {
+    try {
+      setCore(await CoreService.Info());
+    } catch {
+      // Keep the previous snapshot; the core:state event will refresh it.
+    }
+  };
+
   const handleSettingsSaved = (next: Settings) => {
+    const coreChanged = next.coreType !== settings()?.coreType;
     setSettings(next);
+    if (coreChanged) void refreshCoreInfo();
     setDockTransparency(next.dockTransparency || 28);
     applyTheme(next.theme);
     applyAccent(next.accentColor);
@@ -602,7 +614,7 @@ export default function App() {
             <div class="footer-status">
               <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
               <div>
-                <strong>{core()?.installed ? t("shell.xrayVersion", { version: core()?.version ?? "" }) : t("shell.coreMissing")}</strong>
+                <strong>{core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${core()?.version ?? ""}` : t("shell.coreMissing")}</strong>
                 <small>{core()?.installed ? t("shell.coreReady") : t("shell.coreHint")}</small>
               </div>
             </div>
@@ -651,7 +663,7 @@ export default function App() {
               <span class="status-chip"><span class="status-dot online" />{t("shell.localDataReady")}</span>
               <span classList={{ "status-chip": true, muted: !core()?.installed }}>
                 <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
-                {core()?.installed ? t("shell.xrayVersion", { version: core()?.version ?? "" }) : t("shell.coreMissing")}
+                {core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${core()?.version ?? ""}` : t("shell.coreMissing")}
               </span>
               <span classList={{ "status-chip": true, "proxy-running": proxy().status === "running" }}>
                 <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
@@ -715,7 +727,7 @@ export default function App() {
             <LogsPage proxyState={proxy()} onNavigate={(page) => setActive(page as PageKey)} />
           </Show>
           <Show when={active() === "settings"}>
-            <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewLanguage={setLanguage} onPreviewDockTransparency={setDockTransparency} />
+            <SettingsPage android={isAndroidPlatform()} onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewLanguage={setLanguage} onPreviewDockTransparency={setDockTransparency} />
           </Show>
 
         </main>

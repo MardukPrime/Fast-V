@@ -432,9 +432,15 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.mu.Unlock()
 	}()
 	settings := m.store.Settings()
-	if settings.CoreType != "xray" {
+	singboxMode := settings.CoreType == "singbox"
+	if embeddedCoreEnabled() && singboxMode {
+		m.appendLog("warning", "core", "内嵌内核仅支持 Xray 配置，已忽略 sing-box 选择")
+		settings.CoreType = "xray"
+		singboxMode = false
+	}
+	if settings.CoreType != "xray" && !singboxMode {
 		m.mu.Unlock()
-		return m.fail("only Xray-core is currently supported")
+		return m.fail("only Xray-core and sing-box are currently supported")
 	}
 	coreInfo := m.core.Info()
 	if !coreInfo.Installed || coreInfo.Path == "" {
@@ -449,8 +455,14 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	enabledNodes := enabledProxyNodes(m.store.ListNodes())
 	useLoadBalance := settings.LoadBalanceEnabled && !settings.TunMode && len(enabledNodes) >= 2
 	var warnings []string
+	if singboxMode && settings.LoadBalanceEnabled {
+		warnings = append(warnings, "sing-box 暂不支持负载均衡，已回退单节点")
+		useLoadBalance = false
+	}
 	if settings.LoadBalanceEnabled {
 		switch {
+		case singboxMode:
+			// already reported above
 		case settings.TunMode:
 			warnings = append(warnings, "TUN 模式下暂不支持负载均衡，已回退单节点")
 		case len(enabledNodes) < 2:
@@ -474,6 +486,14 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 			statsSkippedForPort = true
 		}
 	}
+	if settings.TunMode && singboxMode {
+		m.mu.Unlock()
+		return m.fail("sing-box 暂不支持 TUN 模式，请切换为 Xray 内核或关闭 TUN")
+	}
+	if singboxMode && (settings.StatsEnabled || settings.XrayAPIEnabled) {
+		settings.StatsEnabled = false
+		m.appendLog("warning", "stats", "sing-box 实时流量统计暂未接入，本次运行将不显示实时速率")
+	}
 	if settings.TunMode {
 		if err := preflightTun(coreInfo.Path); err != nil {
 			m.mu.Unlock()
@@ -486,7 +506,15 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		config   []byte
 		buildErr error
 	)
-	if useLoadBalance {
+	if singboxMode {
+		active, ok := m.store.ActiveNode()
+		if !ok {
+			m.mu.Unlock()
+			return m.fail("no active node selected")
+		}
+		node = active
+		config, buildErr = BuildSingBoxConfig(node, settings, customRules...)
+	} else if useLoadBalance {
 		config, buildErr = BuildLoadBalanceConfig(enabledNodes, settings, customRules...)
 		if buildErr != nil {
 			// A single broken node must not take the whole proxy down: keep the
@@ -495,7 +523,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 			useLoadBalance = false
 		}
 	}
-	if !useLoadBalance {
+	if !singboxMode && !useLoadBalance {
 		if node.ID == "" {
 			active, ok := m.store.ActiveNode()
 			if !ok {
@@ -515,7 +543,11 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.mu.Unlock()
 		return m.fail(err.Error())
 	}
-	configPath := filepath.Join(runtimeDir, "xray-config.json")
+	configFileName := "xray-config.json"
+	if singboxMode {
+		configFileName = "sing-box-config.json"
+	}
+	configPath := filepath.Join(runtimeDir, configFileName)
 	if err := os.WriteFile(configPath, config, 0o600); err != nil {
 		m.mu.Unlock()
 		return m.fail(err.Error())
@@ -573,38 +605,50 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		return m.startEmbeddedCore(ctx, config)
 	}
 
-	m.appendLog("info", "core", "正在校验 Xray 配置")
-	testCmd := exec.CommandContext(ctx, coreInfo.Path, "run", "-test", "-config", configPath)
+	coreName := "Xray"
+	testArgs := []string{"run", "-test", "-config", configPath}
+	runArgs := []string{"run", "-config", configPath}
+	if singboxMode {
+		coreName = "sing-box"
+		testArgs = []string{"check", "-c", configPath}
+		runArgs = []string{"run", "-c", configPath}
+	}
+	m.appendLog("info", "core", "正在校验 "+coreName+" 配置")
+	testCmd := exec.CommandContext(ctx, coreInfo.Path, testArgs...)
 	hideWindow(testCmd)
-	testCmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
+	if !singboxMode {
+		testCmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
+	}
 	if output, err := testCmd.CombinedOutput(); err != nil {
 		if autoRestart && m.userStopRequested() {
 			return m.abortAutoRestart(nil, nil, nil)
 		}
-		return m.fail(fmt.Sprintf("Xray config validation failed: %s", strings.TrimSpace(string(output))))
+		return m.fail(fmt.Sprintf("%s 配置校验失败: %s", coreName, strings.TrimSpace(string(output))))
 	}
-	m.appendLog("info", "core", "Xray 配置校验通过")
+	m.appendLog("info", "core", coreName+" 配置校验通过")
 	if autoRestart && m.userStopRequested() {
 		return m.abortAutoRestart(nil, nil, nil)
 	}
 
-	cmd := exec.Command(coreInfo.Path, "run", "-config", configPath)
+	cmd := exec.Command(coreInfo.Path, runArgs...)
 	hideWindow(cmd)
-	cmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
+	if !singboxMode {
+		cmd.Env = append(os.Environ(), "XRAY_LOCATION_ASSET="+filepath.Dir(coreInfo.Path))
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return m.fail(fmt.Sprintf("failed to open Xray stdout: %v", err))
+		return m.fail(fmt.Sprintf("failed to open %s stdout: %v", coreName, err))
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return m.fail(fmt.Sprintf("failed to open Xray stderr: %v", err))
+		return m.fail(fmt.Sprintf("failed to open %s stderr: %v", coreName, err))
 	}
 	if err := cmd.Start(); err != nil {
-		return m.fail(fmt.Sprintf("failed to start Xray-core: %v", err))
+		return m.fail(fmt.Sprintf("failed to start %s: %v", coreInfo.Version, err))
 	}
 	go m.captureLogStream(stdout, "stdout")
 	go m.captureLogStream(stderr, "stderr")
-	m.appendLog("info", "core", fmt.Sprintf("Xray-core 已启动，PID %d", cmd.Process.Pid))
+	m.appendLog("info", "core", fmt.Sprintf("%s 已启动，PID %d", coreName, cmd.Process.Pid))
 	job, err := newProcessJob()
 	if err != nil {
 		_ = cmd.Process.Kill()
@@ -683,7 +727,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	}
 	m.appendLog("info", "core", "代理已进入运行状态")
 	m.emit(state)
-	if settings.StatsEnabled || settings.XrayAPIEnabled {
+	if !singboxMode && (settings.StatsEnabled || settings.XrayAPIEnabled) {
 		m.appendLog("info", "stats", fmt.Sprintf("实时流量统计已启用（采样间隔 %s）", trafficSampleInterval))
 		m.startTrafficSampler(coreInfo.Path, settings.XrayAPIPort)
 	}

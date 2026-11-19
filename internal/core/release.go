@@ -36,7 +36,11 @@ func coreBinaryName() string {
 }
 
 func findReleaseAsset(release *releaseInfo) (releaseAsset, error) {
-	wanted, err := coreAssetName()
+	return findReleaseAssetFor(release, xraySpec())
+}
+
+func findReleaseAssetFor(release *releaseInfo, spec coreSpec) (releaseAsset, error) {
+	wanted, err := spec.assetName(release.TagName)
 	if err != nil {
 		return releaseAsset{}, err
 	}
@@ -45,10 +49,14 @@ func findReleaseAsset(release *releaseInfo) (releaseAsset, error) {
 			return asset, nil
 		}
 	}
-	return releaseAsset{}, fmt.Errorf("Xray-core release has no asset %s", wanted)
+	return releaseAsset{}, fmt.Errorf("%s release has no asset %s", spec.DisplayName, wanted)
 }
 
 func coreAssetName() (string, error) {
+	return xrayAssetName()
+}
+
+func xrayAssetName() (string, error) {
 	switch runtime.GOOS {
 	case "windows":
 		switch runtime.GOARCH {
@@ -76,6 +84,10 @@ func coreAssetName() (string, error) {
 }
 
 func readCoreVersion(ctx context.Context, binary string) (string, error) {
+	return xraySpec().readVersion(ctx, binary)
+}
+
+func readCoreVersionLegacy(ctx context.Context, binary string) (string, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 

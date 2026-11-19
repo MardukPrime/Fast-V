@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/MardukPrime/Fast-V/internal/coremode"
 	"github.com/MardukPrime/Fast-V/internal/hotkey"
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/store"
@@ -86,6 +87,10 @@ func (s *SettingsService) TunFallback() (model.Settings, error) {
 // normalizeSettings applies the trimming/defaulting rules and validates every
 // field of the user-editable settings. It has no side effects.
 func normalizeSettings(input model.Settings) (model.Settings, error) {
+	// Android embeds Xray-core; the external sing-box core cannot run there.
+	if coremode.Enabled() {
+		input.CoreType = "xray"
+	}
 	input.Theme = strings.TrimSpace(input.Theme)
 	input.Language = strings.TrimSpace(input.Language)
 	input.AccentColor = strings.TrimSpace(input.AccentColor)

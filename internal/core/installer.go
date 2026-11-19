@@ -1,7 +1,9 @@
 package core
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -104,23 +106,102 @@ func extractZip(archivePath string, destination string) error {
 	return nil
 }
 
-func installCoreFiles(sourceDir string, destinationDir string) error {
-	entries, err := os.ReadDir(sourceDir)
+func installCoreFiles(sourceDir string, destinationDir string, spec coreSpec) error {
+	return filepath.WalkDir(sourceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		isBinary := strings.EqualFold(entry.Name(), spec.BinaryName)
+		target := filepath.Join(destinationDir, filepath.Base(relative))
+		mode := os.FileMode(0o600)
+		if isBinary {
+			mode = 0o755
+			target = filepath.Join(destinationDir, spec.BinaryName)
+		}
+		return copyFileAtomic(path, target, mode)
+	})
+}
+
+// extractArchive extracts a .zip or .tar.gz/.tgz core release archive.
+func extractArchive(archivePath string, destination string) error {
+	lower := strings.ToLower(archivePath)
+	switch {
+	case strings.HasSuffix(lower, ".zip"):
+		return extractZip(archivePath, destination)
+	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
+		return extractTarGz(archivePath, destination)
+	default:
+		// Staging files have no extension; sniff the ZIP magic instead.
+		head := make([]byte, 4)
+		file, err := os.Open(archivePath)
+		if err != nil {
+			return err
+		}
+		_, readErr := io.ReadFull(file, head)
+		_ = file.Close()
+		if readErr == nil && head[0] == 'P' && head[1] == 'K' {
+			return extractZip(archivePath, destination)
+		}
+		return fmt.Errorf("unsupported core archive format")
+	}
+}
+
+func extractTarGz(archivePath string, destination string) error {
+	file, err := os.Open(archivePath)
 	if err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() {
+	defer file.Close()
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
+	reader := tar.NewReader(gzipReader)
+	cleanDestination := filepath.Clean(destination) + string(os.PathSeparator)
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		name := filepath.Clean(header.Name)
+		if name == "." || strings.HasPrefix(name, "..") || filepath.IsAbs(name) {
 			continue
 		}
-		source := filepath.Join(sourceDir, entry.Name())
-		target := filepath.Join(destinationDir, entry.Name())
-		mode := os.FileMode(0o600)
-		if entry.Name() == coreBinaryName() {
-			mode = 0o755
+		target := filepath.Join(destination, name)
+		if !strings.HasPrefix(filepath.Clean(target), cleanDestination) {
+			return fmt.Errorf("invalid archive path: %s", header.Name)
 		}
-		if err := copyFileAtomic(source, target, mode); err != nil {
-			return err
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0o700); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				return err
+			}
+			dest, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(dest, reader); err != nil {
+				dest.Close()
+				return err
+			}
+			if err := dest.Close(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
