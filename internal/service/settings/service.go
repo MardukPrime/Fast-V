@@ -27,11 +27,25 @@ var accentColors = map[string]struct{}{
 
 // SettingsService manages basic application settings.
 type SettingsService struct {
-	store *store.Store
+	store   *store.Store
+	onSaved func(model.Settings)
 }
 
 func New(store *store.Store) *SettingsService {
 	return &SettingsService{store: store}
+}
+
+// SetOnSaved registers a callback invoked after a settings mutation is persisted
+// and broadcast. Bootstrap uses it to apply window-level settings (for example
+// the floating traffic ball) without embedding window management in the service.
+func (s *SettingsService) SetOnSaved(fn func(model.Settings)) {
+	s.onSaved = fn
+}
+
+func (s *SettingsService) notifySaved(settings model.Settings) {
+	if s.onSaved != nil {
+		s.onSaved(settings)
+	}
 }
 
 func (s *SettingsService) ServiceName() string {
@@ -54,6 +68,7 @@ func (s *SettingsService) Save(input model.Settings) (model.Settings, error) {
 		return model.Settings{}, err
 	}
 	emitSettingsChanged(normalized)
+	s.notifySaved(normalized)
 	return normalized, nil
 }
 
@@ -232,6 +247,7 @@ func (s *SettingsService) Reset() (model.Settings, error) {
 		return model.Settings{}, err
 	}
 	emitSettingsChanged(defaults)
+	s.notifySaved(defaults)
 	return defaults, nil
 }
 

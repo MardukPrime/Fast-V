@@ -12,6 +12,7 @@ import (
 
 	"github.com/MardukPrime/Fast-V/internal/applog"
 	"github.com/MardukPrime/Fast-V/internal/buildinfo"
+	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/platform"
 	"github.com/MardukPrime/Fast-V/internal/selfcheck"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
@@ -20,6 +21,7 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
 	environment "github.com/MardukPrime/Fast-V/internal/service/environment"
+	floatwinservice "github.com/MardukPrime/Fast-V/internal/service/floatwin"
 	historyservice "github.com/MardukPrime/Fast-V/internal/service/history"
 	"github.com/MardukPrime/Fast-V/internal/service/node"
 	nodegroupservice "github.com/MardukPrime/Fast-V/internal/service/nodegroup"
@@ -99,6 +101,7 @@ func Run(assets embed.FS) (runErr error) {
 	rescueSvc := rescue.New(st, proxySvc)
 	ruleDebugSvc := ruledebug.New(st, ruleSetSvc.ExpandedRules)
 	environmentSvc := environment.New(st)
+	floatWinSvc := floatwinservice.New(st)
 	// Rule-set subscriptions are expanded into routing rules at configuration
 	// build time; the provider keeps the generated config independent of which
 	// sets happened to download successfully.
@@ -121,6 +124,12 @@ func Run(assets embed.FS) (runErr error) {
 
 	// Deep links arrive from the fastv:// protocol handler (first launch and
 	// second instance launches) and from share links passed on the command line.
+	// Window-level settings (currently the floating traffic ball) are applied
+	// after the settings service persists and broadcasts a change.
+	settingsSvc.SetOnSaved(func(settings model.Settings) {
+		floatWinSvc.Sync(settings.FloatWindowEnabled)
+	})
+
 	deepLinks := newDeepLinkIntegration(subSvc, nodeSvc)
 	deepLinks.registerURLScheme()
 
@@ -145,6 +154,7 @@ func Run(assets embed.FS) (runErr error) {
 			application.NewService(rescueSvc),
 			application.NewService(ruleDebugSvc),
 			application.NewService(environmentSvc),
+			application.NewService(floatWinSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
@@ -182,6 +192,15 @@ func Run(assets embed.FS) (runErr error) {
 	// the same time.
 	newTray(app, st, window, proxySvc, settingsSvc, appSvc)
 	startGlobalHotkeys(st, settingsSvc, proxySvc)
+
+	// The floating ball opens the main window on click and follows the persisted
+	// toggle; enabling it must survive restarts.
+	floatWinSvc.OpenMainHandler = func() {
+		window.UnMinimise()
+		window.Show()
+		window.Focus()
+	}
+	floatWinSvc.Sync(st.Settings().FloatWindowEnabled)
 
 	return app.Run()
 }

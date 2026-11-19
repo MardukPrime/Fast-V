@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-1.0.1-2F6FED)
+![Version](https://img.shields.io/badge/version-1.1.0-2F6FED)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
@@ -191,7 +191,7 @@ TUN 模式需要：
 
 ## 下载
 
-最新稳定版 **v1.0.1** 由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
+最新稳定版 **v1.1.0** 由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
@@ -311,6 +311,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 配置快照与回滚：本地最多保留 20 个配置快照，一键回滚（回滚前自动创建安全快照，可撤销）；支持快照导出为 JSON 与从本地备份文件导入快照
 - 诊断与运行日志持久化：运行日志写入 `<数据目录>/logs/fastv.log`（5 MB 轮转、保留 3 个文件），启动/退出/崩溃与内核日志均可追溯
 - 敏感配置加密：Windows 上 WebDAV 密码与入站认证密码使用当前用户 DPAPI 加密后写入本地配置（备份/快照文件仍为明文，需妥善保管）
+- 流量悬浮球（可选，默认关闭）：桌面常驻圆形悬浮球实时显示上下行速率与波形，支持拖动、置顶、单击回到主界面
 - 首次运行引导：三步介绍代理模式、导入方式与快照/救援/诊断/日志能力，仅显示一次
 - 完整文档：[用户手册](docs/USER_GUIDE.md) 与 [常见问题 FAQ](docs/product/FAQ.md)
 - TUN 自检与回退向导：检查平台、管理员权限、内核与 wintun.dll、代理状态，失败时给出修复建议并可一键切回系统代理

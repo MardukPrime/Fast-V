@@ -20,7 +20,7 @@ import (
 	"unicode/utf8"
 )
 
-const storeVersion = 10
+const storeVersion = 11
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -105,6 +105,7 @@ func DefaultSettings() Settings {
 		AccentColor:                "sky",
 		LayoutMode:                 "dock",
 		DockTransparency:           28,
+		FloatWindowEnabled:         false,
 		AutoUpdate:                 false,
 		UpdateIntervalMinutes:      360,
 		ProxyMode:                  "rule",
@@ -274,6 +275,10 @@ func mergeStoreData(loaded storeData) storeData {
 	if loaded.Version < 10 {
 		loaded.Settings.AutoRestartCore = true
 		loaded.Settings.SubscriptionUpdateViaProxy = true
+	}
+	// v11 added the floating traffic ball, disabled by default for existing installs.
+	if loaded.Version < 11 {
+		loaded.Settings.FloatWindowEnabled = false
 	}
 	if loaded.Version < storeVersion {
 		loaded.Version = storeVersion

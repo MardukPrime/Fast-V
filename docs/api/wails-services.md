@@ -59,6 +59,17 @@
 | UpdateAll | - | UpdateAllResult | 更新全部启用的订阅 |
 | SetOptions | id, autoUpdate, intervalMinutes, userAgent | SubscriptionView | 更新单个订阅的自动更新开关、独立间隔（0=跟随全局）与自定义 User-Agent |
 
+## FloatWindowService
+
+| 方法 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| Show | - | - | 确保流量悬浮球窗口存在并显示（用于手动恢复） |
+| Close | - | - | 关闭悬浮球窗口（不修改持久化开关） |
+| StartDrag | - | - | 开始原生拖动（悬浮球指针移动超过阈值时调用） |
+| OpenMain | - | - | 将主窗口恢复到前台（悬浮球单击时调用） |
+| Disable | - | Settings | 关闭悬浮球开关、持久化、广播 settings:changed 并销毁窗口 |
+| Sync | enabled | - | 按开关状态创建/销毁窗口（设置保存后由 bootstrap 调用） |
+
 ## EnvironmentService
 
 | 方法 | 输入 | 输出 | 说明 |

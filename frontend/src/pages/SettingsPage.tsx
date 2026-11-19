@@ -26,6 +26,7 @@ const defaults: Settings = {
   language: "zh-CN",
   accentColor: "sky",
   layoutMode: "dock",
+  floatWindowEnabled: false,
   systemProxyMode: "system",
   dockTransparency: 28,
   autoUpdate: false,
@@ -2265,6 +2266,31 @@ export default function SettingsPage(props: SettingsProps) {
                   <span class="switch-track"><span class="switch-thumb" /></span>
                 </span>
               </label>
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-label">
+                <strong>{t("set.floatWindow")}</strong>
+                <small>{t("set.floatWindowHint")}</small>
+              </div>
+              <label class="switch-row">
+                <span>
+                  <strong>{t("set.floatWindowEnable")}</strong>
+                  <small>{settings().floatWindowEnabled ? t("set.floatWindowOnHint") : t("set.floatWindowOffHint")}</small>
+                </span>
+                <span classList={{ "switch": true, on: settings().floatWindowEnabled }}>
+                  <input
+                    type="checkbox"
+                    checked={settings().floatWindowEnabled}
+                    onChange={(event) => update("floatWindowEnabled", event.currentTarget.checked)}
+                  />
+                  <span class="switch-track"><span class="switch-thumb" /></span>
+                </span>
+              </label>
+              <p class="settings-note">
+                <Icon name="external" size={13} />
+                <span>{t("set.floatWindowNote")}</span>
+              </p>
             </div>
 
             <div class="setting-block">

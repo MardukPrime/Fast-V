@@ -66,6 +66,14 @@ export const zh: Record<string, string> = {
   "shell.onboarding.step": "第 {index} 步",
   "shell.onboarding.close": "关闭引导",
   "shell.onboarding.skip": "跳过",
+
+  // Floating traffic ball.
+  "float.idle": "未连接",
+  "float.live": "实时",
+  "float.connecting": "连接中",
+  "float.error": "异常",
+  "float.ballRunningAria": "流量悬浮球，正在显示上下行流量；单击打开主界面，拖动可移动",
+  "float.ballIdleAria": "流量悬浮球，代理未连接；单击打开主界面",
   "shell.onboarding.start": "开始使用",
   "shell.onboarding.onceHint": "本引导只显示一次，关闭后不会再次打扰。",
   "shell.onboarding.welcomeTitle": "三种代理模式",
@@ -160,6 +168,14 @@ export const en: Record<string, string> = {
   "shell.onboarding.step": "Step {index}",
   "shell.onboarding.close": "Close guide",
   "shell.onboarding.skip": "Skip",
+
+  // Floating traffic ball.
+  "float.idle": "Offline",
+  "float.live": "Live",
+  "float.connecting": "Connecting",
+  "float.error": "Error",
+  "float.ballRunningAria": "Traffic ball showing live upload and download rates; click to open FastV, drag to move",
+  "float.ballIdleAria": "Traffic ball, proxy offline; click to open FastV",
   "shell.onboarding.start": "Get started",
   "shell.onboarding.onceHint": "This guide appears only once and stays out of the way afterwards.",
   "shell.onboarding.welcomeTitle": "Three proxy modes",

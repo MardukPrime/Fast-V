@@ -263,7 +263,15 @@ export const zh: Record<string, string> = {
 
   // System integration.
   "set.integration": "系统集成",
-  "set.integrationHint": "开机自启、托盘行为与应用更新",
+  "set.integrationHint": "开机自启、托盘行为、悬浮窗与应用更新",
+
+  // Floating traffic ball.
+  "set.floatWindow": "流量悬浮球",
+  "set.floatWindowHint": "桌面悬浮窗",
+  "set.floatWindowEnable": "显示流量悬浮球",
+  "set.floatWindowOnHint": "已开启：悬浮球显示实时上下行速率与波形",
+  "set.floatWindowOffHint": "已关闭：不在桌面显示悬浮球",
+  "set.floatWindowNote": "悬浮球始终置顶：单击回到主界面，拖动可移动位置；保存设置后生效。",
   "set.autostartOn": "开机自启已开启",
   "set.autostartOff": "开机自启已关闭",
   "set.autostart": "开机自启",
@@ -752,7 +760,15 @@ export const en: Record<string, string> = {
 
   // System integration.
   "set.integration": "System integration",
-  "set.integrationHint": "Autostart, tray behavior and app updates",
+  "set.integrationHint": "Autostart, tray behavior, floating ball and app updates",
+
+  // Floating traffic ball.
+  "set.floatWindow": "Floating traffic ball",
+  "set.floatWindowHint": "Desktop overlay",
+  "set.floatWindowEnable": "Show floating traffic ball",
+  "set.floatWindowOnHint": "Enabled: the ball shows live upload/download rates and a waveform",
+  "set.floatWindowOffHint": "Disabled: no floating ball on the desktop",
+  "set.floatWindowNote": "The ball stays on top: click to open FastV, drag to move it; takes effect after saving.",
   "set.autostartOn": "Autostart on",
   "set.autostartOff": "Autostart off",
   "set.autostart": "Start with Windows",

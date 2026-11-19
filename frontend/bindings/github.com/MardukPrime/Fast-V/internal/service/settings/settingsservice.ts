@@ -32,6 +32,15 @@ export function Save(input: model$0.Settings): $CancellablePromise<model$0.Setti
 }
 
 /**
+ * SetOnSaved registers a callback invoked after a settings mutation is persisted
+ * and broadcast. Bootstrap uses it to apply window-level settings (for example
+ * the floating traffic ball) without embedding window management in the service.
+ */
+export function SetOnSaved(fn: any): $CancellablePromise<void> {
+    return $Call.ByID(3346711429, fn);
+}
+
+/**
  * TunFallback disables TUN mode and switches to the fixed system proxy so a
  * user whose TUN adapter cannot start stays online after restarting the proxy.
  * The current settings are re-validated and persisted through the same path as
