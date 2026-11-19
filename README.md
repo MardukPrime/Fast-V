@@ -346,6 +346,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 ## 文档
 
 - [用户手册](docs/USER_GUIDE.md)
+- [Android Phase 2 计划](docs/product/ANDROID_PHASE2.md)
 - [常见问题 FAQ](docs/product/FAQ.md)
 - [节点配置编辑器](docs/cores/xray/node-editor.md)
 - [网络诊断](docs/network-diagnostics.md)

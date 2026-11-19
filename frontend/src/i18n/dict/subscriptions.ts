@@ -64,6 +64,8 @@ export const zh: Record<string, string> = {
   "sub.actions.update": "更新",
   "sub.actions.deleteAria": "删除 {name}",
   "sub.actions.deleteTitle": "删除订阅",
+  "sub.actions.delete": "删除",
+  "sub.actions.more": "更多操作",
   // Feedback
   "sub.confirm.delete": "确定删除订阅「{name}」及其 {count} 个节点吗？",
   "sub.error.urlRequired": "请输入订阅地址。",
@@ -179,6 +181,8 @@ export const en: Record<string, string> = {
   "sub.actions.update": "Update",
   "sub.actions.deleteAria": "Delete {name}",
   "sub.actions.deleteTitle": "Delete subscription",
+  "sub.actions.delete": "Delete",
+  "sub.actions.more": "More actions",
   // Feedback
   "sub.confirm.delete": "Delete subscription \"{name}\" and its {count} nodes?",
   "sub.error.urlRequired": "Enter a subscription URL.",

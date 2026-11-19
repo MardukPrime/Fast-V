@@ -1258,6 +1258,22 @@ export default function SettingsPage(props: SettingsProps) {
     }
   };
 
+  // Quick navigation for the long settings page: expand the target section and
+  // scroll it into view (works for both the sticky chip row and mobile).
+  const collapseAllSections = () => {
+    document.querySelectorAll<HTMLDetailsElement>("details.settings-section").forEach((section) => {
+      section.open = false;
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const jumpToSection = (id: string) => {
+    const element = document.getElementById(id) as HTMLDetailsElement | null;
+    if (!element) return;
+    if (!element.open) element.open = true;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const openReleasePage = async (url: string) => {
     if (!url) return;
     try {
@@ -1270,7 +1286,26 @@ export default function SettingsPage(props: SettingsProps) {
   return (
     <form class="page-stack settings-page" onSubmit={save}>
       <Show when={!loading()} fallback={<div class="empty-state">{t("set.loading")}</div>}>
+        <nav class="settings-quick-nav" aria-label={t("set.quickNavAria")}>
+          {[
+            { id: "settings-client", label: t("set.clientSection") },
+            { id: "settings-core", label: t("set.coreSection") },
+            { id: "settings-smart-routing", label: t("set.smartRouting") },
+            { id: "settings-stats", label: t("set.stats") },
+            { id: "settings-integration", label: t("set.integration") },
+            { id: "settings-backup", label: t("set.backup") },
+          ].map((item) => (
+            <button class="settings-quick-nav-item" type="button" onClick={() => jumpToSection(item.id)}>
+              {item.label}
+            </button>
+          ))}
+          <button class="settings-quick-nav-item collapse" type="button" onClick={collapseAllSections}>
+            {t("set.collapseAll")}
+          </button>
+        </nav>
+
         <details
+          id="settings-client"
           class="panel settings-section"
           open={clientExpanded()}
           onToggle={(event) => {
@@ -1600,6 +1635,7 @@ export default function SettingsPage(props: SettingsProps) {
         </details>
 
         <details
+          id="settings-core"
           class="panel settings-section"
           open={coreExpanded()}
           onToggle={(event) => {
@@ -1987,6 +2023,7 @@ export default function SettingsPage(props: SettingsProps) {
         </details>
 
         <details
+          id="settings-smart-routing"
           class="panel settings-section"
           open={autoSelectExpanded()}
           onToggle={(event) => {
@@ -2139,6 +2176,7 @@ export default function SettingsPage(props: SettingsProps) {
         </details>
 
         <details
+          id="settings-stats"
           class="panel settings-section"
           open={statsExpanded()}
           onToggle={(event) => {
@@ -2193,6 +2231,7 @@ export default function SettingsPage(props: SettingsProps) {
         </details>
 
         <details
+          id="settings-integration"
           class="panel settings-section"
           open={integrationExpanded()}
           onToggle={(event) => {
@@ -2730,6 +2769,7 @@ export default function SettingsPage(props: SettingsProps) {
         </details>
 
         <details
+          id="settings-backup"
           class="panel settings-section"
           open={backupExpanded()}
           onToggle={(event) => {

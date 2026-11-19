@@ -124,6 +124,7 @@ export default function SubscriptionsPage() {
   // through the bindings (it contains the user's private token), so the dialog
   // shows the generated QR image only — no text link to copy.
   const [qrOpen, setQROpen] = createSignal(false);
+  const [actionsMenuId, setActionsMenuId] = createSignal<string | null>(null);
   const [qrTitle, setQRTitle] = createSignal("");
   const [qrImage, setQRImage] = createSignal("");
   const [qrLoading, setQrLoading] = createSignal(false);
@@ -575,37 +576,72 @@ export default function SubscriptionsPage() {
 
                       <div class="sub-actions">
                         <button
-                          class="btn secondary"
+                          class="btn secondary sub-icon-btn"
+                          type="button"
+                          onClick={() => updateSubscription(sub.id)}
+                          disabled={updating()}
+                          aria-label={t("sub.actions.update")}
+                          title={updating() ? t("sub.actions.updating") : t("sub.actions.update")}
+                        >
+                          <Icon name="refresh" size={15} />
+                        </button>
+                        <button
+                          class="btn secondary sub-icon-btn"
                           type="button"
                           onClick={() => void openSubscriptionQRCode(sub)}
+                          aria-label={t("sub.actions.qr")}
                           title={t("sub.actions.qrTitle")}
                         >
-                          <QRCodeIcon size={14} /> {t("sub.actions.qr")}
-                        </button>
-                        <button class="btn secondary" type="button" onClick={() => openNodes(sub)}>
-                          <Icon name="nodes" size={14} /> {t("sub.actions.nodes")}
+                          <QRCodeIcon size={15} />
                         </button>
                         <button
-                          class="btn secondary"
+                          class="btn secondary sub-icon-btn"
                           type="button"
-                          onClick={() => openSubscriptionOptions(sub)}
-                          aria-label={t("sub.options.aria", { name: sub.name })}
-                          title={t("sub.options.title")}
+                          onClick={() => openNodes(sub)}
+                          aria-label={t("sub.actions.nodes")}
+                          title={t("sub.actions.nodes")}
                         >
-                          <GearIcon size={14} /> {t("sub.options.button")}
+                          <Icon name="nodes" size={15} />
                         </button>
-                        <button class="btn secondary" type="button" onClick={() => updateSubscription(sub.id)} disabled={updating()}>
-                          <Icon name="refresh" size={14} /> {updating() ? t("sub.actions.updating") : t("sub.actions.update")}
-                        </button>
-                        <button
-                          class="btn danger"
-                          type="button"
-                          onClick={() => removeSubscription(sub)}
-                          aria-label={t("sub.actions.deleteAria", { name: sub.name })}
-                          title={t("sub.actions.deleteTitle")}
-                        >
-                          <Icon name="trash" size={14} />
-                        </button>
+                        <div class="sub-more">
+                          <button
+                            class="btn secondary sub-icon-btn"
+                            type="button"
+                            aria-label={t("sub.actions.more")}
+                            aria-expanded={actionsMenuId() === sub.id}
+                            title={t("sub.actions.more")}
+                            onClick={() => setActionsMenuId(actionsMenuId() === sub.id ? null : sub.id)}
+                          >
+                            <Icon name="more" size={15} />
+                          </button>
+                          <Show when={actionsMenuId() === sub.id}>
+                            <div class="sub-menu-backdrop" onClick={() => setActionsMenuId(null)} />
+                            <div class="sub-menu" role="menu">
+                              <button
+                                class="sub-menu-item"
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setActionsMenuId(null);
+                                  openSubscriptionOptions(sub);
+                                }}
+                              >
+                                <GearIcon size={14} /> {t("sub.options.button")}
+                              </button>
+                              <button
+                                class="sub-menu-item danger"
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setActionsMenuId(null);
+                                  void removeSubscription(sub);
+                                }}
+                              >
+                                <Icon name="trash" size={14} /> {t("sub.actions.delete")}
+                              </button>
+                            </div>
+                          </Show>
+                        </div>
                       </div>
 
                       <Show when={sub.lastError}>

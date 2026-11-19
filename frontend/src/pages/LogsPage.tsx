@@ -9,6 +9,7 @@ import { t } from "../i18n";
 
 type LogsPageProps = {
   proxyState: ProxyState;
+  onNavigate: (page: string) => void;
 };
 
 const levels = ["debug", "info", "warning", "error"];
@@ -219,6 +220,18 @@ export default function LogsPage(props: LogsPageProps) {
                 <div class="empty-icon"><Icon name="logs" size={22} /></div>
                 <strong>{logs().length === 0 ? t("logs.empty.noLogs") : t("logs.empty.noMatch")}</strong>
                 <span>{logs().length === 0 ? t("logs.empty.noLogsHint") : t("logs.empty.noMatchHint")}</span>
+                <div class="empty-actions">
+                  <Show when={logs().length === 0} fallback={
+                    <button class="btn ghost" type="button" onClick={() => setSearch("")}>{t("logs.empty.clearSearch")}</button>
+                  }>
+                    <button class="btn primary" type="button" onClick={() => props.onNavigate("dashboard")}>
+                      <Icon name="dashboard" size={14} /> {t("logs.empty.goDashboard")}
+                    </button>
+                    <button class="btn ghost" type="button" onClick={() => props.onNavigate("settings")}>
+                      <Icon name="settings" size={14} /> {t("logs.empty.openSettings")}
+                    </button>
+                  </Show>
+                </div>
               </div>
             }>
               <For each={filtered()}>

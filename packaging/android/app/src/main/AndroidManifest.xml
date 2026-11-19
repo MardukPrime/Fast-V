@@ -11,6 +11,10 @@
     <!-- Reserved for the upcoming background proxy/VPN service. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- VpnService host for the upcoming system-wide proxy mode (Phase 2). -->
+    <uses-permission
+        android:name="android.permission.BIND_VPN_SERVICE"
+        tools:ignore="ProtectedPermissions" />
     <!-- Some AndroidX libraries declare biometric permissions they never use in
          this app; strip them from the merged manifest to keep the store listing
          permission list minimal. -->
@@ -52,6 +56,17 @@
             android:name=".WailsForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Phase 2 scaffold: VpnService entry point. The tunnel/tun2socks wiring
+             is not implemented yet, so this service is never started by the app. -->
+        <service
+            android:name=".FastVVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

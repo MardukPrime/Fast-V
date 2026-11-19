@@ -263,6 +263,8 @@ export const zh: Record<string, string> = {
 
   // System integration.
   "set.integration": "系统集成",
+  "set.quickNavAria": "设置分区快捷导航",
+  "set.collapseAll": "收起全部",
   "set.integrationHint": "开机自启、托盘行为、悬浮窗与应用更新",
 
   // Floating traffic ball.
@@ -760,6 +762,8 @@ export const en: Record<string, string> = {
 
   // System integration.
   "set.integration": "System integration",
+  "set.quickNavAria": "Settings section shortcuts",
+  "set.collapseAll": "Collapse all",
   "set.integrationHint": "Autostart, tray behavior, floating ball and app updates",
 
   // Floating traffic ball.

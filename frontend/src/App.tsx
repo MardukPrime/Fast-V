@@ -712,7 +712,7 @@ export default function App() {
             <RoutingPage proxyState={proxy()} proxyMode={settings()?.proxyMode ?? "rule"} />
           </Show>
           <Show when={active() === "logs"}>
-            <LogsPage proxyState={proxy()} />
+            <LogsPage proxyState={proxy()} onNavigate={(page) => setActive(page as PageKey)} />
           </Show>
           <Show when={active() === "settings"}>
             <SettingsPage onSaved={handleSettingsSaved} onPreviewTheme={applyTheme} onPreviewAccent={applyAccent} onPreviewLanguage={setLanguage} onPreviewDockTransparency={setDockTransparency} />
