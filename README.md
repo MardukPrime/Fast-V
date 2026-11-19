@@ -55,7 +55,7 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 
 ### 内核管理（Xray-core / sing-box）
 
-- 双内核可选：Xray-core（默认）或 sing-box；切换后独立检测、下载、更新与运行
+- 双内核可选：Xray-core（默认）或 sing-box；切换后独立检测、下载、更新与运行；设置页提供内核能力对照与冲突提醒
 - 自动检测本地 Xray-core / sing-box
 - 检查 GitHub 最新版本
 - 下载并安装 Xray-core

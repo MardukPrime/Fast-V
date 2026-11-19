@@ -1269,6 +1269,35 @@ export default function SettingsPage(props: SettingsProps) {
     }
   };
 
+  // Capability matrix shown above the per-core settings, so it is obvious which
+  // options actually apply to the selected core.
+  const coreCapabilityRows = () => [
+    { name: t("set.coreCapProtocols"), xray: true, singbox: true },
+    { name: t("set.coreCapTun"), xray: true, singbox: false },
+    { name: t("set.coreCapBalance"), xray: true, singbox: false },
+    { name: t("set.coreCapStats"), xray: true, singbox: false },
+    { name: t("set.coreCapGeo"), xray: true, singbox: false },
+    { name: t("set.coreCapUpdate"), xray: true, singbox: true },
+  ];
+
+  // Settings that contradict the selected core. They are warnings rather than
+  // hard validation errors: the user can still save, but the proxy start would
+  // fail or silently ignore the options, so surface them before that happens.
+  const coreWarnings = () => {
+    const current = settings();
+    const warnings: string[] = [];
+    if (current.coreType === "singbox") {
+      if (!core()?.installed) warnings.push(t("set.coreWarnSingboxMissing"));
+      if (current.tunMode) warnings.push(t("set.coreWarnSingboxTun"));
+      if (current.loadBalanceEnabled) warnings.push(t("set.coreWarnSingboxBalance"));
+      if (current.statsEnabled || current.xrayApiEnabled) warnings.push(t("set.coreWarnSingboxStats"));
+      if (current.xrayMuxEnabled) warnings.push(t("set.coreWarnSingboxMux"));
+    } else if (!core()?.installed) {
+      warnings.push(t("set.coreWarnXrayMissing"));
+    }
+    return warnings;
+  };
+
   // Quick navigation for the long settings page: expand the target section and
   // scroll it into view (works for both the sticky chip row and mobile).
   const collapseAllSections = () => {
@@ -1695,6 +1724,48 @@ export default function SettingsPage(props: SettingsProps) {
               ))}
             </div>
           </div>
+
+          <div class="core-capability">
+            <div class="core-capability-head">
+              <div class="setting-label">
+                <strong>{t("set.coreCapabilityTitle")}</strong>
+                <small>{t("set.coreCapabilityHint")}</small>
+              </div>
+            </div>
+            <div class="core-capability-table">
+              <div class="core-capability-row head">
+                <span>{t("set.coreCapabilityTitle")}</span>
+                <span classList={{ "core-cap-cell": true, current: settings().coreType === "xray" }}>
+                  Xray-core
+                  <Show when={settings().coreType === "xray"}><span class="core-cap-current">{t("set.coreCurrent")}</span></Show>
+                </span>
+                <span classList={{ "core-cap-cell": true, current: settings().coreType === "singbox" }}>
+                  sing-box
+                  <Show when={settings().coreType === "singbox"}><span class="core-cap-current">{t("set.coreCurrent")}</span></Show>
+                </span>
+              </div>
+              <For each={coreCapabilityRows()}>
+                {(row) => (
+                  <div class="core-capability-row">
+                    <span>{row.name}</span>
+                    <span classList={{ "core-cap-cell": true, supported: row.xray, unsupported: !row.xray, current: settings().coreType === "xray" }}>
+                      {row.xray ? t("set.coreCapYes") : t("set.coreCapNo")}
+                    </span>
+                    <span classList={{ "core-cap-cell": true, supported: row.singbox, unsupported: !row.singbox, current: settings().coreType === "singbox" }}>
+                      {row.singbox ? t("set.coreCapYes") : t("set.coreCapNo")}
+                    </span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+
+          <Show when={coreWarnings().length > 0}>
+            <div class="core-warnings" role="status">
+              <strong><Icon name="alert" size={14} /> {t("set.coreWarnTitle")}</strong>
+              <For each={coreWarnings()}>{(warning) => <span class="core-warning-item">{warning}</span>}</For>
+            </div>
+          </Show>
 
           <Show when={settings().coreType === "xray"} fallback={
             <div class="singbox-core-block">
