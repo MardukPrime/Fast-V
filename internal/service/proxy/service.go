@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -155,6 +157,13 @@ func (s *ProxyService) ServiceShutdown() error {
 }
 
 func (s *ProxyService) Start() (model.ProxyState, error) {
+	if runtime.GOOS == "android" {
+		// Android preview: the desktop design runs Xray as a child process and
+		// routes traffic through the OS proxy, neither of which exists on a
+		// phone. A VpnService + embedded core is required and tracked for a
+		// later release; fail with a clear message instead of a core crash.
+		return model.ProxyState{}, errors.New("Android 预览版暂不支持本机代理内核；请使用桌面版，移动端 VPN 支持将在后续版本提供")
+	}
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	return s.startLocked(context.Background())

@@ -81,3 +81,11 @@ frontend/node_modules/
 # Wails build intermediates
 *.syso
 *.manifest
+
+# Android Gradle build outputs (project itself lives in packaging/android)
+/packaging/android/app/build/
+/packaging/android/.gradle/
+/packaging/android/local.properties
+/packaging/android/overlay.json
+/packaging/android/gen/
+/packaging/android/app/src/main/jniLibs/

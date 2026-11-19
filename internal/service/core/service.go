@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"errors"
+	"runtime"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -70,6 +72,9 @@ func (s *CoreService) GeoData() model.GeoDataInfo {
 }
 
 func (s *CoreService) UpdateGeoData() (model.GeoDataInfo, error) {
+	if runtime.GOOS == "android" {
+		return model.GeoDataInfo{}, errors.New("Android 预览版暂不支持更新 Geo 数据")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	return s.manager.UpdateGeoData(ctx)
@@ -82,6 +87,9 @@ func (s *CoreService) CheckLatest() (model.CoreInfo, error) {
 }
 
 func (s *CoreService) DownloadLatest() (model.CoreInfo, error) {
+	if runtime.GOOS == "android" {
+		return model.CoreInfo{}, errors.New("Android 预览版暂不支持下载外部内核")
+	}
 	s.manager.SetAutoUpdate(s.store.Settings().CoreAutoUpdate)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()

@@ -218,6 +218,10 @@ export default function App() {
   let onboardingCloseButton: HTMLButtonElement | undefined;
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
+  // Android builds are a preview: the desktop proxy/TUN/tray capabilities are
+  // unavailable, so the shell advertises that clearly and the layout hides
+  // desktop-only chrome.
+  const isAndroidPlatform = () => info()?.platform === "android";
   const activeMeta = () => pageMeta()[active()];
   let dockNavElement: HTMLDivElement | undefined;
   const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
@@ -511,7 +515,7 @@ export default function App() {
   };
 
   return (
-    <div classList={{ "app-root": true, "layout-sidebar": layoutMode() === "sidebar", "layout-dock": layoutMode() === "dock" }}>
+    <div classList={{ "app-root": true, "layout-sidebar": layoutMode() === "sidebar", "layout-dock": layoutMode() === "dock", "platform-android": isAndroidPlatform() }}>
       <svg class="liquid-glass-defs" aria-hidden="true">
         <defs>
           <filter id="liquid-glass-refraction" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
@@ -642,6 +646,16 @@ export default function App() {
               </span>
             </div>
           </header>
+
+          <Show when={isAndroidPlatform()}>
+            <div class="android-preview-banner" role="note">
+              <span class="android-preview-icon"><Icon name="alert" size={14} /></span>
+              <div>
+                <strong>{t("shell.androidPreviewTitle")}</strong>
+                <span>{t("shell.androidPreviewBody")}</span>
+              </div>
+            </div>
+          </Show>
 
           <Show when={proxyModeError()}>
             {(modeError) => (

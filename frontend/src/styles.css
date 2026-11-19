@@ -9487,3 +9487,202 @@ textarea:focus {
   }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Android preview + mobile layout                                     */
+/* ------------------------------------------------------------------ */
+
+/* The Android host is fullscreen: the custom desktop titlebar is redundant and
+   would waste vertical space (and offer window controls that do nothing). */
+.app-root.platform-android .window-titlebar {
+  display: none;
+}
+
+.app-root.platform-android .content {
+  padding-top: calc(16px + env(safe-area-inset-top));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.android-preview-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+}
+
+.android-preview-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.android-preview-banner div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.android-preview-banner strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.android-preview-banner span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  /* The desktop layout uses a 960px floor; phones need the viewport width. */
+  html,
+  body {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .content {
+    padding: 14px 12px 12px;
+  }
+
+  .app-root.platform-android .content {
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .topbar h1 {
+    font-size: 22px;
+  }
+
+  .topbar p {
+    font-size: 10px;
+  }
+
+  .topbar-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .topbar-mode {
+    width: 100%;
+  }
+
+  .topbar-mode-switch {
+    flex: 1 1 auto;
+  }
+
+  .page-stack {
+    margin-top: 12px;
+    gap: 12px;
+  }
+
+  .layout-dock .content {
+    padding-bottom: 12px;
+  }
+
+  .layout-dock .liquid-dock {
+    width: calc(100vw - 16px);
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .layout-dock .liquid-nav-item {
+    min-width: 34px;
+    padding-inline: 4px;
+  }
+
+  .layout-dock .liquid-dock-status,
+  .layout-dock .liquid-dock-node,
+  .layout-dock .liquid-dock-divider,
+  .liquid-dock-actions .liquid-action:not(.primary) {
+    display: none;
+  }
+
+  .liquid-dock-actions {
+    margin-left: auto;
+  }
+
+  .liquid-action.primary {
+    padding-inline: 10px;
+  }
+
+  .connection-hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .connection-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .connection-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .dashboard-main-grid,
+  .dashboard-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-rail {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .glass-panel {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .node-table-wrap,
+  .subscription-list,
+  .recent-list,
+  .traffic-chart,
+  .rule-table-wrap {
+    overflow-x: auto;
+  }
+
+  .settings-section-body {
+    padding: 12px;
+  }
+
+  .hotkey-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .modal-card,
+  .settings-modal,
+  .onboarding-panel {
+    max-width: calc(100vw - 20px);
+  }
+
+  .onboarding-cards {
+    grid-template-columns: 1fr;
+  }
+}

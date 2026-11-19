@@ -38,6 +38,9 @@ import (
 
 // Run assembles the application, services and window, then starts the Wails event loop.
 func Run(assets embed.FS) (runErr error) {
+	// Android: resolve the app-private data dir from the Java bridge before the
+	// store picks its location.
+	prepareMobileDataDir()
 	// The file logger is created after the services so it can receive their log
 	// sink. Every exit path (normal return, early return, panic) runs this
 	// cleanup: the exit reason is written, the file is closed, and a recovered
@@ -127,7 +130,9 @@ func Run(assets embed.FS) (runErr error) {
 	// Window-level settings (currently the floating traffic ball) are applied
 	// after the settings service persists and broadcasts a change.
 	settingsSvc.SetOnSaved(func(settings model.Settings) {
-		floatWinSvc.Sync(settings.FloatWindowEnabled)
+		if desktopIntegrationSupported() {
+			floatWinSvc.Sync(settings.FloatWindowEnabled)
+		}
 	})
 
 	deepLinks := newDeepLinkIntegration(subSvc, nodeSvc)
@@ -190,17 +195,21 @@ func Run(assets embed.FS) (runErr error) {
 	// icon itself once the application is running. The global hotkeys are
 	// registered afterwards so a shortcut can drive the proxy and the tray at
 	// the same time.
-	newTray(app, st, window, proxySvc, settingsSvc, appSvc)
-	startGlobalHotkeys(st, settingsSvc, proxySvc)
-
-	// The floating ball opens the main window on click and follows the persisted
-	// toggle; enabling it must survive restarts.
-	floatWinSvc.OpenMainHandler = func() {
-		window.UnMinimise()
-		window.Show()
-		window.Focus()
+	if desktopIntegrationSupported() {
+		newTray(app, st, window, proxySvc, settingsSvc, appSvc)
+		startGlobalHotkeys(st, settingsSvc, proxySvc)
 	}
-	floatWinSvc.Sync(st.Settings().FloatWindowEnabled)
+
+	if desktopIntegrationSupported() {
+		// The floating ball opens the main window on click and follows the
+		// persisted toggle; enabling it must survive restarts.
+		floatWinSvc.OpenMainHandler = func() {
+			window.UnMinimise()
+			window.Show()
+			window.Focus()
+		}
+		floatWinSvc.Sync(st.Settings().FloatWindowEnabled)
+	}
 
 	return app.Run()
 }

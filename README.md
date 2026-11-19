@@ -197,6 +197,7 @@ TUN 模式需要：
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
 - **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
 - **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz` 便携包、`FastV-<version>-linux-<arch>.deb` 安装包（安装到 `/opt/fastv`），x64 另有 `FastV-<version>-linux-amd64.AppImage`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
+- **Android（arm64）**：`FastV-<version>-android-arm64.apk`（预览版，debug 签名，可直接安装）；当前版本支持订阅/节点/路由/备份管理，系统代理 / VPN / TUN 将在后续 Android 版本提供
 - 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
 - 应用内自动更新当前仅支持 Windows；macOS/Linux 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)
@@ -319,7 +320,7 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 - 托盘状态图标：按代理状态（运行/启动中/异常/停止）显示不同颜色
 - 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
 
-- 多平台构建与分发：Windows x64（NSIS 安装包 / 便携 zip）、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64（deb / AppImage / tar.gz）；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用
+- 多平台构建与分发：Windows x64（NSIS 安装包 / 便携 zip）、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64（deb / AppImage / tar.gz）、Android arm64（预览 APK）；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用
 
 当前仅支持 Xray-core。
 

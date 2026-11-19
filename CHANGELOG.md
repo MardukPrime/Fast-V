@@ -6,6 +6,14 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.2.0-pre.1] - 2026-11-19
+
+### Added
+
+- Android 预览版：新增 `packaging/android` Gradle 工程与发布流水线 `android` job，产出 `FastV-<version>-android-arm64.apk`（debug 签名，可直接安装）；应用在 Android 上使用私有目录存储配置、隐藏桌面标题栏/托盘/悬浮球等不可用能力，并显示预览版说明。
+- 移动端响应式布局：宽度 ≤720px 时顶栏纵向排列、双列指标卡、底部 Dock 精简为图标 + 主操作、页面/表格横向滚动适配，移除 960px 最小宽度限制；新增 viewport 安全区处理。
+- Android 平台限制：暂不支持本机代理内核与 VpnService（代理按钮会给出明确提示），定位为订阅、节点、路由规则与备份管理预览版；后续版本将接入 Android VpnService 与内置内核。
+
 ## [1.1.0] - 2026-11-19
 
 ### Added

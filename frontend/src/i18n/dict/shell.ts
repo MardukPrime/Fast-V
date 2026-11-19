@@ -67,6 +67,10 @@ export const zh: Record<string, string> = {
   "shell.onboarding.close": "关闭引导",
   "shell.onboarding.skip": "跳过",
 
+  // Android preview.
+  "shell.androidPreviewTitle": "Android 预览版",
+  "shell.androidPreviewBody": "当前版本支持订阅、节点、路由规则与备份管理；系统代理 / VPN、TUN、悬浮球等桌面能力将在后续 Android 版本提供。",
+
   // Floating traffic ball.
   "float.idle": "未连接",
   "float.live": "实时",
@@ -168,6 +172,10 @@ export const en: Record<string, string> = {
   "shell.onboarding.step": "Step {index}",
   "shell.onboarding.close": "Close guide",
   "shell.onboarding.skip": "Skip",
+
+  // Android preview.
+  "shell.androidPreviewTitle": "Android preview",
+  "shell.androidPreviewBody": "This build supports subscriptions, nodes, routing rules and backups. System proxy/VPN, TUN and the floating ball are desktop features and will arrive in a later Android release.",
 
   // Floating traffic ball.
   "float.idle": "Offline",
