@@ -4,7 +4,9 @@ All notable changes to FastV are documented here.
 
 ## [Unreleased]
 
-（下一版本开发中，暂无条目）
+### Internal
+
+- Android Phase 2 M2 验证：新增 `internal/proxy/embedded`，以 Go library 方式在进程内启动 Xray-core（`embeddedcore` 构建标签）；桌面测试用真实 SOCKS inbound + freedom outbound 完成了「本地 HTTP → 内嵌 core → 内容校验」，为后续 Android 接线与 VpnService 提供基础。该包默认不参与构建，现有二进制/APK 不受影响。
 
 ## [1.7.0-pre.1] - 2026-11-19
 
