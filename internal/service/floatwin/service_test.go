@@ -61,7 +61,9 @@ func TestHarmlessCallsWithoutWindow(t *testing.T) {
 	svc := New(nil)
 	svc.Sync(false)
 	svc.Close()
-	svc.StartDrag()
+	svc.DragStart(10, 10)
+	svc.DragMove(20, 20)
+	svc.DragEnd()
 	opened := false
 	svc.OpenMainHandler = func() { opened = true }
 	svc.OpenMain()

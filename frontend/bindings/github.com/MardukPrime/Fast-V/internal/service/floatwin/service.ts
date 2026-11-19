@@ -31,6 +31,31 @@ export function Disable(): $CancellablePromise<model$0.Settings> {
 }
 
 /**
+ * DragEnd finishes the drag started by DragStart.
+ */
+export function DragEnd(): $CancellablePromise<void> {
+    return $Call.ByID(3063982494);
+}
+
+/**
+ * DragMove repositions the ball following the cursor, clamped to the union of
+ * all monitor bounds so it can never be dragged completely off-screen.
+ */
+export function DragMove(screenX: number, screenY: number): $CancellablePromise<void> {
+    return $Call.ByID(1569780920, screenX, screenY);
+}
+
+/**
+ * DragStart begins a pointer drag. The frontend supplies the current absolute
+ * cursor position (screenX/screenY) and subsequent DragMove calls move the ball
+ * by the same delta. Keeping the drag in the service avoids relying on the
+ * Win32 non-client move loop, which frameless WebView2 windows do not get.
+ */
+export function DragStart(screenX: number, screenY: number): $CancellablePromise<void> {
+    return $Call.ByID(2783836123, screenX, screenY);
+}
+
+/**
  * OpenMain brings the main application window to the foreground.
  */
 export function OpenMain(): $CancellablePromise<void> {
@@ -42,14 +67,6 @@ export function OpenMain(): $CancellablePromise<void> {
  */
 export function Show(): $CancellablePromise<void> {
     return $Call.ByID(1014386126);
-}
-
-/**
- * StartDrag starts a native window drag; called from the ball on pointer down
- * once the pointer has moved far enough to be considered a drag.
- */
-export function StartDrag(): $CancellablePromise<void> {
-    return $Call.ByID(2710612471);
 }
 
 /**

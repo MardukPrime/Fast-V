@@ -8,29 +8,33 @@ import type { ProxyState, TrafficStats } from "../../bindings/github.com/MardukP
 import { t } from "../i18n";
 import "./floatball.css";
 
-const SAMPLES = 30;
-const WAVE_HEIGHT = 34;
-const WAVE_BOTTOM = 94;
+const SAMPLES = 36;
 
-function formatRate(value: number) {
+function rateParts(value: number) {
   const rate = Number.isFinite(value) && value > 0 ? value : 0;
-  if (rate >= 1024 ** 2) return `${(rate / 1024 ** 2).toFixed(1)}M`;
-  if (rate >= 1024) return `${(rate / 1024).toFixed(0)}K`;
-  return `${Math.round(rate)}B`;
+  if (rate >= 1024 ** 2) {
+    return { value: (rate / 1024 ** 2).toFixed(rate >= 10 * 1024 ** 2 ? 0 : 1), unit: "M" };
+  }
+  if (rate >= 1024) {
+    return { value: (rate / 1024).toFixed(rate >= 10 * 1024 ? 0 : 1), unit: "K" };
+  }
+  return { value: String(Math.round(rate)), unit: "B" };
 }
 
-function wavePath(values: number[], maxValue: number) {
+// Small smooth sparkline for the inside of the ball; the viewBox is stretched to
+// the orb width so the wave hugs the bottom edge.
+function sparkPath(values: number[], maxValue: number) {
+  const bottom = 28;
+  const height = 20;
   const count = values.length;
-  if (count === 0) return `M 0 ${WAVE_BOTTOM} L 100 ${WAVE_BOTTOM}`;
+  if (count === 0) return `M 0 ${bottom} L 100 ${bottom}`;
   const safeMax = Math.max(1, maxValue);
   const points = values.map((value, index) => {
     const x = count === 1 ? 50 : (index / (count - 1)) * 100;
     const ratio = Math.min(1, Math.max(0, value / safeMax));
-    return [x, WAVE_BOTTOM - ratio * WAVE_HEIGHT] as [number, number];
+    return [x, bottom - ratio * height] as [number, number];
   });
-  if (points.length === 1) {
-    return `M 0 ${points[0][1].toFixed(2)} L 100 ${points[0][1].toFixed(2)}`;
-  }
+  if (points.length === 1) return `M 0 ${points[0][1].toFixed(2)} L 100 ${points[0][1].toFixed(2)}`;
   let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
   for (let i = 1; i < points.length - 1; i += 1) {
     const [x, y] = points[i];
@@ -43,25 +47,55 @@ function wavePath(values: number[], maxValue: number) {
   return `${d} L ${last[0].toFixed(2)} ${last[1].toFixed(2)}`;
 }
 
-function waveAreaPath(values: number[], maxValue: number) {
-  return `${wavePath(values, maxValue)} L 100 100 L 0 100 Z`;
+function sparkArea(values: number[], maxValue: number) {
+  return `${sparkPath(values, maxValue)} L 100 30 L 0 30 Z`;
 }
 
 // FloatBall is rendered in its own frameless transparent window ("?float=1").
-// It shows a round, draggable ball with the live down/up traffic waveform; a
-// single click brings the main window back to the front.
+// It shows a polished glass ball with the live down/up speeds, a rotating
+// activity ring, a sparkline and status. Drag is fully pointer-driven and
+// forwarded to the float window service; a clean click brings FastV back.
 export default function FloatBall() {
   const [traffic, setTraffic] = createSignal<TrafficStats | null>(null);
   const [state, setState] = createSignal<ProxyState | null>(null);
   const [downSamples, setDownSamples] = createSignal<number[]>([]);
   const [upSamples, setUpSamples] = createSignal<number[]>([]);
+  const [dragging, setDragging] = createSignal(false);
 
   const running = () => state()?.status === "running";
   const transient = () => state()?.status === "starting" || state()?.status === "stopping";
   const failed = () => state()?.status === "error";
   const downRate = () => (running() ? traffic()?.downlinkRate ?? 0 : 0);
   const upRate = () => (running() ? traffic()?.uplinkRate ?? 0 : 0);
+  const totalRate = () => downRate() + upRate();
   const waveMax = createMemo(() => Math.max(1024, ...downSamples(), ...upSamples()));
+  const downParts = () => rateParts(downRate());
+  const upParts = () => rateParts(upRate());
+  const active = () => running() && totalRate() > 0;
+  const highActivity = () => totalRate() >= 4 * 1024 ** 2;
+  const midActivity = () => totalRate() >= 256 * 1024;
+
+  const downShare = () => {
+    const total = totalRate();
+    if (total <= 0) return 50;
+    return Math.min(95, Math.max(5, Math.round((downRate() / total) * 100)));
+  };
+  const spinDuration = () => {
+    if (highActivity()) return "1.8s";
+    if (midActivity()) return "3.2s";
+    return "7s";
+  };
+
+  const modeLabel = () => {
+    switch (state()?.proxyMode) {
+      case "global":
+        return t("float.modeGlobal");
+      case "direct":
+        return t("float.modeDirect");
+      default:
+        return t("float.modeRule");
+    }
+  };
 
   onMount(() => {
     document.documentElement.classList.add("float-mode");
@@ -112,79 +146,118 @@ export default function FloatBall() {
     setUpSamples((prev) => [...prev, Math.max(0, stats.uplinkRate ?? 0)].slice(-SAMPLES));
   });
 
-  // Pointer handling: a short press (no movement) opens the main window, while
-  // moving the pointer hands the window to the native move loop for dragging.
+  // Pointer drag: a threshold distinguishes a click (open the main window)
+  // from a drag, and the window service moves the native window by the cursor
+  // delta so dragging stays precise at any DPI.
   let press: { x: number; y: number; dragging: boolean } | null = null;
 
   const onPointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
     press = { x: event.screenX, y: event.screenY, dragging: false };
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    void FloatWindowService.DragStart(Math.round(event.screenX), Math.round(event.screenY));
   };
 
   const onPointerMove = (event: PointerEvent) => {
-    if (!press || press.dragging) return;
-    if (Math.hypot(event.screenX - press.x, event.screenY - press.y) > 4) {
+    if (!press) return;
+    if (!press.dragging) {
+      if (Math.abs(event.screenX - press.x) < 3 && Math.abs(event.screenY - press.y) < 3) return;
       press.dragging = true;
-      void FloatWindowService.StartDrag();
+      setDragging(true);
     }
+    void FloatWindowService.DragMove(Math.round(event.screenX), Math.round(event.screenY));
   };
 
-  const onPointerUp = (event: PointerEvent) => {
-    if (press && !press.dragging) {
+  const finishPointer = (event: PointerEvent, cancelled: boolean) => {
+    if (!press) return;
+    const wasDragging = press.dragging;
+    press = null;
+    setDragging(false);
+    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+    void FloatWindowService.DragEnd();
+    if (!wasDragging && !cancelled) {
       void FloatWindowService.OpenMain();
     }
-    press = null;
-    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
   };
 
   return (
     <div
-      classList={{ "float-ball": true, running: running(), failed: failed(), transient: transient() }}
+      classList={{
+        "float-shell": true,
+        running: running(),
+        failed: failed(),
+        transient: transient(),
+        dragging: dragging(),
+        active: active(),
+        busy: highActivity(),
+      }}
+      style={{ "--ring-share": `${downShare()}%`, "--spin-duration": spinDuration() }}
       role="button"
       tabIndex={0}
       aria-label={running() ? t("float.ballRunningAria") : t("float.ballIdleAria")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={() => {
-        press = null;
+      onPointerUp={(event) => finishPointer(event, false)}
+      onPointerCancel={(event) => finishPointer(event, true)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          void FloatWindowService.OpenMain();
+        }
       }}
+      onContextMenu={(event) => event.preventDefault()}
     >
-      <svg class="float-ball-wave" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <defs>
-          <clipPath id="floatBallClip">
-            <circle cx="50" cy="50" r="49" />
-          </clipPath>
-          <linearGradient id="floatBallArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.42" />
-            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
-          </linearGradient>
-        </defs>
-        <g clip-path="url(#floatBallClip)">
-          <path class="float-ball-wave-area" d={waveAreaPath(downSamples(), waveMax())} />
-          <path class="float-ball-wave-line down" d={wavePath(downSamples(), waveMax())} />
-          <path class="float-ball-wave-line up" d={wavePath(upSamples(), waveMax())} />
-        </g>
-      </svg>
+      <span class="float-halo" aria-hidden="true" />
+      <div class="float-ball">
+        <span class="float-ring" aria-hidden="true" />
+        <div class="float-orb">
+          <svg class="float-spark" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="floatSparkArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.42" />
+                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <path class="float-spark-area" d={sparkArea(downSamples(), waveMax())} />
+            <path class="float-spark-line down" d={sparkPath(downSamples(), waveMax())} />
+            <path class="float-spark-line up" d={sparkPath(upSamples(), waveMax())} />
+          </svg>
 
-      <span class="float-ball-shine" aria-hidden="true" />
-      <span class="float-ball-ring" aria-hidden="true" />
+          <div class="float-head">
+            <span class="float-dot" />
+            <span class="float-status">
+              {failed() ? t("float.error") : transient() ? t("float.connecting") : running() ? t("float.live") : t("float.idle")}
+            </span>
+            <Show when={running() || transient()}>
+              <span class="float-mode">{modeLabel()}</span>
+            </Show>
+          </div>
 
-      <div class="float-ball-center">
-        <Show
-          when={running() || transient() || failed()}
-          fallback={<span class="float-ball-idle">{t("float.idle")}</span>}
-        >
-          <span class="float-ball-status">
-            <span class="float-ball-dot" />
-            {failed() ? t("float.error") : transient() ? t("float.connecting") : t("float.live")}
-          </span>
-          <span class="float-ball-rate">
-            <span class="float-ball-rate-down">↓ {formatRate(downRate())}</span>
-            <span class="float-ball-rate-up">↑ {formatRate(upRate())}</span>
-          </span>
-        </Show>
+          <Show
+            when={running() || transient() || failed()}
+            fallback={
+              <div class="float-idle">
+                <strong>{t("float.idle")}</strong>
+                <span>{t("float.clickToOpen")}</span>
+              </div>
+            }
+          >
+            <div class="float-speeds">
+              <div class="float-speed down">
+                <span class="float-arrow">↓</span>
+                <strong>{downParts().value}</strong>
+                <em>{downParts().unit}/s</em>
+              </div>
+              <div class="float-speed up">
+                <span class="float-arrow">↑</span>
+                <strong>{upParts().value}</strong>
+                <em>{upParts().unit}/s</em>
+              </div>
+            </div>
+          </Show>
+
+          <span class="float-gloss" aria-hidden="true" />
+        </div>
       </div>
     </div>
   );

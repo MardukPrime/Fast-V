@@ -13,13 +13,12 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
-	"github.com/MardukPrime/Fast-V/internal/platform"
 	"github.com/MardukPrime/Fast-V/internal/store"
 )
 
 const (
 	// ballSize is the logical window size in pixels. The round ball fills it.
-	ballSize = 132
+	ballSize = 140
 	// screenMargin keeps the ball away from the taskbar/screen edge.
 	screenMargin = 24
 )
@@ -31,11 +30,20 @@ type Service struct {
 
 	mu     sync.Mutex
 	window *application.WebviewWindow
+	drag   *dragSession
 
 	// OpenMainHandler is invoked when the ball is clicked; bootstrap wires it to
 	// the main window. It is a field instead of a method so Wails does not expose
 	// a function-typed binding to the frontend.
 	OpenMainHandler func()
+}
+
+// dragSession records the pointer/window offset captured when a drag starts.
+type dragSession struct {
+	grabX int
+	grabY int
+	winX  int
+	winY  int
 }
 
 // New creates the floating window service. The Wails application is resolved
@@ -77,18 +85,63 @@ func (s *Service) Close() {
 	}
 }
 
-// StartDrag starts a native window drag; called from the ball on pointer down
-// once the pointer has moved far enough to be considered a drag.
-func (s *Service) StartDrag() {
+// DragStart begins a pointer drag. The frontend supplies the current absolute
+// cursor position (screenX/screenY) and subsequent DragMove calls move the ball
+// by the same delta. Keeping the drag in the service avoids relying on the
+// Win32 non-client move loop, which frameless WebView2 windows do not get.
+func (s *Service) DragStart(screenX int, screenY int) {
 	s.mu.Lock()
 	window := s.window
 	s.mu.Unlock()
 	if window == nil {
 		return
 	}
-	if handle := window.NativeWindow(); handle != nil {
-		platform.StartWindowDrag(uintptr(handle))
+	x, y := window.Position()
+	s.mu.Lock()
+	s.drag = &dragSession{grabX: screenX, grabY: screenY, winX: x, winY: y}
+	s.mu.Unlock()
+}
+
+// DragMove repositions the ball following the cursor, clamped to the union of
+// all monitor bounds so it can never be dragged completely off-screen.
+func (s *Service) DragMove(screenX int, screenY int) {
+	s.mu.Lock()
+	window := s.window
+	drag := s.drag
+	s.mu.Unlock()
+	if window == nil || drag == nil {
+		return
 	}
+	x, y := dragTarget(drag.winX, drag.winY, drag.grabX, drag.grabY, screenX, screenY)
+	bounds := virtualScreenBounds()
+	x, y = clampToBounds(x, y, ballSize, ballSize, bounds)
+	window.SetPosition(x, y)
+}
+
+// DragEnd finishes the drag started by DragStart.
+func (s *Service) DragEnd() {
+	s.mu.Lock()
+	s.drag = nil
+	s.mu.Unlock()
+}
+
+// virtualScreenBounds returns the union of all monitor bounds (in screen
+// coordinates). An empty rect means the platform reported no screens.
+func virtualScreenBounds() rect {
+	app := application.Get()
+	if app == nil {
+		return rect{}
+	}
+	screens := app.Screen.GetAll()
+	bounds := make([]rect, 0, len(screens))
+	for _, screen := range screens {
+		if screen == nil {
+			continue
+		}
+		area := screen.Bounds
+		bounds = append(bounds, rect{X: area.X, Y: area.Y, Width: area.Width, Height: area.Height})
+	}
+	return unionBounds(bounds)
 }
 
 // OpenMain brings the main application window to the foreground.
