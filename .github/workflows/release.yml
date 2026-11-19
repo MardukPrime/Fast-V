@@ -364,7 +364,7 @@ jobs:
           base_version="${APP_VERSION%%-*}"
           IFS=. read -r major minor patch <<< "$base_version"
           version_code=$((10#$major * 10000 + 10#$minor * 100 + 10#$patch))
-          sed -i "s/^  version: \".*\"/  version: \"${APP_VERSION}\"/" build/config.yml
+          # build/config.yml is local-only; overlay generation reads defaults.
           sed -i "s/versionCode = .*/versionCode = ${version_code}/" packaging/android/app/build.gradle
           sed -i "s/versionName = \".*\"/versionName = \"${APP_VERSION}\"/" packaging/android/app/build.gradle
 
