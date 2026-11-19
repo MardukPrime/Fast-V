@@ -1,6 +1,6 @@
 # Android Phase 2：VpnService + 内嵌内核
 
-> 状态：**进行中（M1 脚手架已落地，M2 内核可行性已验证）**。当前 Android 预览版只能管理订阅/节点/规则，不能代理流量。本文记录把 Android 变成真正可用的系统级代理客户端所需的工作与里程碑。
+> 状态：**进行中（M1 脚手架已落地，M2 已接通并完成桌面验证）**。当前 Android 预览版只能管理订阅/节点/规则，不能代理流量。本文记录把 Android 变成真正可用的系统级代理客户端所需的工作与里程碑。
 
 ## 目标
 
@@ -37,7 +37,7 @@ Android App (Java host, Wails)
 | 里程碑 | 内容 | 验收 |
 |---|---|---|
 | M1（已完成） | VpnService manifest/权限声明、`FastVVpnService` 脚手架、Phase 2 文档 | APK 构建通过，权限列表正确 |
-| M2（进行中） | 内嵌 Xray-core（Go library）+ 本地 SOCKS/HTTP inbound。**已添加 `internal/proxy/embedded`：`core.StartInstance` 在进程内启动 Xray-core；`-tags embeddedcore` 的桌面测试已通过（本地 HTTP → 内嵌 SOCKS → 内容校验）。** 待接线到 proxy manager、打包 geo 资产并在 Android 构建中启用 | 真机/模拟器内 `curl --socks5 127.0.0.1:10808` 成功 |
+| M2（桌面验证完成，真机待验） | 内嵌 Xray-core（Go library）+ 本地 SOCKS。**已接线 proxy manager（`embeddedcore`/`android` 构建标签）、core 服务报告内嵌内核、GeoIP/GeoSite 条件自动跳过；桌面 embeddedcore 构建实测：启动代理 → 内嵌 core → `curl --socks5 127.0.0.1:18080` 返回 200（1 MB），停止代理正常。Android 交叉编译通过；真机/模拟器验证待设备。** | 真机/模拟器内 `curl --socks5 127.0.0.1:10808` 成功 |
 | M3 | VpnService 建 tun + JNI 传 fd + tun2socks 基本 TCP | 手机浏览器全局代理可上网；通知可断开 |
 | M4 | UDP/DNS、分应用代理、绕过局域网、IPv6、重连与看门狗 | 常用 App 直连/代理策略符合预期 |
 | M5 | 正式签名 AAB、Play 声明与政策材料、真机回归 | 内部/封闭测试通过，可提交正式轨道 |

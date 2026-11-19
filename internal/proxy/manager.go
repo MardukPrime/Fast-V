@@ -28,12 +28,16 @@ type CoreInfoProvider interface {
 
 // Manager owns the Xray process and the local proxy state.
 type Manager struct {
-	mu                 sync.RWMutex
-	store              *store.Store
-	core               CoreInfoProvider
-	cmd                *exec.Cmd
-	done               chan struct{}
-	job                *processJob
+	mu    sync.RWMutex
+	store *store.Store
+	core  CoreInfoProvider
+	cmd   *exec.Cmd
+	done  chan struct{}
+	job   *processJob
+	// embedded holds the in-process Xray-core instance when this build runs the
+	// core as a Go library (Android / embeddedcore); cmd stays nil in that mode.
+	embedded           embeddedInstance
+	embeddedDone       chan struct{}
 	state              model.ProxyState
 	onStateChange      func(model.ProxyState)
 	sampler            *trafficSampler
@@ -97,7 +101,7 @@ func (m *Manager) SetOnTraffic(callback func(model.TrafficStats)) {
 func (m *Manager) Traffic() model.TrafficStats {
 	m.mu.RLock()
 	sampler := m.sampler
-	running := m.cmd != nil && m.state.Status == "running"
+	running := (m.cmd != nil || m.embedded != nil) && m.state.Status == "running"
 	m.mu.RUnlock()
 	if sampler == nil || !running {
 		return model.TrafficStats{}
@@ -408,7 +412,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.mu.Unlock()
 		return state, nil
 	}
-	if m.cmd != nil {
+	if m.cmd != nil || m.embedded != nil {
 		state := m.enrichNodeState(m.state)
 		m.mu.Unlock()
 		return state, nil
@@ -565,6 +569,10 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.appendLog("warning", "stats", fmt.Sprintf("Xray API 端口 %d 与本地代理端口相同，已跳过实时流量统计", settings.XrayAPIPort))
 	}
 
+	if embeddedCoreEnabled() {
+		return m.startEmbeddedCore(ctx, config)
+	}
+
 	m.appendLog("info", "core", "正在校验 Xray 配置")
 	testCmd := exec.CommandContext(ctx, coreInfo.Path, "run", "-test", "-config", configPath)
 	hideWindow(testCmd)
@@ -681,6 +689,76 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	}
 	return state, nil
 }
+
+// startEmbeddedCore runs the in-process Xray-core path. The generated config is
+// reused as-is except for GeoIP/GeoSite conditions, which are stripped until
+// Android ships the geo datasets. Traffic statistics via the CLI API are not
+// available in-process yet, so the dashboard falls back to zero live rates while
+// the session totals keep working.
+func (m *Manager) startEmbeddedCore(ctx context.Context, config []byte) (model.ProxyState, error) {
+	settings := m.store.Settings()
+	if settings.TunMode {
+		return m.fail("内嵌内核暂不支持 TUN 模式")
+	}
+	cleanConfig, removed, err := sanitizeEmbeddedConfig(config)
+	if err != nil {
+		return m.fail(err.Error())
+	}
+	if removed > 0 {
+		m.appendLog("warning", "core", fmt.Sprintf("内嵌内核缺少 GeoIP/GeoSite 数据集，已跳过 %d 条 Geo 路由条件", removed))
+	}
+	instance, err := embeddedStart(cleanConfig)
+	if err != nil {
+		return m.fail(fmt.Sprintf("内嵌 Xray-core 启动失败: %v", err))
+	}
+	done := make(chan struct{})
+	m.mu.Lock()
+	m.embedded = instance
+	m.embeddedDone = done
+	m.state.PID = os.Getpid()
+	m.state.StartedAt = model.NowRFC3339()
+	m.mu.Unlock()
+	m.appendLog("info", "core", fmt.Sprintf("内嵌 Xray-core 已启动（进程内，PID %d）", os.Getpid()))
+
+	starting := m.State()
+	if err := waitForPort(ctx, starting.LocalAddr, 12*time.Second); err != nil {
+		_ = instance.Close()
+		m.mu.Lock()
+		m.embedded = nil
+		m.embeddedDone = nil
+		m.mu.Unlock()
+		close(done)
+		return m.fail(fmt.Sprintf("内嵌 Xray-core 未能就绪: %v", err))
+	}
+	m.appendLog("info", "core", "本地入站已就绪: "+starting.LocalAddr)
+
+	m.mu.Lock()
+	stoppedDuringStart := m.userRequestedStop
+	if !stoppedDuringStart {
+		m.state.Status = "running"
+		m.runningSince = time.Now()
+	} else {
+		m.embedded = nil
+		m.embeddedDone = nil
+	}
+	m.mu.Unlock()
+	if stoppedDuringStart {
+		_ = instance.Close()
+		close(done)
+		return m.State(), nil
+	}
+	m.appendLog("info", "core", "代理已进入运行状态（内嵌内核）")
+	state := m.State()
+	m.emit(state)
+	if settings.SystemProxyMode != "off" {
+		m.appendLog("info", "system", "内嵌内核模式不设置系统代理，本地代理端口: "+state.LocalAddr)
+	}
+	if settings.StatsEnabled || settings.XrayAPIEnabled {
+		m.appendLog("warning", "stats", "内嵌内核模式下暂不支持实时流量统计")
+	}
+	return state, nil
+}
+
 func (m *Manager) Stop() (model.ProxyState, error) {
 	m.mu.Lock()
 	m.userRequestedStop = true
@@ -690,6 +768,33 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	// a stop can never hang on a wedged restart.
 	m.cancelPendingRestart()
 	defer m.stopSystemProxy()
+	m.mu.Lock()
+	if m.embedded != nil {
+		instance := m.embedded
+		done := m.embeddedDone
+		m.embedded = nil
+		m.embeddedDone = nil
+		m.state.Status = "stopping"
+		m.mu.Unlock()
+		m.emit(m.State())
+		m.appendLog("info", "core", "正在停止内嵌 Xray-core")
+		m.stopTrafficSampler()
+		if cleanup := m.takeTunCleanup(); cleanup != nil {
+			_ = cleanup()
+		}
+		_ = instance.Close()
+		if done != nil {
+			close(done)
+		}
+		m.mu.Lock()
+		m.state = model.ProxyState{Status: "stopped"}
+		m.runningSince = time.Time{}
+		state := m.enrichNodeState(m.state)
+		m.mu.Unlock()
+		m.emit(state)
+		return state, nil
+	}
+	m.mu.Unlock()
 	m.mu.Lock()
 	if m.cmd == nil {
 		m.state = model.ProxyState{Status: "stopped"}

@@ -69,7 +69,7 @@ export const zh: Record<string, string> = {
 
   // Android preview.
   "shell.androidPreviewTitle": "Android 预览版",
-  "shell.androidPreviewBody": "当前版本支持订阅、节点、路由规则与备份管理；系统代理 / VPN、TUN、悬浮球等桌面能力将在后续 Android 版本提供。",
+  "shell.androidPreviewBody": "当前版本已内置 Xray 内核，可启动本地 SOCKS 代理（127.0.0.1:端口）；系统级 VPN / TUN、悬浮球等桌面能力将在后续 Android 版本提供。",
 
   // Floating traffic ball.
   "float.idle": "未连接",
@@ -179,7 +179,7 @@ export const en: Record<string, string> = {
 
   // Android preview.
   "shell.androidPreviewTitle": "Android preview",
-  "shell.androidPreviewBody": "This build supports subscriptions, nodes, routing rules and backups. System proxy/VPN, TUN and the floating ball are desktop features and will arrive in a later Android release.",
+  "shell.androidPreviewBody": "This build bundles Xray-core and can run a local SOCKS proxy. System-wide VPN/TUN and desktop-only features will arrive in a later Android release.",
 
   // Floating traffic ball.
   "float.idle": "Offline",

@@ -4,9 +4,20 @@ All notable changes to FastV are documented here.
 
 ## [Unreleased]
 
-### Internal
+（下一版本开发中，暂无条目）
 
-- Android Phase 2 M2 验证：新增 `internal/proxy/embedded`，以 Go library 方式在进程内启动 Xray-core（`embeddedcore` 构建标签）；桌面测试用真实 SOCKS inbound + freedom outbound 完成了「本地 HTTP → 内嵌 core → 内容校验」，为后续 Android 接线与 VpnService 提供基础。该包默认不参与构建，现有二进制/APK 不受影响。
+## [1.8.0-pre.1] - 2026-11-19
+
+### Added
+
+- Android 内嵌 Xray-core（M2）：Android 构建默认使用 Go 库形式的 Xray-core，不再依赖外部核心可执行文件。Android 上可启动本地 SOCKS 代理（默认 `127.0.0.1:10808`），桌面 `embeddedcore` 构建已完成真实代理验证（`curl --socks5` 返回 200 / 1 MB，启停正常）。
+- `internal/coremode` 与 proxy manager 内嵌分支：内嵌内核模式下 core 服务直接报告「已就绪」，下载/更新内核与 Geo 数据返回明确提示；TUN 模式被拒绝并提示。
+- GeoIP/GeoSite 条件在缺少数据集时自动跳过并记录警告（避免内嵌内核启动失败）；实时流量统计在内嵌模式下暂不可用。
+
+### Notes
+
+- Android 仍为预览版：系统级 VPN/TUN 接管尚未实现（M3），当前仅本地 SOCKS 代理；真机验证待设备。
+- 桌面正式构建不受影响：未带 `embeddedcore` 标签时继续使用外部 Xray 可执行文件。
 
 ## [1.7.0-pre.1] - 2026-11-19
 

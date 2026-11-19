@@ -1,4 +1,4 @@
-//go:build embeddedcore
+//go:build embeddedcore || android
 
 package embedded
 

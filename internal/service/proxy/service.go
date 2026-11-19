@@ -12,6 +12,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/MardukPrime/Fast-V/internal/coremode"
 	"github.com/MardukPrime/Fast-V/internal/model"
 	"github.com/MardukPrime/Fast-V/internal/platform"
 	proxyruntime "github.com/MardukPrime/Fast-V/internal/proxy"
@@ -157,7 +158,7 @@ func (s *ProxyService) ServiceShutdown() error {
 }
 
 func (s *ProxyService) Start() (model.ProxyState, error) {
-	if runtime.GOOS == "android" {
+	if runtime.GOOS == "android" && !coremode.Enabled() {
 		// Android preview: the desktop design runs Xray as a child process and
 		// routes traffic through the OS proxy, neither of which exists on a
 		// phone. A VpnService + embedded core is required and tracked for a
