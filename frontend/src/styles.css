@@ -5531,6 +5531,127 @@ select {
   gap: 14px;
 }
 
+/* Live traffic waveform inside the connection hero: a rolling sparkline of the
+   last ~40 traffic samples plus a soft glow that only animates while connected. */
+.dash-live-wave {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-border);
+  color: var(--faint);
+}
+
+.connection-hero:not(.running) .dash-live-wave {
+  opacity: 0.55;
+}
+
+.dash-live-wave-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dash-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+  transition: background 200ms ease;
+}
+
+.connection-hero.running .dash-live-dot {
+  background: var(--success);
+  animation: dash-live-pulse 1.8s ease-in-out infinite;
+}
+
+.dash-live-wave-rates {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.dash-live-wave-chart {
+  display: block;
+  width: 100%;
+  height: 46px;
+  overflow: visible;
+}
+
+.dash-wave-line {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.dash-wave-line.down {
+  stroke: color-mix(in srgb, var(--accent) 82%, white);
+}
+
+.dash-wave-line.up {
+  stroke: var(--success);
+  opacity: 0.7;
+}
+
+.dash-wave-area {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.connection-hero.running .dash-live-wave-chart {
+  animation: dash-wave-breathe 4.5s ease-in-out infinite;
+}
+
+.connection-hero.running .connection-glow {
+  animation: dash-glow-drift 8s ease-in-out infinite alternate;
+}
+
+.connection-hero.running .connection-orb {
+  animation: dash-orb-glow 3.2s ease-in-out infinite;
+}
+
+@keyframes dash-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(146, 223, 180, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(146, 223, 180, 0); }
+}
+
+@keyframes dash-wave-breathe {
+  0%, 100% { opacity: 0.88; }
+  50% { opacity: 1; }
+}
+
+@keyframes dash-glow-drift {
+  from { transform: translate3d(-6px, 0, 0) scale(1); }
+  to { transform: translate3d(26px, 12px, 0) scale(1.12); }
+}
+
+@keyframes dash-orb-glow {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 10px 28px rgba(0, 0, 0, 0.16); }
+  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 10px 34px color-mix(in srgb, var(--accent) 26%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-hero.running .dash-live-dot,
+  .connection-hero.running .dash-live-wave-chart,
+  .connection-hero.running .connection-glow,
+  .connection-hero.running .connection-orb {
+    animation: none;
+  }
+}
+
 .connection-hero {
   position: relative;
   display: grid;
@@ -5762,7 +5883,43 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 322px;
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* Left column stacks the current-node card and the weekly traffic chart so the
+   chart fills the space under the node card instead of leaving a blank gap. */
+.dashboard-left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dashboard-left-column .node-overview {
+  flex: 0 0 auto;
+}
+
+.dashboard-left-column .traffic-history-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: 18px 20px;
+}
+
+.dashboard-left-column .traffic-chart {
+  flex: 1 1 auto;
+  align-items: stretch;
+  margin-top: 14px;
+}
+
+.dashboard-left-column .traffic-day {
+  height: 100%;
+}
+
+.dashboard-left-column .traffic-day-plot {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 96px;
 }
 
 .node-overview {
@@ -5898,7 +6055,7 @@ select {
 }
 
 .dashboard-recent {
-  min-height: 210px;
+  min-height: 0;
 }
 
 .dashboard-recent-row {

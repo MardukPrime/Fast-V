@@ -195,6 +195,44 @@ function nodeUsagePercent(sub: SubscriptionView) {
   return usagePercent(sub.uploadBytes ?? 0, sub.downloadBytes ?? 0, sub.totalBytes ?? 0);
 }
 
+const WAVE_SAMPLES = 40;
+
+type WavePoint = [number, number];
+
+function wavePoints(values: number[], maxValue: number): WavePoint[] {
+  const height = 24;
+  const bottom = 25;
+  const safeMax = Math.max(1, maxValue);
+  const count = values.length;
+  if (count === 0) return [];
+  return values.map((value, index) => {
+    const x = count === 1 ? 50 : (index / (count - 1)) * 100;
+    const ratio = Math.min(1, Math.max(0, value / safeMax));
+    return [x, bottom - ratio * height];
+  });
+}
+
+function wavePath(values: number[], maxValue: number) {
+  const points = wavePoints(values, maxValue);
+  if (points.length === 0) return "M 0 25 L 100 25";
+  if (points.length === 1) return `M 0 ${points[0][1].toFixed(2)} L 100 ${points[0][1].toFixed(2)}`;
+  let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [x, y] = points[i];
+    const next = points[i + 1];
+    const midX = (x + next[0]) / 2;
+    const midY = (y + next[1]) / 2;
+    d += ` Q ${x.toFixed(2)} ${y.toFixed(2)} ${midX.toFixed(2)} ${midY.toFixed(2)}`;
+  }
+  const last = points[points.length - 1];
+  d += ` L ${last[0].toFixed(2)} ${last[1].toFixed(2)}`;
+  return d;
+}
+
+function waveAreaPath(values: number[], maxValue: number) {
+  return `${wavePath(values, maxValue)} L 100 26 L 0 26 Z`;
+}
+
 export default function DashboardPage(props: DashboardProps) {
   const [summary, setSummary] = createSignal<DashboardSummary | null>(null);
   const [loading, setLoading] = createSignal(true);
@@ -204,6 +242,8 @@ export default function DashboardPage(props: DashboardProps) {
   const [trafficHistory, setTrafficHistory] = createSignal<DailyTraffic[]>([]);
   const [historyLoading, setHistoryLoading] = createSignal(true);
   const [historyError, setHistoryError] = createSignal("");
+  const [waveDown, setWaveDown] = createSignal<number[]>([]);
+  const [waveUp, setWaveUp] = createSignal<number[]>([]);
 
   // Traffic history failures are non-fatal: the live proxy keeps working and the
   // card keeps showing the last successfully loaded window.
@@ -283,6 +323,27 @@ export default function DashboardPage(props: DashboardProps) {
       window.clearInterval(timer);
     });
   });
+
+
+  // Live traffic waveform: keep a short rolling window of the rates reported by
+  // the proxy so the dashboard hero can render a "breathing" sparkline while the
+  // connection is up. The window resets as soon as the proxy stops.
+  createEffect(() => {
+    const running = isRunning();
+    const stats = traffic();
+    if (!running) {
+      setWaveDown([]);
+      setWaveUp([]);
+      return;
+    }
+    if (!stats) return;
+    const down = Math.max(0, stats.downlinkRate ?? 0);
+    const up = Math.max(0, stats.uplinkRate ?? 0);
+    setWaveDown((prev) => [...prev, down].slice(-WAVE_SAMPLES));
+    setWaveUp((prev) => [...prev, up].slice(-WAVE_SAMPLES));
+  });
+
+  const waveMax = createMemo(() => Math.max(1024, ...waveDown(), ...waveUp()));
 
   // Persisted daily traffic: load once, then refresh every 30s while the proxy
   // runs because the backend keeps flushing live deltas into today's aggregate.
@@ -400,6 +461,19 @@ export default function DashboardPage(props: DashboardProps) {
           </Show>
         </div>
 
+        <div classList={{ "dash-live-wave": true, active: isRunning() }} aria-hidden="true">
+          <div class="dash-live-wave-head">
+            <span class="dash-live-dot" />
+            <span>{isRunning() ? t("dash.liveTraffic") : t("dash.liveTrafficIdle")}</span>
+            <span class="dash-live-wave-rates">{isRunning() ? `↓ ${downlinkRateLabel()} · ↑ ${uplinkRateLabel()}` : "—"}</span>
+          </div>
+          <svg class="dash-live-wave-chart" viewBox="0 0 100 26" preserveAspectRatio="none">
+            <path class="dash-wave-area" d={waveAreaPath(waveDown(), waveMax())} />
+            <path class="dash-wave-line down" d={wavePath(waveDown(), waveMax())} />
+            <path class="dash-wave-line up" d={wavePath(waveUp(), waveMax())} />
+          </svg>
+        </div>
+
         <Show when={props.proxyError}>
           <div class="proxy-inline-alert error connection-alert"><Icon name="alert" size={13} /> {props.proxyError}</div>
         </Show>
@@ -465,6 +539,7 @@ export default function DashboardPage(props: DashboardProps) {
       </Show>
 
       <div class="dashboard-main-grid">
+        <div class="dashboard-left-column">
         <section class="glass-panel node-overview">
           <div class="panel-heading">
             <div>
@@ -498,31 +573,6 @@ export default function DashboardPage(props: DashboardProps) {
             </div>
           </Show>
         </section>
-
-        <aside class="dashboard-rail">
-          <section class="glass-panel side-card">
-            <div class="panel-heading"><div><h3>{t("dash.quickActions")}</h3><span>{t("dash.quickActionsSubtitle")}</span></div></div>
-            <div class="quick-actions">
-              <button class="quick-action" onClick={() => props.onNavigate("subscriptions")}><span class="quick-icon"><Icon name="plus" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickAddSubscription")}</strong><small>{t("dash.quickAddSubscriptionDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
-              <button class="quick-action" onClick={() => props.onNavigate("routing")}><span class="quick-icon"><Icon name="route" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickRouting")}</strong><small>{t("dash.quickRoutingDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
-              <button class="quick-action" onClick={() => props.onNavigate("logs")}><span class="quick-icon"><Icon name="logs" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickLogs")}</strong><small>{t("dash.quickLogsDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
-              <button class="quick-action" onClick={() => props.onNavigate("settings")}><span class="quick-icon"><Icon name="settings" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickSettings")}</strong><small>{t("dash.quickSettingsDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
-            </div>
-          </section>
-
-          <section class="glass-panel side-card">
-            <div class="panel-heading"><div><h3>{t("dash.systemStatus")}</h3><span>{t("dash.systemStatusSubtitle")}</span></div></div>
-            <div class="system-status-list">
-              <div><span>{t("dash.systemProxyStatus")}</span><strong>{isRunning() ? t("dash.systemRunning") : props.proxyState.status === "error" ? t("dash.systemError") : t("dash.systemStopped")}</strong></div>
-              <div><span>{t("dash.systemXrayApi")}</span><strong>{props.settings?.xrayApiEnabled ? `127.0.0.1:${props.settings.xrayApiPort}` : t("dash.systemDisabled")}</strong></div>
-              <div><span>{t("dash.systemTunMode")}</span><strong>{props.settings?.tunMode ? t("dash.systemEnabled") : t("dash.systemDisabled")}</strong></div>
-              <div><span>{t("dash.systemTestUrl")}</span><strong class="config-url">{props.settings?.testUrl ?? t("dash.systemNotSet")}</strong></div>
-              <div><span>{t("dash.systemAppVersion")}</span><strong>v{props.info?.version ?? "0.1.0"}</strong></div>
-              <div><span>{t("dash.systemPlatform")}</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
-            </div>
-          </section>
-        </aside>
-      </div>
 
       <section class="glass-panel traffic-history-panel">
         <div class="panel-heading">
@@ -593,6 +643,33 @@ export default function DashboardPage(props: DashboardProps) {
           </div>
         </Show>
       </section>
+
+        </div>
+
+        <aside class="dashboard-rail">
+          <section class="glass-panel side-card">
+            <div class="panel-heading"><div><h3>{t("dash.quickActions")}</h3><span>{t("dash.quickActionsSubtitle")}</span></div></div>
+            <div class="quick-actions">
+              <button class="quick-action" onClick={() => props.onNavigate("subscriptions")}><span class="quick-icon"><Icon name="plus" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickAddSubscription")}</strong><small>{t("dash.quickAddSubscriptionDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
+              <button class="quick-action" onClick={() => props.onNavigate("routing")}><span class="quick-icon"><Icon name="route" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickRouting")}</strong><small>{t("dash.quickRoutingDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
+              <button class="quick-action" onClick={() => props.onNavigate("logs")}><span class="quick-icon"><Icon name="logs" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickLogs")}</strong><small>{t("dash.quickLogsDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
+              <button class="quick-action" onClick={() => props.onNavigate("settings")}><span class="quick-icon"><Icon name="settings" size={16} /></span><span class="quick-copy"><strong>{t("dash.quickSettings")}</strong><small>{t("dash.quickSettingsDesc")}</small></span><Icon name="chevron" size={14} class="quick-chevron" /></button>
+            </div>
+          </section>
+
+          <section class="glass-panel side-card">
+            <div class="panel-heading"><div><h3>{t("dash.systemStatus")}</h3><span>{t("dash.systemStatusSubtitle")}</span></div></div>
+            <div class="system-status-list">
+              <div><span>{t("dash.systemProxyStatus")}</span><strong>{isRunning() ? t("dash.systemRunning") : props.proxyState.status === "error" ? t("dash.systemError") : t("dash.systemStopped")}</strong></div>
+              <div><span>{t("dash.systemXrayApi")}</span><strong>{props.settings?.xrayApiEnabled ? `127.0.0.1:${props.settings.xrayApiPort}` : t("dash.systemDisabled")}</strong></div>
+              <div><span>{t("dash.systemTunMode")}</span><strong>{props.settings?.tunMode ? t("dash.systemEnabled") : t("dash.systemDisabled")}</strong></div>
+              <div><span>{t("dash.systemTestUrl")}</span><strong class="config-url">{props.settings?.testUrl ?? t("dash.systemNotSet")}</strong></div>
+              <div><span>{t("dash.systemAppVersion")}</span><strong>v{props.info?.version ?? "0.1.0"}</strong></div>
+              <div><span>{t("dash.systemPlatform")}</span><strong>{props.info ? `${props.info.platform} / ${props.info.arch}` : "..."}</strong></div>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       <section class="glass-panel recent-panel dashboard-recent">
         <div class="panel-heading">
