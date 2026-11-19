@@ -742,7 +742,7 @@ Fast-V.exe "fastv://node?link=vless://..." "fastv://import?url=https://example.c
 
 ## 11.y Android 预览版
 
-- 安装：下载 `FastV-<version>-android-arm64.apk`，允许「安装未知来源应用」后安装；当前为 debug 签名预览包，适合测试。
+- 安装：下载 `FastV-<version>-android-arm64.apk`，允许「安装未知来源应用」后安装；当前为预览包（未配置正式签名时为 debug 签名，适合侧载测试）。发布页同时提供 Play 上架用的 `.aab`。
 - 已支持：订阅添加/更新、节点与分组管理、路由规则与规则集、备份/快照、导入导出、主题与语言（移动端自动切换为单列/底部导航布局）。
 - 暂不支持：系统代理、TUN/VPN、悬浮球、托盘、全局快捷键、应用内更新；在 Android 上点击「启动代理」会提示该版本暂不支持。
 - 数据位置：应用私有目录（系统设置中清除数据会重置 FastV 配置）。

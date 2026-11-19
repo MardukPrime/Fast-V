@@ -197,7 +197,7 @@ TUN 模式需要：
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
 - **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
 - **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz` 便携包、`FastV-<version>-linux-<arch>.deb` 安装包（安装到 `/opt/fastv`），x64 另有 `FastV-<version>-linux-amd64.AppImage`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
-- **Android（arm64）**：`FastV-<version>-android-arm64.apk`（预览版，debug 签名，可直接安装）；当前版本支持订阅/节点/路由/备份管理，系统代理 / VPN / TUN 将在后续 Android 版本提供
+- **Android（arm64）**：`FastV-<version>-android-arm64.apk`（侧载预览版，可直接安装）与 `FastV-<version>-android-arm64.aab`（Play 上架包）；当前版本支持订阅/节点/路由/备份管理，系统代理 / VPN / TUN 将在后续 Android 版本提供；配置 `ANDROID_KEYSTORE_BASE64` 等 Secrets 后为正式签名
 - 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
 - 应用内自动更新当前仅支持 Windows；macOS/Linux 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)

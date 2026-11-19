@@ -6,6 +6,16 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.6.0-pre.1] - 2026-11-19
+
+### Changed
+
+- Android 发布就绪度：
+  - 同时产出 Play 上架用的 `.aab` 与侧载 `.apk`（均纳入 SHA256SUMS 与发布资产）；
+  - 精简模板权限（移除相机、定位、生物识别、振动、通知等未使用权限），仅保留 INTERNET / ACCESS_NETWORK_STATE / 前台服务权限；关闭 `allowBackup` 避免订阅与配置被系统云备份；
+  - 支持通过 GitHub Secrets（`ANDROID_KEYSTORE_BASE64`、密码、别名）进行正式签名；未配置时仍为 debug 签名；
+  - CI 增加 `apksigner verify --print-certs` 签名校验、AAB 结构校验。
+
 ## [1.5.0-pre.1] - 2026-11-19
 
 ### Changed
