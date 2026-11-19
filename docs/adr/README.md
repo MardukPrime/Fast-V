@@ -7,5 +7,6 @@
 | 0001 | 使用 Wails v3 作为桌面框架 | Accepted |
 | 0002 | 使用 SolidJS 作为前端框架 | Accepted |
 | 0003 | 代理协议由外部内核执行 | Accepted |
+| 0004 | Android 使用内嵌 Xray-core，桌面继续使用外部内核 | Accepted |
 
 新增 ADR 时复制 [TEMPLATE.md](TEMPLATE.md)。

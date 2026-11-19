@@ -16,6 +16,9 @@
 10. [api/events.md](api/events.md)：后端事件名和载荷。
 11. [testing/strategy.md](testing/strategy.md)：测试策略和 fixture 规范。
 12. [operations/build.md](operations/build.md)：构建、打包和发布。
+13. [product/ANDROID_PHASE2.md](product/ANDROID_PHASE2.md)：Android VpnService + 内嵌内核里程碑。
+14. [USER_GUIDE.md](USER_GUIDE.md) / [product/FAQ.md](product/FAQ.md)：用户手册与常见问题。
+15. [adr/0004-embedded-core-on-android.md](adr/0004-embedded-core-on-android.md)：Android 内嵌内核决策。
 
 ## 文档目录
 
@@ -24,7 +27,12 @@ docs/
 ├── README.md
 ├── DESIGN.md
 ├── ARCHITECTURE.md
+├── USER_GUIDE.md
 ├── network-diagnostics.md
+├── product/
+│   ├── ANDROID_PHASE2.md
+│   ├── COMMUNITY_RESEARCH.md
+│   └── FAQ.md
 ├── ui/
 │   └── DESIGN_RULES.md
 ├── cores/
@@ -46,7 +54,8 @@ docs/
 │   ├── TEMPLATE.md
 │   ├── 0001-use-wails-v3.md
 │   ├── 0002-use-solidjs.md
-│   └── 0003-external-proxy-core.md
+│   ├── 0003-external-proxy-core.md
+│   └── 0004-embedded-core-on-android.md
 ├── api/
 │   ├── wails-services.md
 │   └── events.md

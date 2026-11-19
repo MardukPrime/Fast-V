@@ -2,13 +2,14 @@
 
 # FastV
 
-**一个现代、轻量、专注桌面体验的代理客户端**
+**一个现代、轻量的代理客户端：桌面完整体验 + Android 预览版（内嵌 Xray 内核）**
 
-Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-core · SolidJS
+Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Android 5.0+（预览） · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-1.1.0-2F6FED)
+![Version](https://img.shields.io/badge/version-1.8.0--pre.1-2F6FED)
+![Stable](https://img.shields.io/badge/stable-1.1.0-38A169)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-2F6FED)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-2F6FED)
 ![Core](https://img.shields.io/badge/core-Xray--core-38A169)
 ![License](https://img.shields.io/badge/license-GPL--3.0-718096)
 
@@ -16,7 +17,9 @@ Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Wails v3 · Xray-c
 
 ---
 
-FastV 是一款面向桌面端的代理客户端。它把订阅管理、节点配置、Xray 内核、路由分流、本地代理、TUN、网络诊断和运行日志整合到一个界面里，尽量减少在多个工具之间来回切换。
+FastV 是一款面向桌面端（并已提供 Android 预览版）的代理客户端。它把订阅管理、节点配置、Xray 内核、路由分流、本地代理、TUN、网络诊断和运行日志整合到一个界面里，尽量减少在多个工具之间来回切换。
+
+桌面版使用外部 Xray-core 可执行文件；Android 版（预览）把 Xray-core 以 Go 库形式内嵌到应用内，可启动本地 SOCKS 代理，系统级 VPN/TUN 正在开发中（见 [Android Phase 2](docs/product/ANDROID_PHASE2.md)）。
 
 FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 
@@ -86,6 +89,15 @@ TUN 模式需要：
 - Windows 10/11
 - 以管理员身份运行 FastV
 - `xray.exe` 同目录存在 `wintun.dll`
+
+### Android（预览版）
+
+- 内嵌 Xray-core（Go library，随应用进程运行，无需下载外部内核）
+- 本地 SOCKS 代理（默认 `127.0.0.1:10808`），可配合支持 SOCKS 的应用或开发调试使用
+- 与桌面共用的订阅、节点、分组、路由规则、规则集、备份/快照/导入导出
+- 移动端响应式布局：单列页面、底部图标导航、设置分区折叠与快捷导航
+- 内嵌模式自动跳过缺少数据集的 GeoIP/GeoSite 路由条件并记录警告
+- 限制：暂不支持系统级 VPN/TUN、实时流量统计与桌面专属能力（M3/M4 开发中）
 
 ### 代理模式
 
@@ -167,6 +179,11 @@ TUN 模式需要：
 - 侧边模式 / 底栏模式一键切换（默认底栏模式）
 - 底栏玻璃透明度可调
 - 响应式布局
+- 首页实时流量波形：波形 / 柱状 / 极简三种样式（持久化），标注峰值/谷值；「最近 7 天流量」内嵌今日实时速率曲线
+- 流量悬浮球（可选，默认关闭）：140px 玻璃球体 + 旋转活动环、实时速率与曲线、指针拖动、单击回到主界面
+- 设置分区快捷导航（吸顶、展开定位、收起全部）与订阅行图标操作 + 更多菜单
+- 首次运行三步引导；日志空状态引导；托盘状态颜色；全局快捷键录制
+- 移动端布局：≤720px 单列页面、图标 Dock、设置分区折叠优化
 
 ## 支持的协议
 
@@ -191,15 +208,15 @@ TUN 模式需要：
 
 ## 下载
 
-最新稳定版 **v1.1.0** 由 GitHub Actions 在 **Windows / macOS / Linux** 上自动构建（多平台产物见 Releases 页面）：
+最新预览版 **v1.8.0-pre.1**（包含 Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
 - **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
 - **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz` 便携包、`FastV-<version>-linux-<arch>.deb` 安装包（安装到 `/opt/fastv`），x64 另有 `FastV-<version>-linux-amd64.AppImage`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
-- **Android（arm64）**：`FastV-<version>-android-arm64.apk`（侧载预览版，可直接安装）与 `FastV-<version>-android-arm64.aab`（Play 上架包）；当前版本内置 Xray 内核并支持本地 SOCKS 代理，系统级 VPN / TUN 将在后续 Android 版本提供；配置 `ANDROID_KEYSTORE_BASE64` 等 Secrets 后为正式签名
+- **Android（arm64，预览）**：`FastV-<version>-android-arm64.apk`（侧载，可直接安装）与 `FastV-<version>-android-arm64.aab`（Play 上架包）；**内置 Xray 内核**，可启动本地 SOCKS 代理（默认 `127.0.0.1:10808`）；系统级 VPN/TUN 仍在开发中；未配置 keystore 时为 debug 签名
 - 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
-- 应用内自动更新当前仅支持 Windows；macOS/Linux 请手动下载新版本
+- 应用内自动更新当前仅支持 Windows；macOS/Linux/Android 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)
 
 ## 快速开始
@@ -240,6 +257,8 @@ TUN 模式需要：
 - Wails v3 CLI
 - WebView2 Runtime
 
+Android 构建额外需要：Android SDK（API 36）、NDK（29.x）、JDK 21；构建命令与签名方式见 [发布说明](docs/operations/release.md)。
+
 ### 安装前端依赖
 
 ```bash
@@ -275,67 +294,58 @@ go build -tags production -trimpath -ldflags "-s -w -H=windowsgui -X github.com/
 
 `-H=windowsgui` 必须保留。缺少该参数会生成控制台子系统程序，启动时出现终端窗口。
 
+验证/开发内嵌 Xray 内核（Android 与桌面 `embeddedcore` 共用代码路径）：
+
+```bash
+# 内嵌内核 + 本地 SOCKS 的桌面验证测试
+go test -tags embeddedcore -run TestEmbeddedCoreServesSocks -v ./internal/proxy/embedded/
+
+# 以嵌入式内核模式运行桌面版（开发验证，不代表正式桌面构建）
+go build -tags "production,embeddedcore" -trimpath -o bin/fastv-embedded.exe .
+```
+
 > 仓库只包含源码和文档。Wails 构建资源、平台资源、安装包和本地工具不纳入版本控制。
 
 ## 当前状态
 
-已实现：
+### 平台支持矩阵
 
-- 订阅和节点管理
-- 订阅格式：分享链接 / Base64 / Clash YAML，节点与订阅二维码
-- 节点分享链接导入 / 导出、手动节点、收藏、标签分组、排序与批量操作
-- 节点配置提取与编辑
-- TCP 连通性测速与真实链路 URL 延迟测速（批量临时内核），延迟历史记录
-- 自动选择最优节点、故障自动切换、Xray 负载均衡（leastPing / leastLoad / roundRobin）
-- Xray 配置生成与 `run -test` 校验、内核更新与 GeoData 更新
-- 本地代理启动和停止
-- 本地 SOCKS/HTTP 入站（局域网共享与入站认证，可选 Windows TUN、Windows 系统代理）
-- 路由规则（域名 / IP / 端口 / 网络 / Windows 进程分流，内置规则预设与 JSON 导入导出）
-- 实时流量统计与每日流量历史（Xray StatsService）
-- 网络诊断与 10 项一键自检
-- 运行日志（筛选、暂停、导出）
-- 配置备份与恢复、开机自启、系统托盘（代理模式切换与重启代理）、关闭 / 最小化到托盘、应用更新（检查、下载、重启安装）
-- 全局快捷键（设置页可录制自定义组合，默认 Ctrl+Shift+F 启停代理、Ctrl+Shift+M 切换模式、Ctrl+Shift+N 下一个节点）
-- WebDAV 云备份与恢复（兼容 Basic Auth，测试连接 / 上传 / 恢复）
-- 配置覆写：高级用户可用 JSON 深合并覆盖生成的 Xray 配置（对象递归合并、数组替换、null 删除字段，保存后重启代理生效）
-- 订阅独立自动更新：每个订阅可单独开关自动更新、设置独立更新间隔与自定义 User-Agent（默认跟随全局设置）
-- 节点分组：手动分组快速切换，或自动测速分组按间隔测速并自动选择延迟最低节点
-- 规则集订阅：远程域名/IP 列表定时下载并展开为路由规则（兼容 hosts / Adblock / Clash 列表格式，失败保留上次规则）
-- 深链接导入：注册 `fastv://` 协议（Windows），支持通过链接导入订阅或分享链接；命令行参数同样生效
-- 网络救援：检测系统代理残留、系统代理地址不一致、WinHTTP 代理残留、本地端口占用与核心异常，并一键安全修复
-- 核心看门狗：核心异常退出后按退避策略自动重启（用户主动停止优先，连续失败有上限），日志与状态可见
-- 规则调试器：离线查询域名 / IP / 进程 / 端口 / 协议命中的路由规则、动作与出站，GeoIP/GeoSite 规则会注明需运行时判定
-- 诊断报告导出：一键生成脱敏 ZIP（设置摘要、脱敏日志、自检结果），便于反馈问题
-- 订阅更新失败时自动通过本地代理重试一次（可关闭）
-- DNS 审计：对比系统 DNS 与 Xray DNS 配置，实测 A 记录解析与延迟，提示明文 DNS、解析器不一致与系统代理模式下的潜在泄露/劫持风险
-- PAC 系统代理模式：生成本地 `fastv.pac`（私有/本地直连，其余走代理）并接管 Windows 自动代理配置
-- 配置快照与回滚：本地最多保留 20 个配置快照，一键回滚（回滚前自动创建安全快照，可撤销）；支持快照导出为 JSON 与从本地备份文件导入快照
-- 诊断与运行日志持久化：运行日志写入 `<数据目录>/logs/fastv.log`（5 MB 轮转、保留 3 个文件），启动/退出/崩溃与内核日志均可追溯
-- 首页实时流量波形与今日实时曲线：连接卡片波形支持波形/柱状/极简三种样式（选择持久化），标注峰值/谷值速率；「最近 7 天流量」面板内置今日实时速率曲线（本会话约 3 分钟）与今日累计。
-- 敏感配置加密：Windows 上 WebDAV 密码与入站认证密码使用当前用户 DPAPI 加密后写入本地配置（备份/快照文件仍为明文，需妥善保管）
-- 界面布局：代理客户端式信息层级（规则调试器可折叠、诊断页紧凑出口质量栏、统计卡紧凑、超宽屏内容居中）
-- 流量悬浮球（可选，默认关闭）：140px 玻璃球体 + 旋转活动环，实时显示上下行速率与曲线；指针拖动、置顶、单击回到主界面、Enter/空格打开
-- 首次运行引导：三步介绍代理模式、导入方式与快照/救援/诊断/日志能力，仅显示一次
-- 完整文档：[用户手册](docs/USER_GUIDE.md) 与 [常见问题 FAQ](docs/product/FAQ.md)
-- TUN 自检与回退向导：检查平台、管理员权限、内核与 wintun.dll、代理状态，失败时给出修复建议并可一键切回系统代理
-- 环境清理：检查并清理卸载残留（fastv:// 协议注册、开机自启项、PAC 文件），不删除用户数据并显示数据目录
-- 托盘状态图标：按代理状态（运行/启动中/异常/停止）显示不同颜色
-- 深色 / 浅色 / 跟随系统主题（默认浅色）与 5 套强调色（天空蓝 / 紫罗兰 / 翡翠绿 / 琥珀橙 / 玫瑰红）
+| 能力 | Windows | macOS | Linux | Android（预览） |
+|---|---|---|---|---|
+| 订阅 / 节点 / 分组 / 路由规则 / 规则集 / 备份 | ✅ | ✅ | ✅ | ✅ |
+| 本地 SOCKS 入站 | ✅ | ✅ | ✅ | ✅（内嵌 Xray 内核） |
+| 流量统计（实时速率 + 每日历史） | ✅ | ✅ | ✅ | ⏳ 内嵌模式暂不支持 |
+| 网络诊断 / DNS 审计 / 网络救援 / 日志 / 诊断报告 | ✅ | ✅ | ✅ | ✅（依赖桌面系统能力项除外） |
+| 系统代理 / PAC / TUN | ✅ | ❌ | ❌ | ❌（M3 开发中） |
+| 托盘 / 全局快捷键 / 悬浮球 / 开机自启 / 应用内更新 | ✅ | ❌ | ❌ | ❌ |
+| WebDAV / 本地备份 / 配置快照 / 导入导出 | ✅ | ✅ | ✅ | ✅ |
+| 安装包 | 安装包 + 便携 zip | `.app` zip | deb / AppImage / tar.gz | APK + AAB |
 
-- 多平台构建与分发：Windows x64（NSIS 安装包 / 便携 zip）、macOS（Apple Silicon / Intel，`FastV.app`）、Linux x64/arm64（deb / AppImage / tar.gz）、Android arm64（预览 APK）；Windows 专属能力（TUN、系统代理、开机自启、托盘菜单、应用内更新）在 macOS/Linux 上暂不提供，其余核心功能（订阅、节点、路由、流量统计、诊断、WebDAV）跨平台可用
+> macOS / Linux 使用外部 Xray-core（Wails purego 后端）；Android 预览版使用内嵌 Xray-core（Go library）。
 
-当前仅支持 Xray-core。
+### Android 预览版（v1.8.0-pre.1）
+
+- 已内置 Xray-core，无需下载外部内核；启动代理后在本机监听 SOCKS（默认 `127.0.0.1:10808`）。
+- 同一条内嵌内核链路已在桌面 `embeddedcore` 构建完成真实验证（`curl --socks5` 返回 HTTP 200）；Android 真机验证待补充。
+- 当前限制：无系统级 VPN/TUN 接管（M3）、内嵌模式无实时流量统计、缺少 GeoIP/GeoSite 数据集时相关路由条件会被跳过并记录警告、未配置正式 keystore 时为 debug 签名。
+- 安装与测试步骤见 [用户手册](docs/USER_GUIDE.md)；里程碑见 [Android Phase 2](docs/product/ANDROID_PHASE2.md)。
+
+### 已知限制
+
+- macOS 构建未签名/未公证，首次启动需右键打开；macOS/Linux 暂不提供系统代理、TUN、托盘、全局快捷键与应用内更新。
+- Android 预览版暂不支持系统级 VPN/TUN 与实时流量统计，Geo 规则条件会跳过；正式上架仍需 Play 测试轨道与签名配置。
+- TUN 模式仅 Windows，且需要管理员权限与 `wintun.dll`。
 
 ## Roadmap
 
+- **Android M3**：`VpnService` + JNI + tun2socks 基础 TCP，实现系统级代理
+- **Android M4**：UDP/DNS、分应用代理、绕过局域网、GeoIP/GeoSite 数据与内嵌流量统计
+- **Android M5**：正式签名 AAB、Play 内部/封闭测试轨道
 - sing-box 内核
-- Hysteria2 / TUIC
-- 连接详情（Xray API 无连接级列表，暂以流量 / 在线统计替代）
-- 规则集订阅与远程规则管理
-- 应用自更新安装
-- macOS / Linux 适配
-- 多语言界面
-- SQLite 存储选项
+- Hysteria2 / TUIC 协议
+- 连接详情（连接级列表受 Xray API 限制，暂以流量/在线统计替代）
+- macOS 签名/公证，Linux 包管理与应用自更新
+- 性能、内存与启动速度优化
 
 ## 反馈
 
