@@ -315,7 +315,26 @@ jobs:
           java-version: '21'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          set -euo pipefail
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_HOME
+          SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "preinstalled sdkmanager not found; installing command-line tools"
+            mkdir -p "$HOME/android-cmdline-tools"
+            curl -fsSL -o "$HOME/android-cmdline-tools.zip" "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip"
+            unzip -q "$HOME/android-cmdline-tools.zip" -d "$HOME/android-cmdline-tools"
+            SDKMANAGER="$HOME/android-cmdline-tools/cmdline-tools/bin/sdkmanager"
+            ANDROID_HOME="$HOME/android-sdk"
+            export ANDROID_HOME
+            mkdir -p "$ANDROID_HOME"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
 
       - name: Install Android platform, build tools and NDK
         run: |
