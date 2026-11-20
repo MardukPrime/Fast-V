@@ -11033,3 +11033,45 @@ textarea:focus {
 .content .panel-heading .heading-with-icon > div > span {
   display: none;
 }
+
+/* ------------------------------------------------------------------ */
+/* Compact diagnostic / form pages                                     */
+/* ------------------------------------------------------------------ */
+
+/* Network quality bar: title + actions only, no repeated eyebrow copy. */
+.network-hero {
+  padding: 12px 16px;
+  align-items: center;
+}
+
+.network-hero .network-eyebrow,
+.network-hero p {
+  display: none;
+}
+
+.network-hero h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+/* Logs toolbar: keep controls on one line on desktop and wrap on phones. */
+.logs-toolbar {
+  gap: 8px;
+}
+
+/* Settings: field descriptions stay out of the way; warnings/errors remain. */
+.settings-section-body .setting-label small,
+.settings-section-body .core-param-grid label > small {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .network-hero {
+    padding: 10px 12px;
+  }
+
+  .settings-section-body .switch-row small {
+    display: none;
+  }
+}

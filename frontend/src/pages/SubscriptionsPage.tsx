@@ -124,6 +124,7 @@ export default function SubscriptionsPage() {
   // through the bindings (it contains the user's private token), so the dialog
   // shows the generated QR image only — no text link to copy.
   const [qrOpen, setQROpen] = createSignal(false);
+  const [addOpen, setAddOpen] = createSignal(false);
   const [actionsMenuId, setActionsMenuId] = createSignal<string | null>(null);
   const [qrTitle, setQRTitle] = createSignal("");
   const [qrImage, setQRImage] = createSignal("");
@@ -181,10 +182,13 @@ export default function SubscriptionsPage() {
   };
 
   const focusAddForm = () => {
-    const input = urlInput;
-    if (!input) return;
-    input.scrollIntoView({ behavior: "smooth", block: "center" });
-    input.focus({ preventScroll: true });
+    setAddOpen(true);
+    requestAnimationFrame(() => {
+      const input = urlInput;
+      if (!input) return;
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+      input.focus({ preventScroll: true });
+    });
   };
 
   const load = async () => {
@@ -218,6 +222,7 @@ export default function SubscriptionsPage() {
       setName("");
       setURL("");
       setMessage(t("sub.success.added"));
+      setAddOpen(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -383,17 +388,17 @@ export default function SubscriptionsPage() {
         <div class="mini-stat"><span>{t("sub.stats.errors")}</span><strong classList={{ "text-danger": failedCount() > 0 }}>{failedCount()}</strong><small>{failedCount() > 0 ? t("sub.stats.errorsHint") : t("sub.stats.errorsOk")}</small></div>
       </section>
 
+      <Show when={addOpen()}>
       <section class="panel add-panel">
         <div class="panel-heading">
           <div class="heading-with-icon">
             <span class="heading-icon cyan"><Icon name="plus" size={17} /></span>
             <div>
               <h3>{t("sub.add.title")}</h3>
-              <span>{t("sub.add.subtitle")}</span>
             </div>
           </div>
-          <button class="btn secondary" onClick={updateAll} disabled={updatingAll() || subscriptions().length === 0}>
-            <Icon name="refresh" size={14} /> {updatingAll() ? t("sub.add.updatingAll") : t("sub.add.updateAll")}
+          <button class="icon-button" type="button" aria-label={t("sub.common.close")} onClick={() => setAddOpen(false)}>
+            <Icon name="close" size={16} />
           </button>
         </div>
         <form class="subscription-form" onSubmit={addSubscription}>
@@ -418,6 +423,7 @@ export default function SubscriptionsPage() {
           </button>
         </form>
       </section>
+      </Show>
 
       <Show when={message()}>
         <div class="alert success"><span class="alert-message"><Icon name="check" size={15} /> {message()}</span></div>
@@ -430,11 +436,18 @@ export default function SubscriptionsPage() {
         <div class="panel-heading">
           <div>
             <h3>{t("sub.list.title")}</h3>
-            <span>{t("sub.list.summary", { subscriptions: subscriptions().length, nodes: totalNodes() })}</span>
           </div>
-          <button class="btn ghost" onClick={load} disabled={loading()}>
-            <Icon name="refresh" size={14} /> {t("sub.list.refresh")}
-          </button>
+          <div class="sub-list-actions">
+            <button class="btn ghost" onClick={updateAll} disabled={updatingAll() || subscriptions().length === 0}>
+              <Icon name="refresh" size={14} /> {updatingAll() ? t("sub.add.updatingAll") : t("sub.add.updateAll")}
+            </button>
+            <button class="btn ghost" onClick={load} disabled={loading()}>
+              <Icon name="refresh" size={14} /> {t("sub.list.refresh")}
+            </button>
+            <button class="btn primary" type="button" onClick={() => setAddOpen(true)}>
+              <Icon name="plus" size={14} /> {t("sub.add.title")}
+            </button>
+          </div>
         </div>
 
         <Show when={!loading()} fallback={<div class="empty-state">{t("sub.list.loading")}</div>}>
