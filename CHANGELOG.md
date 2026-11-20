@@ -6,6 +6,14 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.10.0-pre.1] - 2026-11-20
+
+### Added
+
+- sing-box 实时流量统计：通过 sing-box 的 Clash API WebSocket (`/traffic`) 采集每秒上下行速率，换算为与 Xray 相同的 `TrafficStats`（实时速率、会话累计、每日历史），首页流量卡片、实时波形与流量历史可正常显示。
+- 设置 → 内核能力对照中「实时流量统计」对 sing-box 标记为支持；移除 sing-box 统计不可用的冲突提醒。
+- 新增 Clash API 流量采样器单测（模拟 WebSocket 速率帧，验证速率与会话累计）。
+
 ## [1.9.1-pre.1] - 2026-11-20
 
 ### Changed

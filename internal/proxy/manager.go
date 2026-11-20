@@ -41,6 +41,7 @@ type Manager struct {
 	state              model.ProxyState
 	onStateChange      func(model.ProxyState)
 	sampler            *trafficSampler
+	sbSampler          *singboxTrafficSampler
 	onTraffic          func(model.TrafficStats)
 	tunCleanup         func() error
 	systemProxyCleanup func() error
@@ -101,9 +102,16 @@ func (m *Manager) SetOnTraffic(callback func(model.TrafficStats)) {
 func (m *Manager) Traffic() model.TrafficStats {
 	m.mu.RLock()
 	sampler := m.sampler
+	sbSampler := m.sbSampler
 	running := (m.cmd != nil || m.embedded != nil) && m.state.Status == "running"
 	m.mu.RUnlock()
-	if sampler == nil || !running {
+	if !running {
+		return model.TrafficStats{}
+	}
+	if sbSampler != nil {
+		return sbSampler.stats()
+	}
+	if sampler == nil {
 		return model.TrafficStats{}
 	}
 	return sampler.stats()
@@ -127,18 +135,42 @@ func (m *Manager) startTrafficSampler(corePath string, apiPort int) {
 	sampler.start(context.Background(), corePath, apiPort)
 }
 
-// stopTrafficSampler cancels the sampling goroutine and clears the runtime
+// startSingBoxTrafficSampler streams per-second rates from the sing-box Clash
+// API. It is a no-op when the proxy is not running, the API port is invalid or
+// the sampler is already active.
+func (m *Manager) startSingBoxTrafficSampler(apiPort int) {
+	if apiPort <= 0 {
+		return
+	}
+	m.mu.Lock()
+	if m.sbSampler != nil || m.embedded != nil || m.cmd == nil || m.state.Status != "running" {
+		m.mu.Unlock()
+		return
+	}
+	sampler := newSingBoxTrafficSampler(m.emitTraffic)
+	m.sbSampler = sampler
+	m.mu.Unlock()
+	sampler.start(context.Background(), apiPort)
+}
+
+// stopTrafficSampler cancels the sampling goroutines and clears the runtime
 // traffic state. Concurrent callers (Stop, monitor, fail) are harmless.
 func (m *Manager) stopTrafficSampler() {
 	m.mu.Lock()
 	sampler := m.sampler
+	sbSampler := m.sbSampler
 	m.sampler = nil
+	m.sbSampler = nil
 	m.mu.Unlock()
-	if sampler == nil {
-		return
+	if sampler != nil {
+		sampler.stop()
 	}
-	sampler.stop()
-	m.emitTraffic(model.TrafficStats{})
+	if sbSampler != nil {
+		sbSampler.stop()
+	}
+	if sampler != nil || sbSampler != nil {
+		m.emitTraffic(model.TrafficStats{})
+	}
 }
 
 func (m *Manager) emitTraffic(stats model.TrafficStats) {
@@ -490,10 +522,6 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.mu.Unlock()
 		return m.fail("sing-box 暂不支持 TUN 模式，请切换为 Xray 内核或关闭 TUN")
 	}
-	if singboxMode && (settings.StatsEnabled || settings.XrayAPIEnabled) {
-		settings.StatsEnabled = false
-		m.appendLog("warning", "stats", "sing-box 实时流量统计暂未接入，本次运行将不显示实时速率")
-	}
 	if settings.TunMode {
 		if err := preflightTun(coreInfo.Path); err != nil {
 			m.mu.Unlock()
@@ -730,6 +758,10 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	if !singboxMode && (settings.StatsEnabled || settings.XrayAPIEnabled) {
 		m.appendLog("info", "stats", fmt.Sprintf("实时流量统计已启用（采样间隔 %s）", trafficSampleInterval))
 		m.startTrafficSampler(coreInfo.Path, settings.XrayAPIPort)
+	}
+	if singboxMode && (settings.StatsEnabled || settings.XrayAPIEnabled) {
+		m.appendLog("info", "stats", "sing-box 实时流量统计已启用（Clash API）")
+		m.startSingBoxTrafficSampler(settings.XrayAPIPort)
 	}
 	return state, nil
 }

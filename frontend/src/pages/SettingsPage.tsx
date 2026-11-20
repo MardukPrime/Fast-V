@@ -1275,7 +1275,7 @@ export default function SettingsPage(props: SettingsProps) {
     { name: t("set.coreCapProtocols"), xray: true, singbox: true },
     { name: t("set.coreCapTun"), xray: true, singbox: false },
     { name: t("set.coreCapBalance"), xray: true, singbox: false },
-    { name: t("set.coreCapStats"), xray: true, singbox: false },
+    { name: t("set.coreCapStats"), xray: true, singbox: true },
     { name: t("set.coreCapGeo"), xray: true, singbox: false },
     { name: t("set.coreCapUpdate"), xray: true, singbox: true },
   ];
@@ -1290,7 +1290,6 @@ export default function SettingsPage(props: SettingsProps) {
       if (!core()?.installed) warnings.push(t("set.coreWarnSingboxMissing"));
       if (current.tunMode) warnings.push(t("set.coreWarnSingboxTun"));
       if (current.loadBalanceEnabled) warnings.push(t("set.coreWarnSingboxBalance"));
-      if (current.statsEnabled || current.xrayApiEnabled) warnings.push(t("set.coreWarnSingboxStats"));
       if (current.xrayMuxEnabled) warnings.push(t("set.coreWarnSingboxMux"));
     } else if (!core()?.installed) {
       warnings.push(t("set.coreWarnXrayMissing"));

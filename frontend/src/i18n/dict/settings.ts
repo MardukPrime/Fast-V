@@ -285,7 +285,6 @@ export const zh: Record<string, string> = {
   "set.coreWarnXrayMissing": "已选择 Xray-core，但未检测到内核文件：请点击“下载最新版”，或切换到 sing-box。",
   "set.coreWarnSingboxTun": "TUN 模式已开启，但 sing-box 暂不支持 TUN，启动代理会失败；请关闭 TUN 或切换到 Xray-core。",
   "set.coreWarnSingboxBalance": "负载均衡已开启，但 sing-box 暂不支持，运行时会回退为单节点。",
-  "set.coreWarnSingboxStats": "实时统计/API 已开启，但 sing-box 暂不采集实时流量，这些选项不会生效。",
   "set.coreWarnSingboxMux": "Mux 是 Xray 专属选项，对 sing-box 不生效。",
   "set.integrationHint": "开机自启、托盘行为、悬浮窗与应用更新",
 
@@ -806,7 +805,6 @@ export const en: Record<string, string> = {
   "set.coreWarnXrayMissing": "Xray-core is selected but the core binary is missing: download the latest version or switch to sing-box.",
   "set.coreWarnSingboxTun": "TUN mode is enabled but sing-box does not support TUN yet; starting the proxy will fail. Disable TUN or switch to Xray-core.",
   "set.coreWarnSingboxBalance": "Load balancing is enabled but unsupported by sing-box; it will fall back to a single node.",
-  "set.coreWarnSingboxStats": "Live stats/API are enabled but sing-box does not collect live traffic; these options have no effect.",
   "set.coreWarnSingboxMux": "Mux is an Xray-only option and does not apply to sing-box.",
   "set.integrationHint": "Autostart, tray behavior, floating ball and app updates",
 

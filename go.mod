@@ -5,6 +5,7 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/wailsapp/wails/v3 v3.1.0
 	github.com/xtls/xray-core v1.260327.0
@@ -23,7 +24,6 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect

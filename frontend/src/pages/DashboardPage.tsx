@@ -507,10 +507,10 @@ export default function DashboardPage(props: DashboardProps) {
               <Show
                 when={summary()?.coreVersion}
                 fallback={
-                  <span><Icon name="server" size={12} /> Xray {t("dash.notInstalled")}</span>
+                  <span><Icon name="server" size={12} /> {props.settings?.coreType === "singbox" ? "sing-box" : "Xray"} {t("dash.notInstalled")}</span>
                 }
               >
-                <span><Icon name="server" size={12} /> Xray {summary()?.coreVersion}</span>
+                <span><Icon name="server" size={12} /> {props.settings?.coreType === "singbox" ? "sing-box" : "Xray"} {summary()?.coreVersion}</span>
               </Show>
             </div>
           </div>

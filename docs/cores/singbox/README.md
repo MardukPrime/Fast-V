@@ -29,12 +29,12 @@ FastV 从 1.9.0-pre.1 起支持把 sing-box 作为替代内核（设置 → 内�
 
 ## 已知限制
 
-- 不支持 TUN 模式、负载均衡与实时流量统计（会退回单节点/关闭统计并记录警告）。
+- 不支持 TUN 模式与负载均衡（会退回单节点并记录警告）；实时流量统计通过 Clash API WebSocket (`/traffic`) 采集。
 - 缺少 GeoIP/GeoSite 数据集，相关路由规则被跳过（记录警告）；Xray 的 GeoData 更新不适用于 sing-box。
 - 节点「真实链路测速」仍启动临时 Xray 内核，因此需要同时安装 Xray-core。
 - Android 预览版使用内嵌 Xray-core，不提供 sing-box 切换。
 
 ## 验证
 
-- `go test ./internal/proxy/ -run SingBox`：配置生成与路由映射。
+- `go test ./internal/proxy/ -run SingBox`：配置生成、路由映射与 Clash API 流量采样。
 - 实测：本地 sing-box 作为 Shadowsocks 服务端，FastV 选择 sing-box 启动代理，`curl --socks5-hostname 127.0.0.1:18080` 与 HTTP 代理均返回 200 / 1 MB。
