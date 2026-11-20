@@ -1276,7 +1276,7 @@ export default function SettingsPage(props: SettingsProps) {
     { name: t("set.coreCapTun"), xray: true, singbox: true },
     { name: t("set.coreCapBalance"), xray: true, singbox: false },
     { name: t("set.coreCapStats"), xray: true, singbox: true },
-    { name: t("set.coreCapGeo"), xray: true, singbox: false },
+    { name: t("set.coreCapGeo"), xray: true, singbox: true },
     { name: t("set.coreCapUpdate"), xray: true, singbox: true },
   ];
 

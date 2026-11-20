@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -14,7 +15,49 @@ import (
 // BuildSingBoxConfig creates a complete sing-box configuration for the active
 // node and settings. Xray-specific options (TUN, load balancing, realtime stats)
 // are handled or rejected by the manager before this builder runs.
+// singBoxRuleSetURL returns the official SagerNet binary rule-set URL for one
+// geosite/geoip code. Legacy geoip.db/geosite.db routing was removed in
+// sing-box 1.12, so the generator uses remote rule sets instead.
+func singBoxRuleSetURL(kind string, code string) string {
+	return fmt.Sprintf("https://raw.githubusercontent.com/SagerNet/sing-%s/rule-set/%s-%s.srs", kind, kind, code)
+}
+
+// singBoxRuleSetTag builds a stable tag for a rule-set code (lowercase letters,
+// digits and dashes). The same code always maps to the same tag so multiple
+// rules referencing it share one download.
+func singBoxRuleSetTag(kind string, code string) string {
+	cleaned := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		default:
+			return '-'
+		}
+	}, strings.TrimSpace(code))
+	cleaned = strings.Trim(cleaned, "-")
+	if cleaned == "" {
+		cleaned = "default"
+	}
+	return kind + "-" + cleaned
+}
+
+// BuildSingBoxConfig creates a complete sing-box configuration for the active
+// node and settings. Xray-specific options (TUN, load balancing, realtime stats)
+// are handled or rejected by the manager before this builder runs.
 func BuildSingBoxConfig(node model.Node, settings model.Settings, customRules ...model.RoutingRule) ([]byte, error) {
+	return buildSingBoxConfig(node, settings, "", customRules...)
+}
+
+// BuildSingBoxConfigWithGeoAssets is BuildSingBoxConfig with an explicit
+// directory for the sing-box geoip.db/geosite.db databases, so the core
+// downloads the data next to its binary instead of an arbitrary working dir.
+func BuildSingBoxConfigWithGeoAssets(node model.Node, settings model.Settings, geoAssetDir string, customRules ...model.RoutingRule) ([]byte, error) {
+	return buildSingBoxConfig(node, settings, geoAssetDir, customRules...)
+}
+
+func buildSingBoxConfig(node model.Node, settings model.Settings, geoAssetDir string, customRules ...model.RoutingRule) ([]byte, error) {
 	outbound, err := buildSingBoxOutbound(node, settings)
 	if err != nil {
 		return nil, err
@@ -23,7 +66,7 @@ func BuildSingBoxConfig(node model.Node, settings model.Settings, customRules ..
 	if err != nil {
 		return nil, err
 	}
-	route, skipped := buildSingBoxRoute(settings, customRules)
+	route, skipped, ruleSets := buildSingBoxRoute(settings, customRules)
 	document := map[string]any{
 		"log":      map[string]any{"level": "warn"},
 		"inbounds": inbounds,
@@ -33,6 +76,19 @@ func BuildSingBoxConfig(node model.Node, settings model.Settings, customRules ..
 			map[string]any{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if len(ruleSets) > 0 {
+		route["rule_set"] = ruleSets
+		experimental, _ := document["experimental"].(map[string]any)
+		if experimental == nil {
+			experimental = map[string]any{}
+		}
+		cacheFile := map[string]any{"enabled": true}
+		if geoAssetDir != "" {
+			cacheFile["path"] = filepath.Join(geoAssetDir, "cache.db")
+		}
+		experimental["cache_file"] = cacheFile
+		document["experimental"] = experimental
 	}
 	if settings.TunMode {
 		// TUN receives DNS queries from applications; hijack them so sing-box
@@ -284,8 +340,28 @@ func buildSingBoxTLS(stream map[string]any, reality bool) (map[string]any, error
 	return tls, nil
 }
 
-func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule) (map[string]any, int) {
+func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule) (map[string]any, int, []any) {
 	rules := make([]any, 0, len(customRules)+2)
+	ruleSets := make([]any, 0, 2)
+	seenRuleSets := map[string]bool{}
+	addRuleSet := func(kind string, values []string) []string {
+		tags := make([]string, 0, len(values))
+		for _, value := range values {
+			tag := singBoxRuleSetTag(kind, value)
+			if !seenRuleSets[tag] {
+				seenRuleSets[tag] = true
+				ruleSets = append(ruleSets, map[string]any{
+					"tag":             tag,
+					"type":            "remote",
+					"format":          "binary",
+					"url":             singBoxRuleSetURL(kind, value),
+					"download_detour": proxyOutboundTag,
+				})
+			}
+			tags = append(tags, tag)
+		}
+		return tags
+	}
 	if settings.TunMode {
 		// DNS queries captured by the TUN are answered by sing-box, and local
 		// network traffic avoids the proxy.
@@ -318,7 +394,8 @@ func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule)
 			ports := make([]int, 0, len(values))
 			for _, value := range values {
 				if strings.Contains(value, "-") {
-					ranges = append(ranges, value)
+					// Xray uses "start-end" while sing-box expects "start:end".
+					ranges = append(ranges, strings.Replace(value, "-", ":", 1))
 					continue
 				}
 				if port, err := strconv.Atoi(value); err == nil {
@@ -346,11 +423,10 @@ func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule)
 			singboxRule["network"] = networks
 		case "process":
 			singboxRule["process_name"] = values
-		case "geosite", "geoip":
-			// No geo datasets are bundled with FastV; skipping is safer than
-			// producing a config that fails to start on missing .dat files.
-			skipped++
-			continue
+		case "geosite":
+			singboxRule["rule_set"] = addRuleSet("geosite", values)
+		case "geoip":
+			singboxRule["rule_set"] = addRuleSet("geoip", values)
 		default:
 			skipped++
 			continue
@@ -375,7 +451,7 @@ func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule)
 		"rules":                 rules,
 		"final":                 final,
 		"auto_detect_interface": true,
-	}, skipped
+	}, skipped, ruleSets
 }
 
 func routingSplitValues(value string) []string {

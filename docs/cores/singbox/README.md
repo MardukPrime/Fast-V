@@ -24,6 +24,7 @@ FastV 从 1.9.0-pre.1 起支持把 sing-box 作为替代内核（设置 → 内�
 | TLS/REALITY | `tls`（server_name/insecure/alpn/utls/reality） |
 | WebSocket/gRPC/HTTPUpgrade | `transport` |
 | 路由规则（域名/IP/端口/网络/进程） | `route.rules` + `action: route/reject` |
+| GeoIP / GeoSite | 远程 `rule_set`（SagerNet binary `.srs`）+ `cache_file` 缓存 |
 | 代理模式 | `route.final = proxy` 或 `direct` |
 
 启动前执行 `sing-box check -c <config>`；配置写入 `<数据目录>/runtime/sing-box-config.json`。
@@ -31,8 +32,8 @@ FastV 从 1.9.0-pre.1 起支持把 sing-box 作为替代内核（设置 → 内�
 ## 已知限制
 
 - Windows TUN 模式可用：需要管理员权限，sing-box 自动创建虚拟网卡（`FastV-TUN`）与系统路由；停止代理时清理可能残留的路由/地址。
+- GeoIP/GeoSite 规则使用远程二进制规则集：首次启动通过代理下载（`download_detour: proxy`）并写入 `cache.db`，之后离线复用缓存。
 - 不支持负载均衡（会退回单节点并记录警告）；实时流量统计通过 Clash API WebSocket (`/traffic`) 采集。
-- 缺少 GeoIP/GeoSite 数据集，相关路由规则被跳过（记录警告）；Xray 的 GeoData 更新不适用于 sing-box。
 - 节点「真实链路测速」仍启动临时 Xray 内核，因此需要同时安装 Xray-core。
 - Android 预览版使用内嵌 Xray-core，不提供 sing-box 切换。
 

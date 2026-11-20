@@ -6,6 +6,19 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.12.0-pre.1] - 2026-11-20
+
+### Added
+
+- sing-box **GeoIP / GeoSite 规则**：规则中的 geosite/geoip 条件转换为 sing-box 远程规则集（SagerNet binary `.srs`），通过代理下载并缓存（`experimental.cache_file`），支持 `cn`、`category-ads-all` 等代码，多条规则共享同一规则集。
+  - 规则集下载走当前代理出站（`download_detour: proxy`），首次启动自动下载，之后使用本地缓存；
+  - 设置能力矩阵「GeoIP / GeoSite 路由规则」对 sing-box 标记为支持。
+- 修复 sing-box 端口范围规则格式：Xray 的 `8000-9000` 自动转换为 sing-box 的 `8000:9000`。
+
+### Changed
+
+- sing-box 文档与用户手册更新：Geo 规则通过远程 rule-set 实现，不再跳过相关规则。
+
 ## [1.11.0-pre.1] - 2026-11-20
 
 ### Added

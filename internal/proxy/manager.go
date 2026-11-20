@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -543,7 +544,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 			return m.fail("no active node selected")
 		}
 		node = active
-		config, buildErr = BuildSingBoxConfig(node, settings, customRules...)
+		config, buildErr = BuildSingBoxConfigWithGeoAssets(node, settings, filepath.Join(m.store.DataDir(), "cores", "singbox"), customRules...)
 	} else if useLoadBalance {
 		config, buildErr = BuildLoadBalanceConfig(enabledNodes, settings, customRules...)
 		if buildErr != nil {
@@ -567,6 +568,9 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 	if buildErr != nil {
 		m.mu.Unlock()
 		return m.fail(buildErr.Error())
+	}
+	if singboxMode && bytes.Contains(config, []byte(`"rule_set"`)) {
+		m.appendLog("info", "core", "sing-box 路由包含 GeoIP/GeoSite 规则，首次启动会通过代理下载规则集")
 	}
 	runtimeDir := filepath.Join(m.store.DataDir(), "runtime")
 	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
