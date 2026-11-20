@@ -532,6 +532,9 @@ jobs:
     needs: [meta, windows-x64, macos, linux, android]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
