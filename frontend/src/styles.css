@@ -10365,3 +10365,629 @@ textarea:focus {
     display: none;
   }
 }
+
+/* ================================================================== */
+/* Android (Material 3 inspired) shell                                 */
+/* ================================================================== */
+
+.platform-android {
+  --md-bg: #f2f5f9;
+  --md-surface: #ffffff;
+  --md-surface-2: #eaf0f7;
+  --md-surface-3: #f7f9fc;
+  --md-outline: #dbe3ee;
+  --md-text: #101828;
+  --md-muted: #5b6b80;
+  --md-accent: var(--accent);
+  background: var(--md-bg);
+  color: var(--md-text);
+  font-family: Roboto, "Noto Sans SC", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] .platform-android {
+  --md-bg: #0e131a;
+  --md-surface: #161c25;
+  --md-surface-2: #1d2531;
+  --md-surface-3: #202a37;
+  --md-outline: #2a3646;
+  --md-text: #e9eff8;
+  --md-muted: #9aa9bd;
+}
+
+.platform-android .window-titlebar,
+.platform-android .sidebar,
+.platform-android .liquid-dock,
+.platform-android .topbar {
+  display: none !important;
+}
+
+.platform-android .app-shell {
+  display: block;
+  min-height: 100vh;
+}
+
+.platform-android .content {
+  background: var(--md-bg);
+  padding: 0 0 calc(92px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+}
+
+.platform-android .page-stack {
+  margin: 12px 14px 0;
+  gap: 12px;
+}
+
+/* Top app bar ------------------------------------------------------- */
+.android-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  background: color-mix(in srgb, var(--md-surface) 96%, transparent);
+  border-bottom: 1px solid var(--md-outline);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(14px);
+}
+
+.android-appbar-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.android-appbar-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(145deg, #2563eb, #1d4ed8);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.android-appbar-title strong {
+  display: block;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.android-appbar-title small {
+  display: block;
+  margin-top: 1px;
+  color: var(--md-muted);
+  font-size: 10.5px;
+}
+
+.android-appbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.android-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #98a2b3;
+}
+
+.android-live-dot.online {
+  background: #12b76a;
+  box-shadow: 0 0 0 4px rgba(18, 183, 106, 0.14);
+}
+
+.android-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--md-text);
+  background: transparent;
+}
+
+.android-icon-button:active {
+  background: var(--md-surface-2);
+}
+
+/* Mode / status row ------------------------------------------------ */
+.android-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.android-mode-row::-webkit-scrollbar {
+  display: none;
+}
+
+.android-mode-chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--md-outline);
+  border-radius: 999px;
+  color: var(--md-muted);
+  background: var(--md-surface);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.android-mode-chip.active {
+  color: #fff;
+  border-color: var(--md-accent);
+  background: var(--md-accent);
+}
+
+.android-proxy-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--md-muted);
+  background: var(--md-surface-2);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.android-proxy-chip.running {
+  color: #067647;
+  background: rgba(18, 183, 106, 0.14);
+}
+
+.android-proxy-chip.error {
+  color: #b42318;
+  background: rgba(240, 68, 56, 0.12);
+}
+
+/* Material cards ---------------------------------------------------- */
+.platform-android .glass-panel,
+.platform-android .panel,
+.platform-android .dashboard-stat,
+.platform-android .traffic-history-panel,
+.platform-android .route-section,
+.platform-android .settings-section,
+.platform-android .node-overview,
+.platform-android .dashboard-left-column > .glass-panel,
+.platform-android .dashboard-rail > .glass-panel {
+  border: 1px solid var(--md-outline);
+  border-radius: 16px;
+  background: var(--md-surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  backdrop-filter: none;
+}
+
+.platform-android .mini-stats {
+  gap: 8px;
+}
+
+.platform-android .mini-stat {
+  border: 1px solid var(--md-outline);
+  border-radius: 14px;
+  background: var(--md-surface);
+}
+
+.platform-android .android-preview-banner {
+  margin: 10px 14px 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: 14px;
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.platform-android .android-preview-banner strong {
+  color: var(--md-text);
+}
+
+.platform-android .android-preview-banner span {
+  color: var(--md-muted);
+}
+
+/* Touch friendly controls ------------------------------------------- */
+.platform-android .btn,
+.platform-android .topbar-mode-option,
+.platform-android .core-type-option,
+.platform-android .settings-quick-nav-item,
+.platform-android .dash-wave-style-btn {
+  min-height: 42px;
+}
+
+.platform-android .icon-button {
+  width: 42px;
+  height: 42px;
+}
+
+/* Bottom navigation ------------------------------------------------ */
+.android-bottom-nav {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  height: calc(62px + env(safe-area-inset-bottom));
+  padding: 6px 6px env(safe-area-inset-bottom);
+  border-top: 1px solid var(--md-outline);
+  background: color-mix(in srgb, var(--md-surface) 97%, transparent);
+  box-shadow: 0 -2px 12px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
+}
+
+.android-nav-item {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  border: 0;
+  border-radius: 14px;
+  color: var(--md-muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 550;
+}
+
+.android-nav-item.active {
+  color: var(--md-accent);
+}
+
+.android-nav-indicator {
+  position: absolute;
+  top: 4px;
+  width: 34px;
+  height: 26px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.android-nav-item.active .android-nav-indicator {
+  background: color-mix(in srgb, var(--md-accent) 14%, transparent);
+}
+
+.android-nav-item svg {
+  position: relative;
+  z-index: 1;
+}
+
+/* Floating action button ------------------------------------------- */
+.android-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 61;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 18px;
+  color: #fff;
+  background: var(--md-accent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--md-accent) 38%, transparent);
+}
+
+.android-fab.running {
+  background: #d92d20;
+  box-shadow: 0 8px 20px rgba(217, 45, 32, 0.32);
+}
+
+.android-fab:disabled {
+  opacity: 0.55;
+}
+
+/* Overflow bottom sheet ------------------------------------------- */
+.android-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(9, 14, 22, 0.5);
+}
+
+.android-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 71;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px calc(14px + env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0;
+  background: var(--md-surface);
+  box-shadow: 0 -12px 30px rgba(15, 23, 42, 0.18);
+}
+
+.android-sheet-handle {
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  margin: 2px 0 8px;
+  border-radius: 999px;
+  background: var(--md-outline);
+}
+
+.android-sheet-title {
+  padding: 4px 10px 8px;
+  color: var(--md-muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.android-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 50px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--md-text);
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+}
+
+.android-sheet-item:active {
+  background: var(--md-surface-2);
+}
+
+/* Mobile-specific page polish -------------------------------------- */
+.platform-android .page-stack > .mini-stats {
+  margin-top: 2px;
+}
+
+.platform-android .dashboard-hero,
+.platform-android .connection-card {
+  border-radius: 18px;
+}
+
+.platform-android .topbar,
+.platform-android .window-controls {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .platform-android .page-stack {
+    margin: 10px 12px 0;
+    gap: 11px;
+  }
+
+  .platform-android .android-preview-banner {
+    margin: 10px 12px 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Android pages: list/table layouts become Material list cards        */
+/* ------------------------------------------------------------------ */
+
+.platform-android .connection-hero {
+  border: 1px solid var(--md-outline) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(220px 140px at 8% 0%, color-mix(in srgb, var(--md-accent) 12%, transparent), transparent 70%),
+    var(--md-surface) !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: none !important;
+}
+
+/* Nodes: desktop table -> one card per node. */
+.platform-android .srv-table {
+  display: block;
+}
+
+.platform-android .srv-table-head {
+  display: none;
+}
+
+.platform-android .srv-row {
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  grid-template-areas:
+    "sel node state"
+    "sel addr actions";
+  gap: 6px 10px;
+  min-height: 0;
+  margin: 8px 0;
+  padding: 11px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: 14px;
+  background: var(--md-surface);
+}
+
+.platform-android .srv-row:last-child {
+  margin-bottom: 8px;
+}
+
+.platform-android .srv-cell-select {
+  grid-area: sel;
+  flex-direction: column;
+  align-self: start;
+  gap: 6px;
+}
+
+.platform-android .srv-node {
+  grid-area: node;
+}
+
+.platform-android .srv-addr {
+  grid-area: addr;
+  align-self: center;
+  font-size: 10.5px;
+  color: var(--md-muted);
+}
+
+.platform-android .srv-state {
+  grid-area: state;
+  align-self: start;
+}
+
+.platform-android .srv-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+  align-self: center;
+}
+
+.platform-android .srv-proto,
+.platform-android .srv-latency-cell {
+  display: none;
+}
+
+/* Routing: desktop grid rows -> cards. */
+.platform-android .routing-table-head {
+  display: none;
+}
+
+.platform-android .routing-row {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  grid-template-areas:
+    "name action"
+    "value state"
+    "actions actions";
+  gap: 6px 10px;
+  min-height: 0;
+  margin: 8px 0;
+  padding: 11px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: 14px;
+  background: var(--md-surface);
+}
+
+.platform-android .routing-row .routing-order {
+  display: none;
+}
+
+.platform-android .routing-row .routing-name {
+  grid-area: name;
+}
+
+.platform-android .routing-row > .tag.neutral {
+  display: none;
+}
+
+.platform-android .routing-row .routing-value {
+  grid-area: value;
+  overflow: hidden;
+  color: var(--md-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-android .routing-row .routing-action {
+  grid-area: action;
+  justify-self: end;
+}
+
+.platform-android .routing-row .state-pill {
+  grid-area: state;
+  justify-self: end;
+}
+
+.platform-android .routing-row .routing-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+}
+
+.platform-android .routing-io-bar {
+  flex-wrap: wrap;
+}
+
+/* Android page headers: keep title readable and let actions wrap below. */
+.platform-android .srv-panel > .panel-heading,
+.platform-android .routing-panel > .panel-heading,
+.platform-android .node-overview > .panel-heading {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.platform-android .srv-panel > .panel-heading .heading-with-icon,
+.platform-android .routing-panel > .panel-heading .heading-with-icon,
+.platform-android .node-overview > .panel-heading .heading-with-icon {
+  flex: 1 1 210px;
+  min-width: 0;
+}
+
+.platform-android .srv-heading-actions,
+.platform-android .routing-heading-actions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.platform-android .routing-debug-badge {
+  display: none;
+}
+
+/* Filters scroll horizontally instead of stacking four selects. */
+.platform-android .srv-filters {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.platform-android .srv-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.platform-android .srv-filter-label,
+.platform-android .srv-filter-sep {
+  display: none;
+}
+
+.platform-android .srv-toolbar {
+  row-gap: 8px;
+}
+
+/* Compact preview notice on the dashboard. */
+.platform-android .android-preview-banner {
+  padding: 9px 11px;
+}
+
+.platform-android .android-preview-banner span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Older WebViews: solid fallbacks before color-mix() backgrounds. */
+.platform-android .android-appbar {
+  background: var(--md-surface);
+}
+
+.platform-android .android-bottom-nav {
+  background: var(--md-surface);
+}
+
+.platform-android .android-mode-chip.active,
+.platform-android .android-fab {
+  background: var(--accent);
+}

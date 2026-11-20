@@ -215,13 +215,17 @@ export default function App() {
   // First-run guide state: the overlay opens after the shell has mounted when
   // the storage marker is missing. Every dismissal path writes the marker.
   const [onboardingOpen, setOnboardingOpen] = createSignal(false);
+  const [androidMenuOpen, setAndroidMenuOpen] = createSignal(false);
   let onboardingCloseButton: HTMLButtonElement | undefined;
   const [dockTransparency, setDockTransparency] = createSignal(28);
   const layoutMode = () => settings()?.layoutMode === "sidebar" ? "sidebar" : "dock";
   // Android builds are a preview: the desktop proxy/TUN/tray capabilities are
   // unavailable, so the shell advertises that clearly and the layout hides
   // desktop-only chrome.
-  const isAndroidPlatform = () => info()?.platform === "android";
+  // `?android=1` forces the Android shell in a desktop build so the mobile
+  // layout can be reviewed with Chrome device emulation during development.
+  const isAndroidPlatform = () =>
+    info()?.platform === "android" || new URLSearchParams(window.location.search).has("android");
   const activeMeta = () => pageMeta()[active()];
   let dockNavElement: HTMLDivElement | undefined;
   const [dockIndicator, setDockIndicator] = createSignal({ left: 0, width: 0, visible: false });
@@ -624,6 +628,45 @@ export default function App() {
         </Show>
 
         <main class="content">
+          <Show when={isAndroidPlatform()}>
+            <header class="android-appbar">
+              <div class="android-appbar-title">
+                <span class="android-appbar-mark" aria-hidden="true">F</span>
+                <div>
+                  <strong>{activeMeta().title}</strong>
+                  <small>{core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${core()?.version ?? ""}` : t("shell.coreMissing")}</small>
+                </div>
+              </div>
+              <div class="android-appbar-actions">
+                <span classList={{ "android-live-dot": true, online: proxy().status === "running" }} aria-hidden="true" />
+                <button type="button" class="android-icon-button" aria-label={t("shell.androidMore")} onClick={() => setAndroidMenuOpen(true)}>
+                  <Icon name="more" size={20} />
+                </button>
+              </div>
+            </header>
+
+            <div class="android-mode-row">
+              <For each={proxyModes()}>
+                {(option) => (
+                  <button
+                    type="button"
+                    classList={{ "android-mode-chip": true, active: currentProxyMode() === option.value }}
+                    aria-pressed={currentProxyMode() === option.value}
+                    disabled={proxyModeBusy() || !settings()}
+                    onClick={() => { void handleProxyModeChange(option.value); }}
+                  >
+                    {option.label}
+                  </button>
+                )}
+              </For>
+              <span classList={{ "android-proxy-chip": true, running: proxy().status === "running", error: proxy().status === "error" }}>
+                {proxy().status === "running" ? t("dash.proxyStatusRunning")
+                  : proxy().status === "starting" ? t("dash.proxyStatusStarting")
+                  : proxy().status === "error" ? t("dash.proxyStatusError")
+                  : t("dash.proxyStatusStopped")}
+              </span>
+            </div>
+          </Show>
           <header class="topbar">
             <div class="topbar-title">
               <span class="breadcrumb">FastV / {activeMeta().title}</span>
@@ -672,7 +715,7 @@ export default function App() {
             </div>
           </header>
 
-          <Show when={isAndroidPlatform()}>
+          <Show when={isAndroidPlatform() && active() === "dashboard"}>
             <div class="android-preview-banner" role="note">
               <span class="android-preview-icon"><Icon name="alert" size={14} /></span>
               <div>
@@ -731,6 +774,54 @@ export default function App() {
           </Show>
 
         </main>
+
+        <Show when={isAndroidPlatform()}>
+          <nav class="android-bottom-nav" aria-label={t("shell.dockNav")}>
+            <For each={[navigation()[0], navigation()[1], navigation()[2], navigation()[3], navigation()[6]]}>
+              {(item) => (
+                <button
+                  type="button"
+                  classList={{ "android-nav-item": true, active: active() === item.key }}
+                  onClick={() => { setActive(item.key); setAndroidMenuOpen(false); }}
+                >
+                  <span class="android-nav-indicator" aria-hidden="true" />
+                  <Icon name={item.icon} size={22} />
+                  <span>{item.label}</span>
+                </button>
+              )}
+            </For>
+          </nav>
+
+          <button
+            type="button"
+            classList={{ "android-fab": true, running: proxy().status === "running" }}
+            aria-label={proxy().status === "running" ? t("shell.androidStop") : t("shell.androidStart")}
+            disabled={proxyBusy()}
+            onClick={() => { void (proxy().status === "running" ? handleStopProxy() : handleStartProxy()); }}
+          >
+            <Icon name={proxy().status === "running" ? "stop" : "play"} size={24} />
+          </button>
+
+          <Show when={androidMenuOpen()}>
+            <div class="android-sheet-backdrop" onClick={() => setAndroidMenuOpen(false)} />
+            <div class="android-sheet" role="dialog" aria-modal="true" aria-label={t("shell.androidMore")}>
+              <span class="android-sheet-handle" aria-hidden="true" />
+              <strong class="android-sheet-title">{t("shell.androidMore")}</strong>
+              <button type="button" class="android-sheet-item" onClick={() => { setActive("speedtest"); setAndroidMenuOpen(false); }}>
+                <Icon name="speed" size={20} /> {t("shell.nav.speedtest")}
+              </button>
+              <button type="button" class="android-sheet-item" onClick={() => { setActive("logs"); setAndroidMenuOpen(false); }}>
+                <Icon name="logs" size={20} /> {t("shell.nav.logs")}
+              </button>
+              <button type="button" class="android-sheet-item" onClick={() => { setActive("settings"); setAndroidMenuOpen(false); }}>
+                <Icon name="settings" size={20} /> {t("shell.nav.settings")}
+              </button>
+              <button type="button" class="android-sheet-item" onClick={() => setAndroidMenuOpen(false)}>
+                <Icon name="close" size={20} /> {t("shell.deeplink.close")}
+              </button>
+            </div>
+          </Show>
+        </Show>
 
           <Show when={layoutMode() === "dock"}>
           <nav
