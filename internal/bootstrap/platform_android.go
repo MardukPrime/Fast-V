@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+
+	"github.com/MardukPrime/Fast-V/internal/buildinfo"
 )
 
 // prepareMobileDataDir points the store at the Android app's private files
@@ -17,6 +19,21 @@ func prepareMobileDataDir() {
 		return
 	}
 	base := application.Android.StoragePath()
+	if base == "" {
+		// The bridge normally returns getFilesDir(); fall back to the standard
+		// app sandbox paths if the JNI call happened before it was ready. This
+		// keeps store.NewStore from falling back to an unwritable directory and
+		// failing the whole Android start.
+		for _, candidate := range []string{
+			filepath.Join("/data/user/0", buildinfo.ProductID, "files"),
+			filepath.Join("/data/data", buildinfo.ProductID, "files"),
+		} {
+			if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+				base = candidate
+				break
+			}
+		}
+	}
 	if base == "" {
 		return
 	}

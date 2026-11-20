@@ -6,6 +6,13 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.12.2-pre.1] - 2026-11-20
+
+### Fixed
+
+- 替换项目默认 Wails 图标为 FastV 品牌图标（`F` + 信号条，深蓝渐变），覆盖桌面应用图标与 Android launcher/splash 图标；此前 Android 启动页显示的是模板的 W 图标。
+- Android 数据目录兜底：若启动早期 JNI `getFilesDir()` 尚未返回，回退到应用沙箱标准路径，避免因数据目录不可写导致启动失败/停留在启动页。
+
 ## [1.12.1-pre.1] - 2026-11-20
 
 ### Fixed / Added
