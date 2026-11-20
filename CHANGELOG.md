@@ -6,6 +6,14 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.12.4-pre.1] - 2026-11-20
+
+### Fixed
+
+- Android 首次启动跳过桌面版 onboarding 引导：该引导在手机窄屏上会与仪表盘内容重叠、遮挡功能入口；手机直接进入主界面（Android 预览提示保留）。
+- 移动端设置「内核能力对照」改为紧凑两列布局，修复窄屏下表格横向溢出与「当前使用」徽标裁剪；设置页按底栏 Dock 增加底部留白，避免内容被底栏遮挡。
+- 移动端 onboarding（桌面窄窗口仍可能出现）改为全屏面板，并为不支持 `backdrop-filter` 的旧 WebView 提供不透明背景回退。
+
 ## [1.12.3-pre.1] - 2026-11-20
 
 ### Fixed

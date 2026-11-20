@@ -391,7 +391,7 @@ export default function App() {
   };
 
   onMount(() => {
-    if (!onboardingSeen()) {
+    if (!isAndroidPlatform() && !onboardingSeen()) {
       // Wait one frame so the overlay fades in above a painted shell instead of
       // an empty window.
       const frame = requestAnimationFrame(() => setOnboardingOpen(true));

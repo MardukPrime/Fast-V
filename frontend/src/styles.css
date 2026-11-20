@@ -10233,3 +10233,135 @@ textarea:focus {
   font-weight: 600;
   letter-spacing: 0.03em;
 }
+
+/* ------------------------------------------------------------------ */
+/* Android / WebView fallbacks                                         */
+/* ------------------------------------------------------------------ */
+
+/* Android has no desktop titlebar; the onboarding backdrop must start at the
+   very top and sit above the bottom dock if it is ever shown. */
+.app-root.platform-android .onboarding-backdrop {
+  top: 0;
+  z-index: 120;
+}
+
+/* Older Android WebViews (MuMu/AVD) do not support backdrop-filter; without a
+   blur the translucent onboarding backdrop lets the dashboard text shine
+   through. Use a near-opaque fallback there. */
+@supports not (backdrop-filter: blur(2px)) {
+  .onboarding-backdrop,
+  .modal-backdrop {
+    background: rgba(9, 14, 22, 0.9);
+  }
+}
+
+/* Mobile onboarding: one full-width sheet with dense cards instead of a
+   desktop-sized panel with overflowing content. */
+@media (max-width: 720px) {
+  .onboarding-backdrop {
+    top: 0;
+    padding: 8px;
+  }
+
+  .onboarding-panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 16px);
+    padding: 14px;
+    gap: 10px;
+    border-radius: 18px;
+  }
+
+  .onboarding-header h2 {
+    font-size: 15px;
+  }
+
+  .onboarding-heading p {
+    font-size: 10px;
+  }
+
+  .onboarding-grid {
+    gap: 8px;
+  }
+
+  .onboarding-card {
+    padding: 12px;
+    gap: 6px;
+  }
+
+  .onboarding-card h3 {
+    font-size: 13px;
+  }
+
+  .onboarding-lead {
+    font-size: 10px;
+  }
+
+  .onboarding-footer {
+    gap: 8px;
+  }
+}
+
+/* Mobile: keep the capability matrix inside the panel (old layout overflowed
+   horizontally because the fixed 84px columns exceeded the narrow card). */
+@media (max-width: 720px) {
+  .layout-dock .content {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .core-capability {
+    padding: 10px;
+  }
+
+  .core-capability-head {
+    margin-bottom: 6px;
+  }
+
+  .core-capability-head .setting-label small {
+    display: none;
+  }
+
+  .core-capability-table {
+    border-radius: 8px;
+  }
+
+  .core-capability-row {
+    grid-template-columns: minmax(0, 1fr) 52px 52px;
+    gap: 4px;
+    padding: 6px 7px;
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .core-capability-row.head {
+    font-size: 7.5px;
+    letter-spacing: 0;
+  }
+
+  .core-capability-row.head span:first-child {
+    display: none;
+  }
+
+  .core-cap-cell {
+    padding: 2px 3px;
+    font-size: 8.5px;
+    overflow-wrap: anywhere;
+  }
+
+  .core-cap-cell .core-cap-current {
+    font-size: 6.5px;
+    margin-top: 1px;
+  }
+
+  .core-capability-row.head .core-cap-cell {
+    font-size: 7.5px;
+  }
+}
+
+@media (max-width: 720px) {
+  /* The capability matrix has only 52px per core column on phones; the
+     "in use" pill belongs to the core selector above, not inside the header. */
+  .core-capability-row.head .core-cap-current {
+    display: none;
+  }
+}

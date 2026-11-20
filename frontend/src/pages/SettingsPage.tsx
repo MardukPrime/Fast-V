@@ -1732,7 +1732,7 @@ export default function SettingsPage(props: SettingsProps) {
             </div>
             <div class="core-capability-table">
               <div class="core-capability-row head">
-                <span>{t("set.coreCapabilityTitle")}</span>
+                <span aria-hidden="true"></span>
                 <span classList={{ "core-cap-cell": true, current: settings().coreType === "xray" }}>
                   Xray-core
                   <Show when={settings().coreType === "xray"}><span class="core-cap-current">{t("set.coreCurrent")}</span></Show>
