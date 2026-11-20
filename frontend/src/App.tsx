@@ -395,12 +395,9 @@ export default function App() {
   };
 
   onMount(() => {
-    if (!isAndroidPlatform() && !onboardingSeen()) {
-      // Wait one frame so the overlay fades in above a painted shell instead of
-      // an empty window.
-      const frame = requestAnimationFrame(() => setOnboardingOpen(true));
-      onCleanup(() => cancelAnimationFrame(frame));
-    }
+    // The desktop guide is not auto-opened: the dashboard's empty states and
+    // inline actions already make the first step obvious. It can still be
+    // opened programmatically through ONBOARDING_OPEN_EVENT.
     const handleOpenRequest = () => setOnboardingOpen(true);
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest);
     onCleanup(() => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest));
@@ -595,24 +592,32 @@ export default function App() {
             </div>
           </div>
 
-          <div class="nav-section-label">{t("shell.workspace")}</div>
-          <nav class="nav">
-            {navigation().map((item) => (
-              <button
-                classList={{ "nav-item": true, active: active() === item.key }}
-                onClick={() => setActive(item.key)}
-              >
-                <span class="nav-icon"><Icon name={item.icon} size={17} /></span>
-                <span class="nav-copy">
-                  <span class="nav-label">{item.label}</span>
-                  <span class="nav-caption">{item.caption}</span>
-                </span>
-                <Show when={active() === item.key}>
-                  <span class="nav-active-dot" />
-                </Show>
-              </button>
-            ))}
-          </nav>
+          {[
+            { label: t("shell.workspace"), items: navigation().slice(0, 4) },
+            { label: t("shell.groupTools"), items: navigation().slice(4, 6) },
+            { label: t("shell.groupSystem"), items: navigation().slice(6) },
+          ].map((group) => (
+            <>
+              <div class="nav-section-label">{group.label}</div>
+              <nav class="nav">
+                {group.items.map((item) => (
+                  <button
+                    classList={{ "nav-item": true, active: active() === item.key }}
+                    onClick={() => setActive(item.key)}
+                  >
+                    <span class="nav-icon"><Icon name={item.icon} size={17} /></span>
+                    <span class="nav-copy">
+                      <span class="nav-label">{item.label}</span>
+                      <span class="nav-caption">{item.caption}</span>
+                    </span>
+                    <Show when={active() === item.key}>
+                      <span class="nav-active-dot" />
+                    </Show>
+                  </button>
+                ))}
+              </nav>
+            </>
+          ))}
 
           <div class="sidebar-footer">
             <div class="footer-status">
@@ -669,9 +674,7 @@ export default function App() {
           </Show>
           <header class="topbar">
             <div class="topbar-title">
-              <span class="breadcrumb">FastV / {activeMeta().title}</span>
               <h1>{activeMeta().title}</h1>
-              <p>{activeMeta().subtitle}</p>
             </div>
             <div class="topbar-actions">
               <div classList={{ "topbar-mode": true, switching: proxyModeBusy() }} role="group" aria-label={t("shell.proxyMode")}>
@@ -703,7 +706,6 @@ export default function App() {
                   <For each={proxyModes()}>{(option) => <option value={option.value}>{option.label}</option>}</For>
                 </select>
               </div>
-              <span class="status-chip"><span class="status-dot online" />{t("shell.localDataReady")}</span>
               <span classList={{ "status-chip": true, muted: !core()?.installed }}>
                 <span classList={{ "status-dot": true, online: core()?.installed, idle: !core()?.installed }} />
                 {core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${core()?.version ?? ""}` : t("shell.coreMissing")}
@@ -715,15 +717,6 @@ export default function App() {
             </div>
           </header>
 
-          <Show when={isAndroidPlatform() && active() === "dashboard"}>
-            <div class="android-preview-banner" role="note">
-              <span class="android-preview-icon"><Icon name="alert" size={14} /></span>
-              <div>
-                <strong>{t("shell.androidPreviewTitle")}</strong>
-                <span>{t("shell.androidPreviewBody")}</span>
-              </div>
-            </div>
-          </Show>
 
           <Show when={proxyModeError()}>
             {(modeError) => (

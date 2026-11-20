@@ -10991,3 +10991,45 @@ textarea:focus {
 .platform-android .android-fab {
   background: var(--accent);
 }
+
+/* ------------------------------------------------------------------ */
+/* Reduced-explanatory chrome: compact desktop header and settings     */
+/* ------------------------------------------------------------------ */
+
+/* Page headers carry the title and actions; the subtitle moved to empty states
+   and tooltips instead of repeating under every heading. */
+.topbar-title p {
+  display: none;
+}
+
+.topbar {
+  gap: 12px;
+}
+
+/* Settings section summaries show title + status only; the explanatory hint
+   lives in the opened panel (or its title), keeping the list scannable. */
+.settings-section-summary .heading-with-icon > div > span {
+  display: none;
+}
+
+/* Sidebar groups: clear breathing room between core / tools / system. */
+.sidebar .nav-section-label + .nav {
+  margin-bottom: 2px;
+}
+
+.sidebar .nav-section-label:not(:first-of-type) {
+  margin-top: 12px;
+}
+
+/* Subtle separators between dock groups (core / tools / system). */
+.layout-dock .liquid-nav-item:nth-child(5),
+.layout-dock .liquid-nav-item:nth-child(7) {
+  box-shadow: -1px 0 0 var(--glass-border);
+  margin-left: 6px;
+}
+
+/* Explanatory subtitles are informational only; remove them from panel headings
+   so the interface scans by title + action instead of reading prose. */
+.content .panel-heading .heading-with-icon > div > span {
+  display: none;
+}
