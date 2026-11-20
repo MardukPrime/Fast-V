@@ -6,6 +6,15 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.12.1-pre.1] - 2026-11-20
+
+### Fixed / Added
+
+- Android 启动诊断与兼容性改进（针对部分设备打开后只显示单个字符/空白的问题）：
+  - 前端构建目标从 `esnext` 降为 `es2019`，并使用相对资源路径（`base: "./"`），兼容较旧的 Android System WebView；
+  - `index.html` 内置启动占位与错误捕获：JS 加载/执行失败时直接显示错误信息，而不是空白页；
+  - Android 原生层新增诊断浮层：WebView 主文档/资源加载失败、JS console error 时显示错误码、URL 与当前 WebView 版本，便于定位设备兼容问题。
+
 ## [1.12.0-pre.1] - 2026-11-20
 
 ### Added

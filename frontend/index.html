@@ -2,12 +2,66 @@
 <html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>FastV</title>
+    <style>
+      /* Shown until the SolidJS app mounts (and left visible if boot fails, so
+         Android WebViews never present a completely blank screen). */
+      #boot-status {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-content: center;
+        gap: 10px;
+        padding: 24px;
+        color: #334155;
+        background: #eef2f7;
+        font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif;
+        text-align: center;
+        z-index: 1;
+      }
+      #boot-status strong { font-size: 18px; color: #0f172a; }
+      #boot-status .boot-error { color: #b42318; white-space: pre-wrap; word-break: break-word; max-width: 90vw; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-status">
+        <strong>FastV</strong>
+        <span>正在启动…</span>
+        <div class="boot-error" id="boot-error" hidden></div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var errorNode = document.getElementById("boot-error");
+        function report(message) {
+          if (!errorNode) return;
+          errorNode.hidden = false;
+          errorNode.textContent = String(message);
+        }
+        window.addEventListener("error", function (event) {
+          var detail = event && event.message ? event.message : "unknown error";
+          if (event && event.filename) detail += "\n" + event.filename + ":" + (event.lineno || 0);
+          report("FastV 启动失败：" + detail);
+        });
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event && event.reason ? event.reason.message || event.reason : "unknown rejection";
+          report("FastV 启动失败：" + reason);
+        });
+        // If the bundle never executes (asset/CORS/syntax error), surface it
+        // instead of leaving the user on a blank screen.
+        setTimeout(function () {
+          var status = document.getElementById("boot-status");
+          var root = document.getElementById("root");
+          if (status && root && root.contains(status) && !errorNode.textContent) {
+            var error = "前端未能在 10 秒内加载（WebView 可能无法执行该 JS 包）";
+            report(error);
+          }
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>

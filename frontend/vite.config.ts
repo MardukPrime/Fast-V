@@ -3,6 +3,7 @@ import solid from "vite-plugin-solid";
 import wails from "@wailsio/runtime/plugins/vite";
 
 export default defineConfig({
+  base: "./",
   plugins: [solid(), wails("./bindings")],
   server: {
     host: "127.0.0.1",
@@ -10,6 +11,9 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    target: "esnext",
+    // Android System WebView versions still in the wild can be older than the
+    // default "modules" target; es2019 keeps optional chaining etc. away from
+    // the parser while remaining fast on modern WebViews.
+    target: "es2019",
   },
 });

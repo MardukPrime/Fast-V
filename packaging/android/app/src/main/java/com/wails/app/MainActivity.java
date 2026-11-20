@@ -15,6 +15,7 @@ import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -22,6 +23,7 @@ import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.util.Log;
+import android.widget.TextView;
 import android.webkit.ConsoleMessage;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -60,6 +62,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int FILE_PICKER_REQUEST = 7001;
 
     private WebView webView;
+    private TextView diagnostics;
     private Uri devServer;
     private WailsBridge bridge;
     // Battery: system-event receivers are registered only while the activity is
@@ -97,6 +100,8 @@ public class MainActivity extends AppCompatActivity {
 
         String devURL = WailsBridge.devServerURL(this);
         if (devURL != null) devServer = Uri.parse(devURL);
+
+        diagnostics = findViewById(R.id.diagnostics);
 
         // Initialize the native Go library
         bridge = new WailsBridge(this);
@@ -219,6 +224,22 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request.isForMainFrame()) {
+                    showDiagnostics("页面加载失败 [" + error.getErrorCode() + "]: " + error.getDescription());
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                super.onReceivedHttpError(view, request, errorResponse);
+                if (request.isForMainFrame()) {
+                    showDiagnostics("资源加载失败: HTTP " + errorResponse.getStatusCode() + " " + request.getUrl());
+                }
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if (DEBUG) Log.d(TAG, "Page loaded: " + url);
@@ -242,9 +263,10 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage msg) {
-                if (DEBUG) {
-                    Log.d(TAG, "[WebView] " + msg.messageLevel() + ": " + msg.message()
-                            + " (" + msg.sourceId() + ":" + msg.lineNumber() + ")");
+                Log.d(TAG, "[WebView] " + msg.messageLevel() + ": " + msg.message()
+                        + " (" + msg.sourceId() + ":" + msg.lineNumber() + ")");
+                if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    showDiagnostics("前端错误: " + msg.message() + " (" + msg.sourceId() + ":" + msg.lineNumber() + ")");
                 }
                 return true;
             }
@@ -270,6 +292,23 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
+    }
+
+    /** Surface WebView/boot errors on screen (release builds included). */
+    private void showDiagnostics(String message) {
+        if (diagnostics == null) {
+            return;
+        }
+        String webViewVersion = "";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            PackageInfo info = WebView.getCurrentWebViewPackage();
+            if (info != null) {
+                webViewVersion = "\nWebView " + info.versionName;
+            }
+        }
+        diagnostics.setText("FastV 显示诊断\n" + message + webViewVersion);
+        diagnostics.setVisibility(TextView.VISIBLE);
+        Log.e(TAG, message);
     }
 
     private void loadApplication() {

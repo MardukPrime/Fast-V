@@ -10,6 +10,10 @@ if (!root) {
   throw new Error("Root element not found");
 }
 
+// Remove the static boot/fallback panel from index.html before mounting the
+// real application (it stays visible only when boot fails).
+root.replaceChildren();
+
 // The floating traffic ball lives in a separate frameless window created with
 // the "?float=1" query parameter; it renders only the ball, not the app shell.
 const isFloatWindow = new URLSearchParams(window.location.search).get("float") === "1";

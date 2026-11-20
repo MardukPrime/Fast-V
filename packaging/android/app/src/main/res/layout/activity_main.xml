@@ -9,4 +9,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Shown only when the WebView reports a load/JS error, so a broken
+         frontend never looks like a blank screen. -->
+    <TextView
+        android:id="@+id/diagnostics"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#E61E293B"
+        android:padding="14dp"
+        android:textColor="#F8FAFC"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
 </FrameLayout>
