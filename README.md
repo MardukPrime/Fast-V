@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Android 5.0+（预览） · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-1.12.2--pre.1-2F6FED)
+![Version](https://img.shields.io/badge/version-1.12.3--pre.1-2F6FED)
 ![Stable](https://img.shields.io/badge/stable-1.1.0-38A169)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-2F6FED)
@@ -211,13 +211,13 @@ TUN 模式需要：
 
 ## 下载
 
-最新预览版 **v1.12.2-pre.1**（多内核 + Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
+最新预览版 **v1.12.3-pre.1**（多内核 + Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
 - **macOS（Apple Silicon / Intel）**：`FastV-<version>-macos-arm64.zip` / `-macos-amd64.zip`，解压得到 `FastV.app`；要求 macOS 11+，未签名构建首次启动需右键 → 打开
 - **Linux（x64 / arm64）**：`FastV-<version>-linux-<arch>.tar.gz` 便携包、`FastV-<version>-linux-<arch>.deb` 安装包（安装到 `/opt/fastv`），x64 另有 `FastV-<version>-linux-amd64.AppImage`；要求 GTK3 与 WebKitGTK 4.1（如 Debian/Ubuntu 的 `libgtk-3-0`、`libwebkit2gtk-4.1-0`）
-- **Android（arm64，预览）**：`FastV-<version>-android-arm64.apk`（侧载，可直接安装）与 `FastV-<version>-android-arm64.aab`（Play 上架包）；**内置 Xray 内核**，可启动本地 SOCKS 代理（默认 `127.0.0.1:10808`）；系统级 VPN/TUN 仍在开发中；未配置 keystore 时为 debug 签名
+- **Android（arm64，预览）**：`FastV-<version>-android-universal.apk`（侧载，可直接安装）与 `FastV-<version>-android-universal.aab`（Play 上架包）；**内置 Xray 内核**，可启动本地 SOCKS 代理（默认 `127.0.0.1:10808`）；系统级 VPN/TUN 仍在开发中；未配置 keystore 时为 debug 签名
 - 完整性校验：同页 `SHA256SUMS.txt`；平台说明见 `release-info.txt`
 - 应用内自动更新当前仅支持 Windows；macOS/Linux/Android 请手动下载新版本
 - 发布流程与标签约定见 [发布说明](docs/operations/release.md)

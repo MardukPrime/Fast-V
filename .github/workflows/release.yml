@@ -396,21 +396,34 @@ jobs:
           TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
           export CC="$TOOLCHAIN/bin/aarch64-linux-android21-clang"
           export CXX="$TOOLCHAIN/bin/aarch64-linux-android21-clang++"
-          export CGO_ENABLED=1 GOOS=android GOARCH=arm64
+          export CGO_ENABLED=1 GOOS=android
 
-          mkdir -p packaging/android/app/src/main/jniLibs/arm64-v8a
-          go build -buildmode=c-shared -overlay packaging/android/overlay.json \
-            -tags "production,android" -trimpath -buildvcs=false \
-            -ldflags "-w -s -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=${APP_VERSION} -X github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=${GITHUB_SHA}" \
-            -o packaging/android/app/src/main/jniLibs/arm64-v8a/libwails.so
+          build_android_lib() {
+            local goarch="$1"
+            local clang="$2"
+            local abidir="$3"
+            export GOARCH="${goarch}"
+            export CC="$TOOLCHAIN/bin/${clang}"
+            export CXX="$TOOLCHAIN/bin/${clang}++"
+            mkdir -p "packaging/android/app/src/main/jniLibs/${abidir}"
+            go build -buildmode=c-shared -overlay packaging/android/overlay.json \
+              -tags "production,android" -trimpath -buildvcs=false \
+              -ldflags "-w -s -X github.com/MardukPrime/Fast-V/internal/buildinfo.Version=${APP_VERSION} -X github.com/MardukPrime/Fast-V/internal/buildinfo.Commit=${GITHUB_SHA}" \
+              -o "packaging/android/app/src/main/jniLibs/${abidir}/libwails.so"
+            echo "built libwails.so for ${abidir}"
+          }
+
+          # Universal APK/AAB: arm64 for phones, x86_64 for emulators (MuMu, AVD).
+          build_android_lib arm64 aarch64-linux-android21-clang arm64-v8a
+          build_android_lib amd64 x86_64-linux-android21-clang x86_64
 
           cd packaging/android
           chmod +x ./gradlew
           ./gradlew assembleRelease bundleRelease --no-daemon
           cd ../..
           mkdir -p dist
-          cp packaging/android/app/build/outputs/apk/release/app-release.apk "dist/FastV-${APP_VERSION}-android-arm64.apk"
-          cp packaging/android/app/build/outputs/bundle/release/app-release.aab "dist/FastV-${APP_VERSION}-android-arm64.aab"
+          cp packaging/android/app/build/outputs/apk/release/app-release.apk "dist/FastV-${APP_VERSION}-android-universal.apk"
+          cp packaging/android/app/build/outputs/bundle/release/app-release.aab "dist/FastV-${APP_VERSION}-android-universal.aab"
           ls -la dist
 
       - name: Verify APK and AAB packages
@@ -418,12 +431,15 @@ jobs:
           APP_VERSION: ${{ needs.meta.outputs.version }}
         run: |
           set -euo pipefail
-          apk="dist/FastV-${APP_VERSION}-android-arm64.apk"
-          aab="dist/FastV-${APP_VERSION}-android-arm64.aab"
+          apk="dist/FastV-${APP_VERSION}-android-universal.apk"
+          aab="dist/FastV-${APP_VERSION}-android-universal.aab"
           test -f "$apk"
           test -f "$aab"
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libwails.so"
+          unzip -l "$apk" | grep -q "lib/x86_64/libwails.so"
           unzip -l "$aab" | grep -q "base/manifest/AndroidManifest.xml"
+          unzip -l "$aab" | grep -q "base/lib/arm64-v8a/libwails.so"
+          unzip -l "$aab" | grep -q "base/lib/x86_64/libwails.so"
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs "$apk" | head -6
           unzip -l "$apk" | grep -q "AndroidManifest.xml"
@@ -540,7 +556,7 @@ jobs:
             echo "- macos-arm64: macOS 11+ (Apple Silicon), unsigned build - right-click > Open on first launch"
             echo "- macos-amd64: macOS 11+ (Intel), unsigned build - right-click > Open on first launch"
             echo "- linux-amd64 / linux-arm64: portable tar.gz or .deb; linux-amd64 also ships an AppImage; requires GTK3 and WebKitGTK 4.1 (libwebkit2gtk-4.1)"
-            echo "- android-arm64: preview APK + Play-ready AAB (debug-signed unless ANDROID_KEYSTORE_BASE64 is configured); management features only, VPN/proxy pending"
+            echo "- android-universal: preview APK + Play-ready AAB containing arm64-v8a and x86_64 (emulators such as MuMu/AVD); debug-signed unless ANDROID_KEYSTORE_BASE64 is configured"
             echo ""
             echo "macOS packages are not code-signed or notarized yet; users must allow them in System Settings."
             echo "In-app self update currently supports Windows only; macOS/Linux users should download the new package manually."
@@ -554,7 +570,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          expected="windows-amd64.zip windows-amd64-setup.exe macos-arm64.zip macos-amd64.zip linux-amd64.tar.gz linux-amd64.deb linux-arm64.tar.gz linux-arm64.deb linux-amd64.AppImage android-arm64.apk android-arm64.aab"
+          expected="windows-amd64.zip windows-amd64-setup.exe macos-arm64.zip macos-amd64.zip linux-amd64.tar.gz linux-amd64.deb linux-arm64.tar.gz linux-arm64.deb linux-amd64.AppImage android-universal.apk android-universal.aab"
           for suffix in ${expected}; do
             asset="FastV-${APP_VERSION}-${suffix}"
             if [ ! -f "${asset}" ]; then
@@ -583,7 +599,7 @@ jobs:
             | macOS Intel | `FastV-${{ needs.meta.outputs.version }}-macos-amd64.zip` | macOS 11+ (unsigned: right-click > Open) |
             | Linux x64 | `FastV-${{ needs.meta.outputs.version }}-linux-amd64.tar.gz` / `.deb` / `.AppImage` | GTK3 + WebKitGTK 4.1 |
             | Linux arm64 | `FastV-${{ needs.meta.outputs.version }}-linux-arm64.tar.gz` / `.deb` | GTK3 + WebKitGTK 4.1 |
-            | Android arm64 | `FastV-${{ needs.meta.outputs.version }}-android-arm64.apk` / `.aab` | Android 5.0+（预览版：订阅/节点/规则管理，代理/VPN 待后续版本） |
+            | Android universal (arm64 + x86_64) | `FastV-${{ needs.meta.outputs.version }}-android-universal.apk` / `.aab` | Android 5.0+（预览版：订阅/节点/规则管理，代理/VPN 待后续版本） |
 
             - SHA-256 checksums: `SHA256SUMS.txt`
             - `release-info.txt` lists platform notes

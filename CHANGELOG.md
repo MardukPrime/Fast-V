@@ -6,6 +6,13 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.12.3-pre.1] - 2026-11-20
+
+### Fixed
+
+- Android 发布产物改为 **universal APK/AAB（arm64-v8a + x86_64）**：此前只包含 arm64 库，在 MuMu/AVD 等 x86_64 模拟器上会因原生库 ABI 不匹配卡在启动页（FastV 图标 splash）。现在模拟器使用原生 x86_64 库，真机使用 arm64 库；Play AAB 同时包含两种 ABI。
+- CI 同时构建两份 `libwails.so`，校验 APK/AAB 内 `lib/arm64-v8a` 与 `lib/x86_64` 均存在。
+
 ## [1.12.2-pre.1] - 2026-11-20
 
 ### Fixed
