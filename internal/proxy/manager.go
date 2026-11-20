@@ -519,10 +519,12 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		}
 	}
 	if settings.TunMode && singboxMode {
-		m.mu.Unlock()
-		return m.fail("sing-box 暂不支持 TUN 模式，请切换为 Xray 内核或关闭 TUN")
+		if err := preflightSingBoxTun(); err != nil {
+			m.mu.Unlock()
+			return m.fail(err.Error())
+		}
 	}
-	if settings.TunMode {
+	if settings.TunMode && !singboxMode {
 		if err := preflightTun(coreInfo.Path); err != nil {
 			m.mu.Unlock()
 			return m.fail(err.Error())
@@ -588,7 +590,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 			subscriptionName = sub.Name
 		}
 		resolvedIP = resolveNodeHost(ctx, node.Address)
-		if settings.TunMode && resolvedIP == "" {
+		if settings.TunMode && !singboxMode && resolvedIP == "" {
 			m.mu.Unlock()
 			return m.fail("TUN 模式要求节点服务器地址能够解析为 IP")
 		}
@@ -725,7 +727,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 			m.enablePACSystemProxy(state.LocalAddr)
 		}
 	}
-	if settings.TunMode {
+	if settings.TunMode && !singboxMode {
 		cleanup, routeErr := setupTunRoutes(tunInterfaceName, resolvedIP)
 		if routeErr != nil {
 			_ = cmd.Process.Kill()
@@ -905,6 +907,12 @@ func (m *Manager) Stop() (model.ProxyState, error) {
 	}
 	if job != nil {
 		_ = job.Close()
+	}
+	if settings := m.store.Settings(); settings.TunMode && settings.CoreType == "singbox" {
+		// sing-box owns the TUN adapter/routes; after a forced stop, remove any
+		// leftover routes/addresses so the next start and the physical network
+		// stay clean.
+		_ = cleanupSingBoxTun()
 	}
 
 	m.mu.Lock()

@@ -6,6 +6,21 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.11.0-pre.1] - 2026-11-20
+
+### Added
+
+- sing-box **Windows TUN 模式**：设置 → 客户端设置开启 TUN 并选择 sing-box 内核即可全局接管流量。
+  - 生成 sing-box TUN 入站（`FastV-TUN`、`198.18.0.1/15`、MTU 可配、`stack: mixed`、`auto_route`），由 sing-box 自动创建虚拟网卡与系统路由；
+  - `route.auto_detect_interface` 避免代理自身出站回环；TUN 模式内置 DNS 劫持（`hijack-dns`）与内网直连规则，减少 DNS 泄露并保持局域网访问；
+  - 需要管理员权限（保存 TUN 设置时沿用现有 UAC 提权流程）；停止代理时额外清理可能残留的 `FastV-TUN` 路由/地址；
+  - sing-box TUN 配置已通过 `sing-box check` 校验，并新增生成器单测。
+
+### Changed
+
+- 设置内核能力对照：「TUN 模式（Windows）」对 sing-box 标记为支持；移除 sing-box TUN 冲突提醒。
+- TUN 设置说明区分两个内核的要求：Xray 需要 `wintun.dll`，sing-box 自动创建虚拟网卡。
+
 ## [1.10.0-pre.1] - 2026-11-20
 
 ### Added

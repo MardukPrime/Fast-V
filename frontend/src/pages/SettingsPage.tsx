@@ -1273,7 +1273,7 @@ export default function SettingsPage(props: SettingsProps) {
   // options actually apply to the selected core.
   const coreCapabilityRows = () => [
     { name: t("set.coreCapProtocols"), xray: true, singbox: true },
-    { name: t("set.coreCapTun"), xray: true, singbox: false },
+    { name: t("set.coreCapTun"), xray: true, singbox: true },
     { name: t("set.coreCapBalance"), xray: true, singbox: false },
     { name: t("set.coreCapStats"), xray: true, singbox: true },
     { name: t("set.coreCapGeo"), xray: true, singbox: false },
@@ -1288,7 +1288,6 @@ export default function SettingsPage(props: SettingsProps) {
     const warnings: string[] = [];
     if (current.coreType === "singbox") {
       if (!core()?.installed) warnings.push(t("set.coreWarnSingboxMissing"));
-      if (current.tunMode) warnings.push(t("set.coreWarnSingboxTun"));
       if (current.loadBalanceEnabled) warnings.push(t("set.coreWarnSingboxBalance"));
       if (current.xrayMuxEnabled) warnings.push(t("set.coreWarnSingboxMux"));
     } else if (!core()?.installed) {

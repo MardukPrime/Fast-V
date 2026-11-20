@@ -16,6 +16,7 @@ FastV 从 1.9.0-pre.1 起支持把 sing-box 作为替代内核（设置 → 内�
 | FastV / Xray | sing-box |
 |---|---|
 | 本地 SOCKS/HTTP 入站 | `mixed` 入站（同一端口） |
+| Windows TUN | `tun` 入站（FastV-TUN、auto_route、DNS 劫持） |
 | VMess | `vmess` 出站（uuid/security/alter_id） |
 | VLESS | `vless` 出站（uuid/flow） |
 | Trojan | `trojan` 出站（password） |
@@ -29,12 +30,13 @@ FastV 从 1.9.0-pre.1 起支持把 sing-box 作为替代内核（设置 → 内�
 
 ## 已知限制
 
-- 不支持 TUN 模式与负载均衡（会退回单节点并记录警告）；实时流量统计通过 Clash API WebSocket (`/traffic`) 采集。
+- Windows TUN 模式可用：需要管理员权限，sing-box 自动创建虚拟网卡（`FastV-TUN`）与系统路由；停止代理时清理可能残留的路由/地址。
+- 不支持负载均衡（会退回单节点并记录警告）；实时流量统计通过 Clash API WebSocket (`/traffic`) 采集。
 - 缺少 GeoIP/GeoSite 数据集，相关路由规则被跳过（记录警告）；Xray 的 GeoData 更新不适用于 sing-box。
 - 节点「真实链路测速」仍启动临时 Xray 内核，因此需要同时安装 Xray-core。
 - Android 预览版使用内嵌 Xray-core，不提供 sing-box 切换。
 
 ## 验证
 
-- `go test ./internal/proxy/ -run SingBox`：配置生成、路由映射与 Clash API 流量采样。
+- `go test ./internal/proxy/ -run SingBox`：配置生成、Windows TUN、路由映射与 Clash API 流量采样。
 - 实测：本地 sing-box 作为 Shadowsocks 服务端，FastV 选择 sing-box 启动代理，`curl --socks5-hostname 127.0.0.1:18080` 与 HTTP 代理均返回 200 / 1 MB。

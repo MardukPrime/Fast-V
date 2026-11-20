@@ -127,3 +127,57 @@ func TestBuildSingBoxDirectModeFinal(t *testing.T) {
 		t.Fatalf("final = %v", doc["route"])
 	}
 }
+
+func TestBuildSingBoxTunConfig(t *testing.T) {
+	settings := singBoxTestSettings()
+	settings.TunMode = true
+	settings.XrayTunMTU = 1400
+	raw, err := BuildSingBoxConfig(singBoxTestNode(), settings)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	var doc struct {
+		Inbounds []map[string]any `json:"inbounds"`
+		DNS      map[string]any   `json:"dns"`
+		Route    struct {
+			Rules []map[string]any `json:"rules"`
+			Final string           `json:"final"`
+		} `json:"route"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(doc.Inbounds) != 2 {
+		t.Fatalf("inbounds = %d, want TUN + mixed", len(doc.Inbounds))
+	}
+	tun := doc.Inbounds[0]
+	if tun["type"] != "tun" || tun["interface_name"] != tunInterfaceName {
+		t.Fatalf("unexpected TUN inbound: %#v", tun)
+	}
+	if tun["auto_route"] != true {
+		t.Fatalf("auto_route missing: %#v", tun)
+	}
+	if mtu, ok := tun["mtu"].(float64); !ok || int(mtu) != 1400 {
+		t.Fatalf("mtu = %#v", tun["mtu"])
+	}
+	if doc.Inbounds[1]["type"] != "mixed" {
+		t.Fatalf("mixed inbound missing: %#v", doc.Inbounds[1])
+	}
+	if doc.DNS == nil {
+		t.Fatal("TUN config is missing dns section")
+	}
+	if len(doc.Route.Rules) < 2 || doc.Route.Rules[0]["action"] != "hijack-dns" {
+		t.Fatalf("DNS hijack rule missing: %#v", doc.Route.Rules)
+	}
+	if doc.Route.Rules[1]["ip_is_private"] != true || doc.Route.Rules[1]["outbound"] != "direct" {
+		t.Fatalf("private IP direct rule missing: %#v", doc.Route.Rules[1])
+	}
+	if doc.Route.Final != "proxy" {
+		t.Fatalf("final = %s", doc.Route.Final)
+	}
+	if dump := os.Getenv("FASTV_DUMP_SINGBOX_TUN_CONFIG"); dump != "" {
+		if err := os.WriteFile(dump, raw, 0o600); err != nil {
+			t.Fatalf("dump: %v", err)
+		}
+	}
+}

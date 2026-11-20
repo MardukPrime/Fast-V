@@ -19,22 +19,30 @@ func BuildSingBoxConfig(node model.Node, settings model.Settings, customRules ..
 	if err != nil {
 		return nil, err
 	}
-	inbound, err := buildSingBoxInbound(settings)
+	inbounds, err := buildSingBoxInbounds(settings)
 	if err != nil {
 		return nil, err
 	}
 	route, skipped := buildSingBoxRoute(settings, customRules)
 	document := map[string]any{
-		"log": map[string]any{"level": "warn"},
-		"inbounds": []any{
-			inbound,
-		},
+		"log":      map[string]any{"level": "warn"},
+		"inbounds": inbounds,
 		"outbounds": []any{
 			outbound,
 			map[string]any{"type": "direct", "tag": "direct"},
 			map[string]any{"type": "block", "tag": "block"},
 		},
 		"route": route,
+	}
+	if settings.TunMode {
+		// TUN receives DNS queries from applications; hijack them so sing-box
+		// answers locally instead of leaking plaintext DNS through the tunnel.
+		document["dns"] = map[string]any{
+			"servers": []any{
+				map[string]any{"tag": "local", "type": "local"},
+			},
+			"final": "local",
+		}
 	}
 	// The Clash API is only useful for traffic statistics; the manager enables
 	// the sampler separately, so expose it whenever a valid API port is set.
@@ -58,7 +66,11 @@ func BuildSingBoxConfig(node model.Node, settings model.Settings, customRules ..
 	return json.MarshalIndent(document, "", "  ")
 }
 
-func buildSingBoxInbound(settings model.Settings) (map[string]any, error) {
+func buildSingBoxInbounds(settings model.Settings) ([]any, error) {
+	inbounds := make([]any, 0, 2)
+	if settings.TunMode {
+		inbounds = append(inbounds, buildSingBoxTunInbound(settings))
+	}
 	port := settings.XrayLocalPort
 	if port <= 0 || port > 65535 {
 		return nil, errors.New("本地代理端口无效")
@@ -80,7 +92,30 @@ func buildSingBoxInbound(settings model.Settings) (map[string]any, error) {
 			},
 		}
 	}
-	return inbound, nil
+	inbounds = append(inbounds, inbound)
+	return inbounds, nil
+}
+
+// buildSingBoxTunInbound creates a Windows TUN inbound. auto_route configures
+// the interface as the default route; route.auto_detect_interface (set by
+// buildSingBoxRoute) keeps the core's own outbound traffic out of the TUN to
+// avoid a traffic loop. sing-box manages adapter/routes/DNS cleanup itself.
+func buildSingBoxTunInbound(settings model.Settings) map[string]any {
+	mtu := settings.XrayTunMTU
+	if mtu <= 0 {
+		mtu = 1500
+	}
+	return map[string]any{
+		"type":                     "tun",
+		"tag":                      "tun-in",
+		"interface_name":           tunInterfaceName,
+		"address":                  []string{"198.18.0.1/15"},
+		"mtu":                      mtu,
+		"stack":                    "mixed",
+		"auto_route":               true,
+		"strict_route":             false,
+		"endpoint_independent_nat": true,
+	}
 }
 
 func buildSingBoxOutbound(node model.Node, settings model.Settings) (map[string]any, error) {
@@ -250,7 +285,15 @@ func buildSingBoxTLS(stream map[string]any, reality bool) (map[string]any, error
 }
 
 func buildSingBoxRoute(settings model.Settings, customRules []model.RoutingRule) (map[string]any, int) {
-	rules := make([]any, 0, len(customRules))
+	rules := make([]any, 0, len(customRules)+2)
+	if settings.TunMode {
+		// DNS queries captured by the TUN are answered by sing-box, and local
+		// network traffic avoids the proxy.
+		rules = append(rules,
+			map[string]any{"protocol": "dns", "action": "hijack-dns"},
+			map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
+		)
+	}
 	skipped := 0
 	for _, rule := range customRules {
 		if !rule.Enabled {

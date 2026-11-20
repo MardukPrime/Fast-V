@@ -6,7 +6,7 @@
 
 Windows 10/11 · macOS 11+ · Linux (GTK3 / WebKitGTK 4.1) · Android 5.0+（预览） · Wails v3 · Xray-core · SolidJS
 
-![Version](https://img.shields.io/badge/version-1.10.0--pre.1-2F6FED)
+![Version](https://img.shields.io/badge/version-1.11.0--pre.1-2F6FED)
 ![Stable](https://img.shields.io/badge/stable-1.1.0-38A169)
 [![Release](https://img.shields.io/github/v/release/MardukPrime/Fast-V?include_prereleases&label=release)](https://github.com/MardukPrime/Fast-V/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-2F6FED)
@@ -72,7 +72,7 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - FinalMask 传输伪装和 Sockopt 底层网络参数
 - 本地 Xray API、StatsService 和统计策略配置
 - sing-box 配置生成（mixed SOCKS/HTTP、VMess/VLESS/Trojan/Shadowsocks、TLS/REALITY、WS/gRPC/HTTPUpgrade）
-- sing-box 启动前 `check` 校验、版本记录与自动更新；实时流量统计经 Clash API 接入；暂不支持 TUN/负载均衡
+- sing-box 启动前 `check` 校验、版本记录与自动更新；实时流量统计经 Clash API 接入；Windows TUN 可用；暂不支持负载均衡
 
 ### 本地代理与 TUN
 
@@ -80,7 +80,7 @@ FastV 不自行实现代理协议，而是使用 Xray-core 作为代理内核。
 - 自定义本地端口
 - 启动后显示实际入站地址
 - 代理链路测试
-- Windows Xray TUN 模式
+- Windows TUN 模式（Xray-core；sing-box 支持 Windows TUN，自动创建虚拟网卡与路由）
 - Wintun 适配器
 - 管理员权限预检查
 - TUN 地址、默认路由和代理服务器主机路由自动配置
@@ -211,7 +211,7 @@ TUN 模式需要：
 
 ## 下载
 
-最新预览版 **v1.10.0-pre.1**（多内核 + Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
+最新预览版 **v1.11.0-pre.1**（多内核 + Android 内嵌内核）与稳定版 **v1.1.0** 均由 GitHub Actions 在 Windows / macOS / Linux 上自动构建，历史产物见 Releases 页面：
 
 - Releases 页面：<https://github.com/MardukPrime/Fast-V/releases>
 - **Windows x64**：`FastV-<version>-windows-amd64-setup.exe`（安装包，含桌面/开始菜单快捷方式与卸载程序）或 `FastV-<version>-windows-amd64.zip`（便携版）；要求 Windows 10/11 x64 + Microsoft Edge WebView2 Runtime
