@@ -1,5 +1,30 @@
 # 发布说明
 
+## 正式构建参数（必须遵守）
+
+所有发布产物必须使用 production 构建参数，避免把开发/调试配置带进 Release：
+
+| 平台 | 必需参数 |
+|---|---|
+| 前端 | `pnpm build`（Vite production 模式） |
+| Windows | `go build -tags production -trimpath -buildvcs=false -ldflags "-s -w -H=windowsgui -X .../buildinfo.Version=... -X .../buildinfo.Commit=... -X .../buildinfo.BuildDate=..."` |
+| macOS / Linux | 同上，但 tags 为 `production purego`，不使用 `-H=windowsgui` |
+| Android | `go build -buildmode=c-shared -overlay ... -tags "production,android"`，版本/commit 通过 ldflags 注入；APK/AAB 需同时包含 arm64-v8a 与 x86_64 |
+
+- 版本号必须来自发布 tag（不带 `v` 前缀）并写入 `buildinfo.Version`；commit 使用完整 `GITHUB_SHA`。
+- Windows 必须使用 `-H=windowsgui`（PE subsystem 2），否则会弹出控制台窗口。
+- 不要使用临时 ProductID（例如 `com.mardukprime.fastv.xxx`）、debug 构建钩子或 `?android=1` 等开发参数作为发布产物。
+- 本地 Windows 构建可直接运行 `scripts/build-windows.ps1`，该脚本已包含上述参数并校验 PE subsystem。
+
+发布 job 会在上传前运行 `scripts/verify-release-artifacts.py`，验证：
+
+1. Windows/macOS/Linux 二进制内嵌 release 版本与 commit；Windows PE 为 GUI 子系统；
+2. 二进制中不存在 debug/test ProductID 后缀；
+3. Android APK/AAB 同时包含 arm64-v8a 与 x86_64 的 `libwails.so`，且内嵌版本正确；
+4. `SHA256SUMS.txt` 覆盖 `dist` 内全部发布资产。
+
+任何一项失败都会阻止 GitHub Release 发布。
+
 ## 自动发布（GitHub Actions）
 
 仓库内置 `.github/workflows/release.yml`：推送 `v*` 标签（或在 Actions 页面手动 `workflow_dispatch` 填写 tag）即可自动完成构建与发布。

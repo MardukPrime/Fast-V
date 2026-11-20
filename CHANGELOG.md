@@ -6,6 +6,18 @@ All notable changes to FastV are documented here.
 
 （下一版本开发中，暂无条目）
 
+## [1.13.1-pre.1] - 2026-11-21
+
+### Changed
+
+- 发布流程强制校验正式构建参数：新增 `scripts/verify-release-artifacts.py`，在 GitHub Release 上传前检查
+  - 桌面二进制内嵌 release 版本/完整 commit、Windows PE 为 GUI 子系统（`-H=windowsgui`）；
+  - 不存在 debug/test ProductID 后缀；
+  - Android APK/AAB 同时包含 `arm64-v8a` 与 `x86_64` 的 `libwails.so` 且版本正确；
+  - `SHA256SUMS.txt` 与 `dist` 内发布资产一致。
+- 修复 `SHA256SUMS.txt` 曾包含未发布的原始 `Fast-V.exe` 导致校验条目无法对应发布资产的问题。
+- `docs/operations/release.md` 增加「正式构建参数（必须遵守）」清单。
+
 ## [1.13.0-pre.1] - 2026-11-20
 
 ### Added
