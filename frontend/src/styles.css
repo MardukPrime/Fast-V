@@ -11075,3 +11075,61 @@ textarea:focus {
     display: none;
   }
 }
+
+/* Logs secondary actions live in one overflow menu. */
+.log-more {
+  position: relative;
+}
+
+.log-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.log-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.log-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  min-width: 158px;
+  padding: 5px;
+  border: 1px solid var(--glass-border);
+  border-radius: 11px;
+  background: var(--surface, #161d28);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.26);
+}
+
+.log-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.log-more-item:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.log-more-item.danger {
+  color: var(--danger, #e07878);
+}
+
+:root[data-theme="light"] .log-more-menu {
+  background: rgba(255, 255, 255, 0.97);
+}
+
+:root[data-theme="light"] .log-more-item:hover {
+  background: rgba(15, 23, 42, 0.06);
+}

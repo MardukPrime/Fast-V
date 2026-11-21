@@ -721,3 +721,31 @@
     transition: none;
   }
 }
+
+/* Filter controls are secondary: hidden behind one toolbar button. */
+.srv-filter-toggle.active,
+.srv-filter-toggle[aria-expanded="true"] {
+  border-color: var(--accent-line);
+  color: var(--text);
+  background: var(--srv-tint);
+}
+
+.srv-filter-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 1179.98px) {
+  .srv-filters {
+    grid-column: 1 / -1;
+  }
+}

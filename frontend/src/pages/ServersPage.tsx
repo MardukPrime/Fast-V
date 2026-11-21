@@ -117,6 +117,8 @@ export default function ServersPage(props: ServersProps) {
   const [testingAll, setTestingAll] = createSignal(false);
   const [busyID, setBusyID] = createSignal("");
   const [sortMode, setSortMode] = createSignal<SortMode>("default");
+  const [filtersOpen, setFiltersOpen] = createSignal(false);
+  const activeFilterCount = () => [protocol(), tagFilter(), subscriptionID()].filter(Boolean).length;
 
   // ---- Node groups --------------------------------------------------------
   // Groups are persisted by NodeGroupService; the list is refreshed on mount
@@ -1269,6 +1271,7 @@ export default function ServersPage(props: ServersProps) {
               aria-label={t("srv.searchAria")}
             />
           </label>
+          <Show when={filtersOpen()}>
           <div class="srv-filters" role="group" aria-label={t("srv.filtersAria")}>
             <span class="srv-filter-label" aria-hidden="true">{t("srv.filterLabel")}</span>
             <select
@@ -1312,7 +1315,17 @@ export default function ServersPage(props: ServersProps) {
               <For each={sortOptions()}>{(item) => <option value={item.value}>{item.label}</option>}</For>
             </select>
           </div>
+          </Show>
           <div class="srv-tools">
+            <button
+              classList={{ "btn": true, "ghost": true, "srv-filter-toggle": true, active: filtersOpen() }}
+              type="button"
+              aria-expanded={filtersOpen()}
+              onClick={() => setFiltersOpen(!filtersOpen())}
+            >
+              <Icon name="settings" size={14} /> {t("srv.filterLabel")}
+              <Show when={activeFilterCount() > 0}><span class="srv-filter-count">{activeFilterCount()}</span></Show>
+            </button>
             <button class="btn secondary srv-import" onClick={openImport} disabled={loading()}>
               <Icon name="plus" size={14} /> {t("srv.import")}
             </button>

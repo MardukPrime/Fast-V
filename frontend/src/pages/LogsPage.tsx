@@ -166,6 +166,11 @@ export default function LogsPage(props: LogsPageProps) {
     flashNotice(t("logs.notice.exported", { count: entries.length, filename: link.download }));
   };
 
+  const closeLogMoreMenu = (event: Event) => {
+    const details = (event.currentTarget as HTMLElement).closest("details");
+    details?.removeAttribute("open");
+  };
+
   const proxyLabel = () => {
     switch (props.proxyState.status) {
       case "running": return t("logs.status.running", { addr: props.proxyState.localAddr });
@@ -192,10 +197,23 @@ export default function LogsPage(props: LogsPageProps) {
           <button classList={{ "btn": true, "secondary": true, active: autoScroll() }} type="button" onClick={() => setAutoScroll(!autoScroll())}><Icon name="chevron" size={13} class="rotate-down" /> {t("logs.autoScroll")}</button>
           <button classList={{ "btn": true, "secondary": true, active: paused() }} type="button" onClick={() => setPaused(!paused())}>{paused() ? t("logs.resume") : t("logs.pause")}</button>
           <button class="icon-button" type="button" onClick={load} disabled={loading()} aria-label={t("logs.refresh")}><Icon name="refresh" size={14} /></button>
-          <button class="icon-button" type="button" onClick={copyLogs} disabled={filtered().length === 0} aria-label={t("logs.copyFiltered")} title={t("logs.copyFiltered")}><Icon name="edit" size={14} /></button>
-          <button class="btn secondary" type="button" onClick={copyAllLogs} aria-label={t("logs.copyAllAria")} title={t("logs.copyAllTitle")}><Icon name="edit" size={14} /> {t("logs.copyAll")}</button>
-          <button class="btn secondary" type="button" onClick={exportLogs} aria-label={t("logs.exportAria")} title={t("logs.exportTitle")}><Icon name="external" size={14} /> {t("logs.export")}</button>
-          <button class="btn ghost" type="button" onClick={clearLogs} disabled={logs().length === 0}>{t("logs.clear")}</button>
+          <details class="log-more">
+            <summary class="btn ghost">{t("logs.more")}</summary>
+            <div class="log-more-menu" role="menu">
+              <button class="log-more-item" type="button" role="menuitem" disabled={filtered().length === 0} onClick={(event) => { closeLogMoreMenu(event); copyLogs(); }}>
+                <Icon name="edit" size={14} /> {t("logs.copyFiltered")}
+              </button>
+              <button class="log-more-item" type="button" role="menuitem" onClick={(event) => { closeLogMoreMenu(event); copyAllLogs(); }}>
+                <Icon name="edit" size={14} /> {t("logs.copyAll")}
+              </button>
+              <button class="log-more-item" type="button" role="menuitem" onClick={(event) => { closeLogMoreMenu(event); exportLogs(); }}>
+                <Icon name="external" size={14} /> {t("logs.export")}
+              </button>
+              <button class="log-more-item danger" type="button" role="menuitem" disabled={logs().length === 0} onClick={(event) => { closeLogMoreMenu(event); clearLogs(); }}>
+                <Icon name="trash" size={14} /> {t("logs.clear")}
+              </button>
+            </div>
+          </details>
         </div>
       </section>
 
