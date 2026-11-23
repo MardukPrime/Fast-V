@@ -322,6 +322,7 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 		}
 	}
 	outbound["tag"] = proxyOutboundTag
+	applyCdnEndpoint(outbound, node)
 	if settings.XrayMuxEnabled {
 		outbound["mux"] = map[string]any{
 			"enabled":     true,
@@ -334,6 +335,22 @@ func buildOutbound(node model.Node, settings model.Settings) (map[string]any, er
 	return outbound, nil
 }
 
+// applyCdnEndpoint points the outbound at the CDN edge the user picked. The
+// node's own address stays in the record because the Host/SNI still has to be
+// the domain the edge routes on — only the destination IP changes.
+func applyCdnEndpoint(outbound map[string]any, node model.Node) {
+	ip := strings.TrimSpace(node.CdnIP)
+	if ip == "" {
+		return
+	}
+	settings, _ := outbound["settings"].(map[string]any)
+	if settings == nil {
+		return
+	}
+	settings["address"] = ip
+}
+
+// buildRouting builds the routing block for the single-node configuration.
 func buildRouting(proxyMode string, customRules []model.RoutingRule, apiEnabled bool, domainStrategy string) map[string]any {
 	rules := routing.BuildXrayRules(customRules, proxyMode)
 	if apiEnabled {

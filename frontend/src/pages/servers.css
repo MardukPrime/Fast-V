@@ -749,3 +749,129 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Cloudflare edge picker (srv.cdn.*): scan toolbar, latency list and the pin
+   chip shown next to the node address. */
+.srv-cdn-chip {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.cdn-modal {
+  width: min(520px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cdn-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.cdn-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cdn-samples {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+}
+
+.cdn-sample {
+  min-width: 44px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cdn-sample.active {
+  background: var(--glass-strong);
+  color: var(--text);
+}
+
+.cdn-summary,
+.cdn-error {
+  margin: 0;
+  font-size: 11px;
+}
+
+.cdn-summary {
+  color: var(--muted);
+}
+
+.cdn-error {
+  color: #f87171;
+}
+
+.cdn-empty {
+  margin: 0;
+  padding: 12px 0;
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
+}
+
+.cdn-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.cdn-hit {
+  display: grid;
+  grid-template-columns: 1fr auto auto 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 11px;
+  text-align: left;
+}
+
+.cdn-hit:hover:not(:disabled) {
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.cdn-hit.active {
+  border-color: rgba(56, 189, 248, 0.65);
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.cdn-hit-ip {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.cdn-hit-latency {
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+}
+
+.cdn-hit-status {
+  color: var(--faint);
+}

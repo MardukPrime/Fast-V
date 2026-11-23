@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MardukPrime/Fast-V/internal/model"
@@ -73,6 +74,16 @@ type Manager struct {
 	runningSince time.Time
 	// pendingRestart is the scheduled or in-flight automatic restart, if any.
 	pendingRestart *coreRestartPlan
+
+	// probeFailures counts consecutive failed probes (Test) since the last
+	// success. Reaching autoDegradeThreshold switches on the anti-censorship
+	// profile, which looks exactly like a blocked handshake rather than a broken
+	// node. The counter and the flag are atomic so config building never has to
+	// take the lifecycle lock.
+	probeFailures atomic.Int32
+	degraded      atomic.Bool
+	degradeMu     sync.Mutex
+	onDegrade     func(reason string)
 }
 
 func NewManager(st *store.Store, coreProvider CoreInfoProvider) *Manager {
@@ -96,6 +107,67 @@ func (m *Manager) SetOnTraffic(callback func(model.TrafficStats)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.onTraffic = callback
+}
+
+// autoDegradeThreshold is the number of consecutive failed probes that switches
+// the anti-censorship profile on. Two is deliberate: one failure is usually a
+// flaky test target, while a blocked handshake fails every time.
+const autoDegradeThreshold = 2
+
+// SetOnDegrade registers the callback that restarts the proxy once the fallback
+// engages. It runs on the probing goroutine, so it must not block.
+func (m *Manager) SetOnDegrade(callback func(reason string)) {
+	m.degradeMu.Lock()
+	m.onDegrade = callback
+	m.degradeMu.Unlock()
+}
+
+// Degraded reports whether the anti-censorship profile is active for this
+// process. It is never persisted: the profile is a rescue for the current
+// session, not a change to the user's settings.
+func (m *Manager) Degraded() bool { return m.degraded.Load() }
+
+// noteProbeResult tracks consecutive failed probes and engages the fallback.
+func (m *Manager) noteProbeResult(settings model.Settings, ok bool) {
+	if !settings.AutoAntiDpiFallback || ok {
+		m.probeFailures.Store(0)
+		return
+	}
+	failures := m.probeFailures.Add(1)
+	if failures < autoDegradeThreshold || m.degraded.Load() {
+		return
+	}
+	m.degraded.Store(true)
+	reason := fmt.Sprintf("连续 %d 次探测失败，已启用抗审查降级（TLS 分片 + 随机指纹），正在重启代理", failures)
+	m.appendLog("warning", "antidpi", reason)
+
+	m.degradeMu.Lock()
+	callback := m.onDegrade
+	m.degradeMu.Unlock()
+	if callback != nil {
+		callback(reason)
+	}
+}
+
+// effectiveSettings applies the fallback profile to a config build. The stored
+// settings are left untouched, so turning the rescue off restores the previous
+// behaviour on the next start.
+func (m *Manager) effectiveSettings(settings model.Settings) model.Settings {
+	if !m.degraded.Load() {
+		return settings
+	}
+	settings.XrayFragmentEnabled = true
+	if strings.TrimSpace(settings.XrayFragmentPackets) == "" {
+		settings.XrayFragmentPackets = "tlshello"
+	}
+	if strings.TrimSpace(settings.XrayFragmentLength) == "" {
+		settings.XrayFragmentLength = "100-200"
+	}
+	if strings.TrimSpace(settings.XrayFragmentDelay) == "" {
+		settings.XrayFragmentDelay = "10-20"
+	}
+	settings.XrayTLSFingerprint = "randomized"
+	return settings
 }
 
 // Traffic returns the latest live traffic snapshot. Once the proxy is stopped
@@ -185,8 +257,10 @@ func (m *Manager) emitTraffic(stats model.TrafficStats) {
 
 func (m *Manager) State() model.ProxyState {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.enrichNodeState(m.state)
+	state := m.enrichNodeState(m.state)
+	m.mu.RUnlock()
+	state.Degraded = m.degraded.Load()
+	return state
 }
 
 func (m *Manager) enrichNodeState(state model.ProxyState) model.ProxyState {
@@ -464,7 +538,7 @@ func (m *Manager) startCore(ctx context.Context, autoRestart bool) (model.ProxyS
 		m.startInProgress = false
 		m.mu.Unlock()
 	}()
-	settings := m.store.Settings()
+	settings := m.effectiveSettings(m.store.Settings())
 	singboxMode := settings.CoreType == "singbox"
 	if embeddedCoreEnabled() && singboxMode {
 		m.appendLog("warning", "core", "内嵌内核仅支持 Xray 配置，已忽略 sing-box 选择")
@@ -958,6 +1032,7 @@ func (m *Manager) Test(settings model.Settings) (model.ProxyTestResult, error) {
 	}
 	if err != nil {
 		result.Error = err.Error()
+		m.noteProbeResult(settings, false)
 		return result, err
 	}
 	defer resp.Body.Close()
@@ -965,8 +1040,10 @@ func (m *Manager) Test(settings model.Settings) (model.ProxyTestResult, error) {
 	result.Success = resp.StatusCode >= 200 && resp.StatusCode < 400
 	if !result.Success {
 		result.Error = fmt.Sprintf("unexpected HTTP status %d", resp.StatusCode)
+		m.noteProbeResult(settings, false)
 		return result, errors.New(result.Error)
 	}
+	m.noteProbeResult(settings, true)
 	return result, nil
 }
 

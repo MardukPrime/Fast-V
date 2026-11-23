@@ -22,50 +22,54 @@ type AppInfo struct {
 
 // Settings contains the basic application settings.
 type Settings struct {
-	Theme                      string `json:"theme"`
-	Language                   string `json:"language"`
-	AccentColor                string `json:"accentColor"`
-	LayoutMode                 string `json:"layoutMode"`
-	DockTransparency           int    `json:"dockTransparency"`
-	LiveWaveStyle              string `json:"liveWaveStyle"`
-	FloatWindowEnabled         bool   `json:"floatWindowEnabled"`
-	AutoUpdate                 bool   `json:"autoUpdate"`
-	UpdateIntervalMinutes      int    `json:"updateIntervalMinutes"`
-	ProxyMode                  string `json:"proxyMode"`
-	CoreAutoUpdate             bool   `json:"coreAutoUpdate"`
-	CoreType                   string `json:"coreType"`
-	XrayLocalPort              int    `json:"xrayLocalPort"`
-	XrayLogLevel               string `json:"xrayLogLevel"`
-	XrayMuxEnabled             bool   `json:"xrayMuxEnabled"`
-	XrayMuxConcurrency         int    `json:"xrayMuxConcurrency"`
-	XraySniffing               bool   `json:"xraySniffing"`
-	XrayDNSStrategy            string `json:"xrayDnsStrategy"`
-	XrayDNSServers             string `json:"xrayDnsServers"`
-	XrayDomainStrategy         string `json:"xrayDomainStrategy"`
-	ConfigOverride             string `json:"configOverride"`
-	XrayTunMTU                 int    `json:"xrayTunMtu"`
-	XraySockoptTFO             bool   `json:"xraySockoptTfo"`
-	XraySockoptMPTCP           bool   `json:"xraySockoptMptcp"`
-	XraySockoptKeepIdle        int    `json:"xraySockoptKeepIdle"`
-	XraySockoptKeepIntvl       int    `json:"xraySockoptKeepIntvl"`
-	XraySockoptUserTimeout     int    `json:"xraySockoptUserTimeout"`
-	XraySockoptCongestion      string `json:"xraySockoptCongestion"`
-	XraySockoptDomainStrategy  string `json:"xraySockoptDomainStrategy"`
-	XraySockoptJSON            string `json:"xraySockoptJson"`
-	XrayFinalMaskJSON          string `json:"xrayFinalMaskJson"`
-	XrayFragmentEnabled        bool   `json:"xrayFragmentEnabled"`
-	XrayFragmentPackets        string `json:"xrayFragmentPackets"`
-	XrayFragmentLength         string `json:"xrayFragmentLength"`
-	XrayFragmentDelay          string `json:"xrayFragmentDelay"`
-	XrayTLSFingerprint         string `json:"xrayTlsFingerprint"`
-	SystemProxyMode            string `json:"systemProxyMode"`
-	TunMode                    bool   `json:"tunMode"`
-	AllowLan                   bool   `json:"allowLan"`
-	InboundAuthEnabled         bool   `json:"inboundAuthEnabled"`
-	InboundUsername            string `json:"inboundUsername"`
-	InboundPassword            string `json:"inboundPassword"`
-	CloseToTray                bool   `json:"closeToTray"`
-	AutoRestartCore            bool   `json:"autoRestartCore"`
+	Theme                     string `json:"theme"`
+	Language                  string `json:"language"`
+	AccentColor               string `json:"accentColor"`
+	LayoutMode                string `json:"layoutMode"`
+	DockTransparency          int    `json:"dockTransparency"`
+	LiveWaveStyle             string `json:"liveWaveStyle"`
+	FloatWindowEnabled        bool   `json:"floatWindowEnabled"`
+	AutoUpdate                bool   `json:"autoUpdate"`
+	UpdateIntervalMinutes     int    `json:"updateIntervalMinutes"`
+	ProxyMode                 string `json:"proxyMode"`
+	CoreAutoUpdate            bool   `json:"coreAutoUpdate"`
+	CoreType                  string `json:"coreType"`
+	XrayLocalPort             int    `json:"xrayLocalPort"`
+	XrayLogLevel              string `json:"xrayLogLevel"`
+	XrayMuxEnabled            bool   `json:"xrayMuxEnabled"`
+	XrayMuxConcurrency        int    `json:"xrayMuxConcurrency"`
+	XraySniffing              bool   `json:"xraySniffing"`
+	XrayDNSStrategy           string `json:"xrayDnsStrategy"`
+	XrayDNSServers            string `json:"xrayDnsServers"`
+	XrayDomainStrategy        string `json:"xrayDomainStrategy"`
+	ConfigOverride            string `json:"configOverride"`
+	XrayTunMTU                int    `json:"xrayTunMtu"`
+	XraySockoptTFO            bool   `json:"xraySockoptTfo"`
+	XraySockoptMPTCP          bool   `json:"xraySockoptMptcp"`
+	XraySockoptKeepIdle       int    `json:"xraySockoptKeepIdle"`
+	XraySockoptKeepIntvl      int    `json:"xraySockoptKeepIntvl"`
+	XraySockoptUserTimeout    int    `json:"xraySockoptUserTimeout"`
+	XraySockoptCongestion     string `json:"xraySockoptCongestion"`
+	XraySockoptDomainStrategy string `json:"xraySockoptDomainStrategy"`
+	XraySockoptJSON           string `json:"xraySockoptJson"`
+	XrayFinalMaskJSON         string `json:"xrayFinalMaskJson"`
+	XrayFragmentEnabled       bool   `json:"xrayFragmentEnabled"`
+	XrayFragmentPackets       string `json:"xrayFragmentPackets"`
+	XrayFragmentLength        string `json:"xrayFragmentLength"`
+	XrayFragmentDelay         string `json:"xrayFragmentDelay"`
+	XrayTLSFingerprint        string `json:"xrayTlsFingerprint"`
+	SystemProxyMode           string `json:"systemProxyMode"`
+	TunMode                   bool   `json:"tunMode"`
+	AllowLan                  bool   `json:"allowLan"`
+	InboundAuthEnabled        bool   `json:"inboundAuthEnabled"`
+	InboundUsername           string `json:"inboundUsername"`
+	InboundPassword           string `json:"inboundPassword"`
+	CloseToTray               bool   `json:"closeToTray"`
+	AutoRestartCore           bool   `json:"autoRestartCore"`
+	// AutoAntiDpiFallback enables the anti-censorship profile (TLS fragment plus a
+	// randomized fingerprint) after consecutive probe failures, which is what a
+	// node looks like when its handshake is being blocked rather than broken.
+	AutoAntiDpiFallback        bool   `json:"autoAntiDpiFallback"`
 	SubscriptionUpdateViaProxy bool   `json:"subscriptionUpdateViaProxy"`
 	MinimizeToTray             bool   `json:"minimizeToTray"`
 	HotkeysEnabled             bool   `json:"hotkeysEnabled"`
@@ -152,6 +156,10 @@ type Node struct {
 	Tag            string `json:"tag"`
 	SourceKey      string `json:"sourceKey"`
 	OutboundJSON   string `json:"outboundJson"`
+	// CdnIP replaces Address at connect time when the node sits behind a CDN
+	// (Cloudflare). It is kept as a separate field so a subscription refresh,
+	// which rebuilds the node from its link, does not wipe the chosen edge.
+	CdnIP string `json:"cdnIp"`
 }
 
 // NodeView is the frontend-safe node representation.
@@ -168,6 +176,9 @@ type NodeView struct {
 	Favorite         bool   `json:"favorite"`
 	Tag              string `json:"tag"`
 	Active           bool   `json:"active"`
+	// CdnIP is the Cloudflare edge in use instead of Address, empty when the
+	// node connects to its own address.
+	CdnIP string `json:"cdnIp"`
 }
 
 // NodeImportResult summarizes a paste/import of share links.
@@ -391,6 +402,7 @@ func NodeViewFrom(node Node, subscriptionName string, activeID string) NodeView 
 		Favorite:         node.Favorite,
 		Tag:              node.Tag,
 		Active:           node.ID == activeID,
+		CdnIP:            node.CdnIP,
 	}
 }
 
@@ -453,6 +465,9 @@ type ProxyState struct {
 	StartedAt        string `json:"startedAt"`
 	Error            string `json:"error"`
 	PID              int    `json:"pid"`
+	// Degraded reports that the running core uses the anti-censorship profile
+	// because probes kept failing.
+	Degraded bool `json:"degraded"`
 }
 
 // ProxyTestResult is the result of a request through the local proxy.
@@ -571,4 +586,36 @@ type GeoDataInfo struct {
 	GeoIP     *GeoDataFile  `json:"geoIp"`
 	GeoSite   *GeoDataFile  `json:"geoSite"`
 	Files     []GeoDataFile `json:"files"`
+}
+
+// CdnScanRequest describes one CDN edge scan. Host comes from the node so that
+// only edges actually serving that site are kept: a Cloudflare IP that answers
+// the TLS handshake but returns "not configured" is useless for the node.
+type CdnScanRequest struct {
+	NodeID      string `json:"nodeId"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	CustomIPs   string `json:"customIps"`
+	Sample      int    `json:"sample"`
+	Count       int    `json:"count"`
+	Concurrency int    `json:"concurrency"`
+	TimeoutMS   int    `json:"timeoutMs"`
+}
+
+// CdnScanHit is one edge that answered for the scanned host.
+type CdnScanHit struct {
+	IP        string `json:"ip"`
+	LatencyMS int64  `json:"latencyMs"`
+	Status    int    `json:"status"`
+	TLSOk     bool   `json:"tlsOk"`
+}
+
+// CdnScanResult is the outcome of a scan.
+type CdnScanResult struct {
+	Host      string       `json:"host"`
+	Tested    int          `json:"tested"`
+	Reachable int          `json:"reachable"`
+	Hits      []CdnScanHit `json:"hits"`
+	ElapsedMS int64        `json:"elapsedMs"`
+	Errors    []string     `json:"errors"`
 }

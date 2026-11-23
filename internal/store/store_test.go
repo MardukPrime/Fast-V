@@ -173,6 +173,10 @@ func TestReplaceSubscriptionNodesPreservesTags(t *testing.T) {
 	if _, err := st.SetNodeTag("node-1", "美国"); err != nil {
 		t.Fatal(err)
 	}
+	// A pinned CDN edge is user data too: it must survive the refresh below.
+	if _, err := st.SetNodeCdnIP("node-1", "104.22.0.7"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Refresh: the same SourceKey keeps identity, a new SourceKey is a new node.
 	if err := st.ReplaceSubscriptionNodes("sub-1", []Node{
@@ -195,6 +199,9 @@ func TestReplaceSubscriptionNodesPreservesTags(t *testing.T) {
 	}
 	if matched.Name != "New One" || matched.Tag != "美国" {
 		t.Fatalf("expected a refreshed name with a preserved tag, got %+v", matched)
+	}
+	if matched.CdnIP != "104.22.0.7" {
+		t.Fatalf("pinned CDN edge lost on refresh: %+v", matched)
 	}
 	added, err := st.FindNode("node-3")
 	if err != nil {

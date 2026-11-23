@@ -32,6 +32,44 @@ export interface BatchResult {
 }
 
 /**
+ * CdnScanHit is one edge that answered for the scanned host.
+ */
+export interface CdnScanHit {
+    "ip": string;
+    "latencyMs": number;
+    "status": number;
+    "tlsOk": boolean;
+}
+
+/**
+ * CdnScanRequest describes one CDN edge scan. Host comes from the node so that
+ * only edges actually serving that site are kept: a Cloudflare IP that answers
+ * the TLS handshake but returns "not configured" is useless for the node.
+ */
+export interface CdnScanRequest {
+    "nodeId": string;
+    "host": string;
+    "port": number;
+    "customIps": string;
+    "sample": number;
+    "count": number;
+    "concurrency": number;
+    "timeoutMs": number;
+}
+
+/**
+ * CdnScanResult is the outcome of a scan.
+ */
+export interface CdnScanResult {
+    "host": string;
+    "tested": number;
+    "reachable": number;
+    "hits": CdnScanHit[] | null;
+    "elapsedMs": number;
+    "errors": string[] | null;
+}
+
+/**
  * CheckResult is one diagnostics self-check outcome.
  */
 export interface CheckResult {
@@ -274,6 +312,12 @@ export interface NodeView {
     "favorite": boolean;
     "tag": string;
     "active": boolean;
+
+    /**
+     * CdnIP is the Cloudflare edge in use instead of Address, empty when the
+     * node connects to its own address.
+     */
+    "cdnIp": string;
 }
 
 /**
@@ -294,6 +338,12 @@ export interface ProxyState {
     "startedAt": string;
     "error": string;
     "pid": number;
+
+    /**
+     * Degraded reports that the running core uses the anti-censorship profile
+     * because probes kept failing.
+     */
+    "degraded": boolean;
 }
 
 /**
@@ -404,6 +454,13 @@ export interface Settings {
     "inboundPassword": string;
     "closeToTray": boolean;
     "autoRestartCore": boolean;
+
+    /**
+     * AutoAntiDpiFallback enables the anti-censorship profile (TLS fragment plus a
+     * randomized fingerprint) after consecutive probe failures, which is what a
+     * node looks like when its handshake is being blocked rather than broken.
+     */
+    "autoAntiDpiFallback": boolean;
     "subscriptionUpdateViaProxy": boolean;
     "minimizeToTray": boolean;
     "hotkeysEnabled": boolean;

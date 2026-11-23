@@ -11161,3 +11161,11 @@ textarea:focus {
   background: var(--glass-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
+
+/* Anti-DPI fallback badge in the topbar status row. */
+.degraded-chip {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  gap: 4px;
+}

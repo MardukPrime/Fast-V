@@ -179,6 +179,8 @@ func buildSingBoxOutbound(node model.Node, settings model.Settings) (map[string]
 	if err != nil {
 		return nil, err
 	}
+	// A pinned CDN edge applies to sing-box exactly like it does to Xray.
+	applyCdnEndpoint(xray, node)
 	protocol := strings.ToLower(stringOf(xray["protocol"]))
 	settingsMap, _ := xray["settings"].(map[string]any)
 	if settingsMap == nil {

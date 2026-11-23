@@ -86,7 +86,22 @@ func New(st *store.Store, coreProvider proxyruntime.CoreInfoProvider) *ProxyServ
 	manager.SetOnStateChange(service.emit)
 	manager.SetOnLog(service.emitLog)
 	manager.SetOnTraffic(service.emitTraffic)
+	manager.SetOnDegrade(service.handleAutoDegrade)
 	return service
+}
+
+// handleAutoDegrade restarts the proxy so the fallback profile takes effect. The
+// callback arrives on the probing goroutine, so the restart runs in its own
+// goroutine and a failure is reported as a log line instead of being lost.
+func (s *ProxyService) handleAutoDegrade(reason string) {
+	if s == nil || s.manager == nil {
+		return
+	}
+	go func() {
+		if _, err := s.Restart(); err != nil {
+			s.manager.AppendLog("warning", "antidpi", fmt.Sprintf("抗审查降级重启失败: %v", err))
+		}
+	}()
 }
 
 func (s *ProxyService) ServiceName() string {

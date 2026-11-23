@@ -72,7 +72,6 @@ jobs:
   verify-crossplatform:
     name: Verify cross-platform builds
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -117,3 +116,119 @@ jobs:
           done
           ls -la "${RUNNER_TEMP}"/fastv-*
 
+
+  verify-android:
+    name: Verify Android build (VpnService + dataplane)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK and NDK
+        run: |
+          set -euo pipefail
+          ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_HOME
+          SDKMANAGER=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "preinstalled sdkmanager not found; installing command-line tools"
+            mkdir -p "$HOME/android-cmdline-tools"
+            curl -fsSL -o "$HOME/android-cmdline-tools.zip" "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip"
+            unzip -q "$HOME/android-cmdline-tools.zip" -d "$HOME/android-cmdline-tools"
+            SDKMANAGER="$HOME/android-cmdline-tools/cmdline-tools/bin/sdkmanager"
+            ANDROID_HOME="$HOME/android-sdk"
+            export ANDROID_HOME
+            mkdir -p "$ANDROID_HOME"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+
+      - name: Install Wails CLI
+        run: |
+          set -euo pipefail
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      # This is the gate that a host without the NDK cannot provide: it compiles
+      # the Java sources and links the cgo dataplane exports for both ABIs.
+      - name: Build shared libraries and debug APK
+        run: |
+          set -euo pipefail
+          wails3 android overlay:gen -out packaging/android/overlay.json
+          NDK_ROOT=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)
+          TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
+          export CGO_ENABLED=1 GOOS=android
+
+          build_android_lib() {
+            local goarch="$1"
+            local clang="$2"
+            local abidir="$3"
+            export GOARCH="${goarch}"
+            export CC="$TOOLCHAIN/bin/${clang}"
+            export CXX="$TOOLCHAIN/bin/${clang}++"
+            mkdir -p "packaging/android/app/src/main/jniLibs/${abidir}"
+            go build -buildmode=c-shared -overlay packaging/android/overlay.json \
+              -tags "production,android" -trimpath -buildvcs=false \
+              -ldflags "-w -s" \
+              -o "packaging/android/app/src/main/jniLibs/${abidir}/libwails.so"
+          }
+
+          build_android_lib arm64 aarch64-linux-android21-clang arm64-v8a
+          build_android_lib amd64 x86_64-linux-android21-clang x86_64
+
+          # The JNI symbol the VpnService calls must exist in the built library,
+          # otherwise the device would only fail at runtime.
+          for abi in arm64-v8a x86_64; do
+            nm -D --defined-only "packaging/android/app/src/main/jniLibs/${abi}/libwails.so" \
+              | grep -q "Java_com_wails_app_WailsBridge_nativeVpnStart"
+            nm -D --defined-only "packaging/android/app/src/main/jniLibs/${abi}/libwails.so" \
+              | grep -q "Java_com_wails_app_WailsBridge_nativeVpnStop"
+            echo "VPN JNI exports present in ${abi}"
+          done
+
+          cd packaging/android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastV-ci-android-debug
+          path: packaging/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

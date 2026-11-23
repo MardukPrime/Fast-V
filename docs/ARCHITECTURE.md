@@ -64,6 +64,9 @@ fastV/
 │   │   ├── socks5.go
 │   │   ├── udp_relay.go
 │   │   └── manager.go
+│   ├── cdnip/
+│   │   ├── cdnip.go
+│   │   └── cdnip_test.go
 │   └── service/
 │       ├── app/
 │       │   └── service.go
@@ -216,7 +219,18 @@ frontend/node_modules/
 
 该包不依赖 Wails，也不依赖 cgo；`vpn_test.go` 用一对内存 veth + 双 netstack 在桌面端做端到端验证。
 
-### 3.6.3 网络诊断模块
+### 3.6.3 CDN 优选模块
+
+`internal/cdnip` 负责为 Cloudflare 前置的节点挑选边缘 IP：
+
+- 候选来自 Cloudflare 的 anycast 网段（按 /24 抽样），不依赖第三方接口
+- 探测必须同时满足 TLS 握手（SNI = 节点域名）与 HTTP 响应，避免把“端口通但不服务该站点”的地址当成可用
+- 并发探测后按 TCP 建连耗时排序；选中的 IP 存进 `Node.CdnIP`，随订阅刷新保留
+- 构建配置时只替换 outbound 的目标地址，Host/SNI 仍使用节点域名
+
+该包同样不依赖 Wails，`cdnip_test.go` 用本地 TLS 服务器验证探测逻辑。
+
+### 3.6.4 网络诊断模块
 
 `internal/diagnostics` 负责：
 

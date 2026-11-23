@@ -138,6 +138,7 @@ func DefaultSettings() Settings {
 		InboundPassword:            "",
 		CloseToTray:                false,
 		AutoRestartCore:            true,
+		AutoAntiDpiFallback:        true,
 		SubscriptionUpdateViaProxy: true,
 		MinimizeToTray:             false,
 		HotkeysEnabled:             true,
@@ -1028,6 +1029,9 @@ func (s *Store) ReplaceSubscriptionNodes(id string, nodes []Node) error {
 				nodes[i].Favorite = old.Favorite
 				nodes[i].Order = old.Order
 				nodes[i].Tag = old.Tag
+				// A chosen CDN edge is user data as well: the refresh payload
+				// rebuilds the node from its link and would otherwise drop it.
+				nodes[i].CdnIP = old.CdnIP
 				continue
 			}
 			// A node that appears for the first time has no user data yet.
@@ -1311,6 +1315,24 @@ func (s *Store) SetNodeTag(id string, tag string) (Node, error) {
 				continue
 			}
 			data.Nodes[i].Tag = normalized
+			updated = data.Nodes[i]
+			return nil
+		}
+		return errors.New("node not found")
+	})
+	return updated, err
+}
+
+// SetNodeCdnIP pins the CDN edge a node connects to, or clears it when ip is
+// empty. Like tags and favorites it survives a subscription refresh.
+func (s *Store) SetNodeCdnIP(id string, ip string) (Node, error) {
+	var updated Node
+	err := s.update(func(data *storeData) error {
+		for i := range data.Nodes {
+			if data.Nodes[i].ID != id {
+				continue
+			}
+			data.Nodes[i].CdnIP = ip
 			updated = data.Nodes[i]
 			return nil
 		}

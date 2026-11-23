@@ -17,6 +17,7 @@ import (
 	"github.com/MardukPrime/Fast-V/internal/selfcheck"
 	appservice "github.com/MardukPrime/Fast-V/internal/service/app"
 	backupservice "github.com/MardukPrime/Fast-V/internal/service/backup"
+	cdnservice "github.com/MardukPrime/Fast-V/internal/service/cdnip"
 	"github.com/MardukPrime/Fast-V/internal/service/core"
 	"github.com/MardukPrime/Fast-V/internal/service/dashboard"
 	diagnosticsservice "github.com/MardukPrime/Fast-V/internal/service/diagnostics"
@@ -105,6 +106,7 @@ func Run(assets embed.FS) (runErr error) {
 	ruleDebugSvc := ruledebug.New(st, ruleSetSvc.ExpandedRules)
 	environmentSvc := environment.New(st)
 	floatWinSvc := floatwinservice.New(st)
+	cdnSvc := cdnservice.New(st)
 	// Rule-set subscriptions are expanded into routing rules at configuration
 	// build time; the provider keeps the generated config independent of which
 	// sets happened to download successfully.
@@ -160,6 +162,7 @@ func Run(assets embed.FS) (runErr error) {
 			application.NewService(ruleDebugSvc),
 			application.NewService(environmentSvc),
 			application.NewService(floatWinSvc),
+			application.NewService(cdnSvc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

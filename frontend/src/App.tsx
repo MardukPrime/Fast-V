@@ -203,7 +203,7 @@ export default function App() {
   const [info, setInfo] = createSignal<AppInfo | null>(null);
   const [settings, setSettings] = createSignal<Settings | null>(null);
   const [core, setCore] = createSignal<CoreInfo | null>(null);
-  const [proxy, setProxy] = createSignal<ProxyState>({ status: "stopped", nodeId: "", nodeName: "", nodeProtocol: "", nodeAddress: "", nodePort: 0, nodeSubscription: "", resolvedIp: "", proxyMode: "", inbound: "", localAddr: "", startedAt: "", error: "", pid: 0 });
+  const [proxy, setProxy] = createSignal<ProxyState>({ status: "stopped", nodeId: "", nodeName: "", nodeProtocol: "", nodeAddress: "", nodePort: 0, nodeSubscription: "", resolvedIp: "", proxyMode: "", inbound: "", localAddr: "", startedAt: "", error: "", pid: 0, degraded: false });
   const [proxyBusy, setProxyBusy] = createSignal(false);
   const [proxyError, setProxyError] = createSignal("");
   const [proxyTest, setProxyTest] = createSignal<ProxyTestResult | null>(null);
@@ -729,6 +729,11 @@ export default function App() {
                 <span classList={{ "status-dot": true, online: proxy().status === "running", idle: proxy().status !== "running" }} />
                 {proxy().status === "running" ? t("shell.proxyRunning", { addr: proxy().localAddr }) : proxy().status === "starting" ? t("shell.proxyStarting") : proxy().status === "error" ? t("shell.proxyError") : t("shell.proxyStopped")}
               </span>
+              <Show when={proxy().degraded}>
+                <span class="status-chip degraded-chip" title={t("shell.antiDpiDegradedTitle")}>
+                  <Icon name="alert" size={11} /> {t("shell.antiDpiDegraded")}
+                </span>
+              </Show>
             </div>
           </header>
 

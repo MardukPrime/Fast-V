@@ -37,6 +37,7 @@ const defaults: Settings = {
   proxyMode: "rule",
   coreAutoUpdate: true,
   autoRestartCore: true,
+  autoAntiDpiFallback: true,
   coreType: "xray",
   xrayLocalPort: 10808,
   xrayLogLevel: "warning",
@@ -2016,6 +2017,20 @@ export default function SettingsPage(props: SettingsProps) {
                       type="checkbox"
                       checked={settings().xrayFragmentEnabled}
                       onChange={(event) => update("xrayFragmentEnabled", event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+                <label class="switch-row">
+                  <span>
+                    <strong>{t("set.autoDegrade")}</strong>
+                    <small>{t("set.autoDegradeHint")}</small>
+                  </span>
+                  <span classList={{ "switch": true, on: settings().autoAntiDpiFallback }}>
+                    <input
+                      type="checkbox"
+                      checked={settings().autoAntiDpiFallback}
+                      onChange={(event) => update("autoAntiDpiFallback", event.currentTarget.checked)}
                     />
                     <span class="switch-track"><span class="switch-thumb" /></span>
                   </span>

@@ -1381,3 +1381,52 @@ func TestAntiDPIConfigPassesXrayValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestCdnEndpointOverridesAddress covers the Cloudflare 优选 path: the pinned edge
+// replaces the destination IP while the node keeps its domain for Host/SNI.
+func TestCdnEndpointOverridesAddress(t *testing.T) {
+	node := model.Node{
+		Protocol: "vless",
+		Raw:      tlsWSLink,
+		CdnIP:    "104.22.0.7",
+	}
+	settings := testSettings()
+	raw, err := BuildConfig(node, settings)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	outbounds, _ := config["outbounds"].([]any)
+	outbound, _ := outbounds[0].(map[string]any)
+	settingsMap, _ := outbound["settings"].(map[string]any)
+	if settingsMap["address"] != "104.22.0.7" {
+		t.Fatalf("edge not applied: %+v", settingsMap)
+	}
+	stream, _ := outbound["streamSettings"].(map[string]any)
+	if stream["method"] != "websocket" {
+		t.Fatalf("transport changed unexpectedly: %+v", stream)
+	}
+	if wsSettings, _ := stream["wsSettings"].(map[string]any); wsSettings["host"] != "vless.example.com" {
+		t.Fatalf("Host header must stay on the node domain: %+v", wsSettings)
+	}
+
+	// Without a pinned edge the node keeps its own address.
+	node.CdnIP = ""
+	raw, err = BuildConfig(node, settings)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	config = nil
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	outbounds, _ = config["outbounds"].([]any)
+	outbound, _ = outbounds[0].(map[string]any)
+	settingsMap, _ = outbound["settings"].(map[string]any)
+	if settingsMap["address"] != "vless.example.com" {
+		t.Fatalf("node address not restored: %+v", settingsMap)
+	}
+}

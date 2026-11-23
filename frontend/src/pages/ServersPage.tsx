@@ -7,6 +7,7 @@ import { Service as NodeGroupService } from "../../bindings/github.com/MardukPri
 import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/internal/service/proxy";
 import type { BatchResult, NodeConfig, NodeConfigPreview, NodeGroup, NodeImportResult, NodeLatency, NodeView } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
+import CdnScanModal from "../components/CdnScanModal";
 import QRModal, { QRCodeIcon } from "../components/QRModal";
 import { t } from "../i18n";
 
@@ -153,6 +154,8 @@ export default function ServersPage(props: ServersProps) {
   const [qrLoading, setQRLoading] = createSignal(false);
   const [qrError, setQRError] = createSignal("");
   const [qrTarget, setQRTarget] = createSignal<NodeView | null>(null);
+  // Cloudflare edge picker: null keeps the dialog closed.
+  const [cdnNode, setCdnNode] = createSignal<NodeView | null>(null);
 
   let pageNoticeTimer: number | undefined;
   // Only the latest QR request is allowed to update the dialog (the user may
@@ -1476,6 +1479,9 @@ export default function ServersPage(props: ServersProps) {
                     </div>
                     <span class="srv-proto" title={protocolLabel(node.protocol)}>{protocolLabel(node.protocol)}</span>
                     <span class="srv-addr" title={`${node.address}:${node.port}`}>{node.address}:{node.port}</span>
+                    <Show when={node.cdnIp}>
+                      <span class="srv-cdn-chip" title={t("srv.row.cdnChipTitle", { ip: node.cdnIp })}>{node.cdnIp}</span>
+                    </Show>
                     <span class="srv-latency-cell">{latencyLabel(node)}</span>
                     <button
                       classList={{ "srv-state": true, on: node.enabled }}
@@ -1506,6 +1512,15 @@ export default function ServersPage(props: ServersProps) {
                         title={testingID() === node.id ? t("srv.testing") : t("srv.row.testTitle")}
                       >
                         <Icon name="speed" size={14} />
+                      </button>
+                      <button
+                        class="srv-action srv-cdn"
+                        onClick={() => setCdnNode(node)}
+                        disabled={batchBusyActive()}
+                        aria-label={t("srv.row.cdnAria", { name: node.name })}
+                        title={t("srv.row.cdnTitle")}
+                      >
+                        <Icon name="globe" size={14} />
                       </button>
                       <button
                         class="srv-action srv-qr"
@@ -1975,6 +1990,16 @@ export default function ServersPage(props: ServersProps) {
         onClose={closeQRCode}
         onRetry={retryQRCode}
       />
+
+      <Show when={cdnNode()}>
+        {(node) => (
+          <CdnScanModal
+            node={node()}
+            onClose={() => setCdnNode(null)}
+            onApplied={(updated) => setNodes((current) => current.map((item) => item.id === updated.id ? updated : item))}
+          />
+        )}
+      </Show>
     </div>
   );
 }
