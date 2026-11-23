@@ -182,8 +182,17 @@ jobs:
       - name: Install Wails CLI
         run: |
           set -euo pipefail
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+          # Build the CLI from the module this repo already pins instead of
+          # `go install ...@v3.1.0`: that form re-resolves the module through the
+          # proxy and fails when the proxy is flaky or the deprecation lookup is
+          # unavailable. `go list -m` reuses the cached module.
+          go mod download github.com/wailsapp/wails/v3
+          wails_dir="$(go list -m -f '{{.Dir}}' github.com/wailsapp/wails/v3)"
+          mkdir -p "$HOME/go/bin"
+          ( cd "$wails_dir" && GOBIN="$HOME/go/bin" go build -o "$HOME/go/bin/wails3" ./cmd/wails3 )
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          "$HOME/go/bin/wails3" generate bindings -help >/dev/null
+          echo "wails3 CLI ready"
 
       # This is the gate that a host without the NDK cannot provide: it compiles
       # the Java sources and links the cgo dataplane exports for both ABIs.
