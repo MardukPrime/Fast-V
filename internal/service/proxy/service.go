@@ -383,8 +383,11 @@ func (s *ProxyService) schedulerLoop(ctx context.Context) {
 			}
 		}
 
-		// Failover health checks.
-		if !settings.FailoverEnabled {
+		// Health checks. The same probe feeds two features: failover switching and
+		// the anti-DPI fallback, so it has to run when either one is enabled —
+		// otherwise the fallback would never see a failure unless the user also
+		// turned failover on.
+		if !settings.FailoverEnabled && !settings.AutoAntiDpiFallback {
 			lastHealthCheck = time.Time{}
 			consecutiveFailures = 0
 			continue
@@ -402,6 +405,11 @@ func (s *ProxyService) schedulerLoop(ctx context.Context) {
 				s.manager.AppendLog("info", "failover", "代理健康检查恢复，故障切换计数已清零")
 			}
 			consecutiveFailures = 0
+			continue
+		}
+		// The fallback arms itself inside the probe; failover switching stays
+		// gated on its own setting.
+		if !settings.FailoverEnabled {
 			continue
 		}
 		consecutiveFailures++

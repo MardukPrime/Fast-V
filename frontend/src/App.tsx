@@ -437,8 +437,14 @@ export default function App() {
       // On Android the local SOCKS inbound is only useful once the tun captures
       // system traffic, so connect the system-wide proxy right after it is up.
       if (isAndroidPlatform() && androidVpnSupported()) {
-        const port = socksPortFromLocalAddr(next.localAddr) || (settings()?.xrayLocalPort ?? 0);
-        if (port > 0) androidVpnConnect(port);
+        if (settings()?.inboundAuthEnabled) {
+          // The dataplane speaks no-auth SOCKS only, so enabling inbound
+          // authentication would build a tunnel that cannot forward anything.
+          setProxyError(t("shell.androidAuthUnsupported"));
+        } else {
+          const port = socksPortFromLocalAddr(next.localAddr) || (settings()?.xrayLocalPort ?? 0);
+          if (port > 0) androidVpnConnect(port);
+        }
       }
     } catch (error) {
       setProxyError(error instanceof Error ? error.message : String(error));

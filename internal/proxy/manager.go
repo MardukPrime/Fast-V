@@ -1306,6 +1306,10 @@ func (m *Manager) fail(message string) (model.ProxyState, error) {
 }
 
 func (m *Manager) emit(state model.ProxyState) {
+	// Every published state carries the fallback flag: the state pushed to the UI
+	// is rebuilt locally at each transition, so filling it here keeps the badge
+	// from disappearing after the restart that the fallback itself triggers.
+	state.Degraded = m.degraded.Load()
 	m.mu.RLock()
 	callback := m.onStateChange
 	m.mu.RUnlock()

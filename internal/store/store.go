@@ -1591,6 +1591,11 @@ func (s *Store) UpdateNode(id string, name string, protocol string, address stri
 			if data.Nodes[i].ID != id {
 				continue
 			}
+			if data.Nodes[i].Address != address {
+				// Editing the address invalidates a pinned CDN edge: keeping it
+				// would silently override the address the user just typed.
+				data.Nodes[i].CdnIP = ""
+			}
 			data.Nodes[i].Name = name
 			data.Nodes[i].Protocol = protocol
 			data.Nodes[i].Address = address
