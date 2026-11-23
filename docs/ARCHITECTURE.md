@@ -58,6 +58,12 @@ fastV/
 │   │   ├── tun_windows.go
 │   │   ├── tun_other.go
 │   │   └── process_other.go
+│   ├── vpn/
+│   │   ├── session.go
+│   │   ├── stack.go
+│   │   ├── socks5.go
+│   │   ├── udp_relay.go
+│   │   └── manager.go
 │   └── service/
 │       ├── app/
 │       │   └── service.go
@@ -199,7 +205,18 @@ frontend/node_modules/
 - 在 Windows 下使用 Xray TUN inbound、Wintun 和自动路由接管
 
 该包不依赖 Wails。
-### 3.6.2 网络诊断模块
+### 3.6.2 Android 系统级代理数据面（M3）
+
+`internal/vpn` 负责 Android VpnService 捕获到的流量转发：
+
+- 用 gVisor netstack 在用户态终结 tun 设备上的 TCP/UDP 流
+- 每条被接受的流经本地 SOCKS5 入站转发，因此出口节点、路由与规则完全复用既有代理链路
+- TCP 使用 SOCKS5 CONNECT；UDP 为每条流建立 UDP ASSOCIATE 并按目标地址回注
+- 设备抽象为 `io.ReadWriter`，Android 侧只负责把 tun fd 交接进来（`android_vpn_jni.go`）
+
+该包不依赖 Wails，也不依赖 cgo；`vpn_test.go` 用一对内存 veth + 双 netstack 在桌面端做端到端验证。
+
+### 3.6.3 网络诊断模块
 
 `internal/diagnostics` 负责：
 

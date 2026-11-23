@@ -11,7 +11,10 @@
     <!-- Reserved for the upcoming background proxy/VPN service. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <!-- VpnService host for the upcoming system-wide proxy mode (Phase 2). -->
+    <!-- System-wide proxy (M3) runs as a specialUse foreground service: Android
+         14+ requires both the permission and the subtype property below. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- VpnService host for the system-wide proxy mode (Phase 2). -->
     <uses-permission
         android:name="android.permission.BIND_VPN_SERVICE"
         tools:ignore="ProtectedPermissions" />
@@ -57,12 +60,17 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Phase 2 scaffold: VpnService entry point. The tunnel/tun2socks wiring
-             is not implemented yet, so this service is never started by the app. -->
+        <!-- VpnService entry point for the system-wide proxy (Phase 2 M3). The
+             service builds the tun interface and hands its descriptor to the Go
+             dataplane; see internal/vpn. -->
         <service
             android:name=".FastVVpnService"
             android:exported="false"
+            android:foregroundServiceType="specialUse"
             android:permission="android.permission.BIND_VPN_SERVICE">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="vpn" />
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>

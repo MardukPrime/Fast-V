@@ -9,6 +9,7 @@ import { SettingsService } from "../bindings/github.com/MardukPrime/Fast-V/inter
 import type { AppInfo, CoreInfo, ProxyState, ProxyTestResult, Settings } from "../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
+import { androidVpnConnect, androidVpnDisconnect, androidVpnSupported, onAndroidVpnResult, socksPortFromLocalAddr } from "./androidVpn";
 import { language, setLanguage, t } from "./i18n";
 import DashboardPage from "./pages/DashboardPage";
 import LogsPage from "./pages/LogsPage";
@@ -401,6 +402,12 @@ export default function App() {
     const handleOpenRequest = () => setOnboardingOpen(true);
     window.addEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest);
     onCleanup(() => window.removeEventListener(ONBOARDING_OPEN_EVENT, handleOpenRequest));
+
+    // Android reports the VPN consent/start outcome asynchronously, after the
+    // system dialog closes.
+    onCleanup(onAndroidVpnResult((ok, message) => {
+      if (!ok && message) setProxyError(message);
+    }));
   });
 
   // While the guide is open: focus its close button for keyboard users and let
@@ -425,7 +432,14 @@ export default function App() {
     setProxyError("");
     setProxyTest(null);
     try {
-      setProxy(await ProxyService.Start());
+      const next = await ProxyService.Start();
+      setProxy(next);
+      // On Android the local SOCKS inbound is only useful once the tun captures
+      // system traffic, so connect the system-wide proxy right after it is up.
+      if (isAndroidPlatform() && androidVpnSupported()) {
+        const port = socksPortFromLocalAddr(next.localAddr) || (settings()?.xrayLocalPort ?? 0);
+        if (port > 0) androidVpnConnect(port);
+      }
     } catch (error) {
       setProxyError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -437,6 +451,7 @@ export default function App() {
     setProxyBusy(true);
     setProxyError("");
     setProxyTest(null);
+    if (isAndroidPlatform()) androidVpnDisconnect();
     try {
       setProxy(await ProxyService.Stop());
     } catch (error) {

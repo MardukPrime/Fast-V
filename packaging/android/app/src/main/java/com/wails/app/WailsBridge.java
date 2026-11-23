@@ -122,6 +122,15 @@ public class WailsBridge {
     private static native void nativeMainThreadCallback(int callbackID);
     private static native void nativeEmitSystemEvent(String name, String json);
     private static native void nativeEmitEvent(String name, String json);
+    // VPN dataplane (Phase 2 M3). The tun descriptor is handed to Go, which
+    // closes it when the session stops; see internal/vpn.
+    static native int nativeVpnStart(int fd, int socksPort, int mtu);
+    static native int nativeVpnStop();
+
+    /** Activity owning this bridge; used by the VPN bridge methods. */
+    public Activity activity() {
+        return activity;
+    }
 
     /** The private CLI launch protocol is accepted only by debug apps over adb loopback. */
     public static String devServerURL(Activity activity) {

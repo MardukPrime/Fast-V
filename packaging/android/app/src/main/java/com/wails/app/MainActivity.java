@@ -11,6 +11,7 @@ import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
+import android.net.VpnService;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -81,6 +82,13 @@ public class MainActivity extends AppCompatActivity {
     // In-flight callback for an HTML <input type="file"> chooser opened by the
     // WebView's WebChromeClient (null when idle).
     private static final int WEBVIEW_FILE_CHOOSER_REQUEST = 7004;
+    private static final int VPN_PREPARE_REQUEST = 7011;
+
+    /** Tun MTU used for the system-wide proxy. */
+    private static final int VPN_MTU = 1500;
+
+    /** SOCKS port waiting for the user's VPN consent dialog. */
+    private int pendingVpnSocksPort = 0;
     private ValueCallback<Uri[]> webViewFileChooserCallback;
     private File pendingCaptureFile;
     private boolean pendingCaptureIsVideo;
@@ -316,6 +324,108 @@ public class MainActivity extends AppCompatActivity {
         String url = devServer != null ? devServer.toString() + "/" : WAILS_SCHEME + "://" + WAILS_HOST + "/";
         if (DEBUG) Log.d(TAG, "Loading URL: " + url);
         webView.loadUrl(url);
+    }
+
+    /**
+     * Start the system-wide proxy (Phase 2 M3). Android requires an explicit
+     * consent dialog the first time, which is why the flow goes through
+     * startActivityForResult instead of starting the service directly.
+     *
+     * @param socksPort loopback SOCKS5 port served by the embedded core
+     */
+    public void startVpn(int socksPort) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            notifyVpnResult(false, "当前系统版本不支持 VPN 模式");
+            return;
+        }
+        if (socksPort <= 0) {
+            notifyVpnResult(false, "本地代理端口无效，请先启动代理");
+            return;
+        }
+        Intent prepare = VpnService.prepare(this);
+        if (prepare != null) {
+            pendingVpnSocksPort = socksPort;
+            try {
+                startActivityForResult(prepare, VPN_PREPARE_REQUEST);
+            } catch (Exception error) {
+                pendingVpnSocksPort = 0;
+                notifyVpnResult(false, "无法请求 VPN 授权: " + error.getMessage());
+            }
+            return;
+        }
+        launchVpnService(socksPort);
+    }
+
+    /** Stop the tunnel and remove its notification. */
+    public void stopVpn() {
+        Intent intent = new Intent(this, FastVVpnService.class);
+        intent.setAction(FastVVpnService.ACTION_STOP);
+        try {
+            startService(intent);
+        } catch (Exception error) {
+            stopService(new Intent(this, FastVVpnService.class));
+        }
+    }
+
+    private void launchVpnService(int socksPort) {
+        Intent intent = new Intent(this, FastVVpnService.class);
+        intent.setAction(FastVVpnService.ACTION_START);
+        intent.putExtra(FastVVpnService.EXTRA_SOCKS_PORT, socksPort);
+        // A tun of 1500 minus the tunnel overhead keeps the outer path inside the
+        // carrier MTU on most networks.
+        intent.putExtra(FastVVpnService.EXTRA_MTU, VPN_MTU);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent);
+            } else {
+                startService(intent);
+            }
+        } catch (Exception error) {
+            notifyVpnResult(false, "无法启动 VPN 服务: " + error.getMessage());
+            return;
+        }
+        // Starting the service only means the request was accepted: establishing
+        // the interface and the dataplane happen asynchronously inside it. Report
+        // the real outcome once that has had a chance to settle.
+        notifyVpnOutcomeAfterStart();
+    }
+
+    /** Report whether the tunnel really came up shortly after the start request. */
+    private void notifyVpnOutcomeAfterStart() {
+        if (webView == null) {
+            return;
+        }
+        webView.postDelayed(() -> {
+            boolean running = FastVVpnService.isRunning();
+            if (running) {
+                notifyVpnResult(true, "");
+                return;
+            }
+            String error = FastVVpnService.lastError();
+            notifyVpnResult(false, error == null || error.isEmpty() ? "VPN 未启动" : error);
+        }, 1500);
+    }
+
+    /** Deliver the outcome of a VPN attempt to the web UI. */
+    private void notifyVpnResult(final boolean ok, final String message) {
+        if (webView == null) {
+            return;
+        }
+        final String js = String.format(
+                "window.__fastvVpnResult && window.__fastvVpnResult(%s, %s);",
+                ok ? "true" : "false",
+                message == null || message.isEmpty() ? "null" : "'" + message.replace("\\", "\\\\").replace("'", "\\'") + "'");
+        webView.post(() -> webView.evaluateJavascript(js, null));
+    }
+
+    private void handleVpnPrepareResult(int resultCode) {
+        int socksPort = pendingVpnSocksPort;
+        pendingVpnSocksPort = 0;
+        if (resultCode == RESULT_OK) {
+            launchVpnService(socksPort);
+            return;
+        }
+        notifyVpnResult(false, "已取消 VPN 授权");
     }
 
     /**
@@ -560,6 +670,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VPN_PREPARE_REQUEST) {
+            handleVpnPrepareResult(resultCode);
+            return;
+        }
         if (requestCode == PHOTO_CAPTURE_REQUEST || requestCode == VIDEO_CAPTURE_REQUEST) {
             handleCaptureResult(resultCode, data);
             return;

@@ -4,7 +4,15 @@ All notable changes to FastV are documented here.
 
 ## [Unreleased]
 
-（下一版本开发中，暂无条目）
+### Added
+
+- Android 系统级代理（Phase 2 / M3）：VpnService 建立 tun 接口后把描述符交给 Go 数据面，由 gVisor netstack 终结 TCP/UDP 流并经内嵌 Xray 的本地 SOCKS5 入站转发；连接时自动申请 VPN 授权，通知栏提供常驻状态与断开操作。
+- 网络诊断页把「出口检测」与「救援与工具」拆成两个分区，测量结果与救援项不再混排。
+
+### Internal
+
+- 新增 `internal/vpn`（不依赖 Wails、不依赖 cgo），配套端到端测试用内存 veth + 双 netstack 覆盖 TCP/UDP 转发路径。
+- 新增 `android_vpn_jni.go` 承接 `WailsBridge.nativeVpnStart/nativeVpnStop`，tun fd 由 Go 侧持有并负责关闭。
 
 ## [1.15.0-pre.1] - 2026-11-21
 

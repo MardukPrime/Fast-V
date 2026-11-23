@@ -116,6 +116,63 @@ public class WailsJSBridge {
     }
 
     /**
+     * Whether the VPN dataplane can run on this device.
+     * Called from JavaScript: wails.vpnSupported()
+     */
+    @JavascriptInterface
+    public boolean vpnSupported() {
+        return android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP;
+    }
+
+    /**
+     * Current tunnel state as a JSON string.
+     * Called from JavaScript: wails.vpnStatus()
+     */
+    @JavascriptInterface
+    public String vpnStatus() {
+        boolean running = FastVVpnService.isRunning();
+        String error = FastVVpnService.lastError();
+        return String.format("{\"supported\":%s,\"running\":%s,\"error\":\"%s\"}",
+                vpnSupported(), running, escapeJson(error));
+    }
+
+    /**
+     * Ask Android for VPN consent and start the tunnel.
+     * Called from JavaScript: wails.vpnConnect(socksPort)
+     *
+     * @param socksPort the loopback SOCKS5 port served by the embedded core
+     */
+    @JavascriptInterface
+    public void vpnConnect(final int socksPort) {
+        final android.app.Activity activity = bridge.activity();
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            if (activity instanceof MainActivity) {
+                ((MainActivity) activity).startVpn(socksPort);
+            }
+        });
+    }
+
+    /**
+     * Stop the tunnel.
+     * Called from JavaScript: wails.vpnDisconnect()
+     */
+    @JavascriptInterface
+    public void vpnDisconnect() {
+        final android.app.Activity activity = bridge.activity();
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            if (activity instanceof MainActivity) {
+                ((MainActivity) activity).stopVpn();
+            }
+        });
+    }
+
+    /**
      * Send a callback response to JavaScript
      */
     private void sendCallback(String callbackId, String result, String error) {
@@ -147,5 +204,15 @@ public class WailsJSBridge {
                 // (char) casts so the Java lexer does not reinterpret them as newlines.
                 .replace(String.valueOf((char) 0x2028), "\\u2028")
                 .replace(String.valueOf((char) 0x2029), "\\u2029");
+    }
+
+    /** Escape a value for a JSON double-quoted string (used by vpnStatus). */
+    private String escapeJson(String str) {
+        if (str == null) return "";
+        return str.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 }
