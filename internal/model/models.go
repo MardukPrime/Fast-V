@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -51,6 +53,11 @@ type Settings struct {
 	XraySockoptDomainStrategy  string `json:"xraySockoptDomainStrategy"`
 	XraySockoptJSON            string `json:"xraySockoptJson"`
 	XrayFinalMaskJSON          string `json:"xrayFinalMaskJson"`
+	XrayFragmentEnabled        bool   `json:"xrayFragmentEnabled"`
+	XrayFragmentPackets        string `json:"xrayFragmentPackets"`
+	XrayFragmentLength         string `json:"xrayFragmentLength"`
+	XrayFragmentDelay          string `json:"xrayFragmentDelay"`
+	XrayTLSFingerprint         string `json:"xrayTlsFingerprint"`
 	SystemProxyMode            string `json:"systemProxyMode"`
 	TunMode                    bool   `json:"tunMode"`
 	AllowLan                   bool   `json:"allowLan"`
@@ -399,6 +406,35 @@ func NewID() string {
 // NowRFC3339 returns the current time in the format used by local records.
 func NowRFC3339() string {
 	return time.Now().Format(time.RFC3339)
+}
+
+// ParseIntRange parses the "N" / "N-M" range syntax Xray uses for the TLS
+// fragment masking knobs (length and delay) and reports whether both bounds fall
+// inside [min, max].
+func ParseIntRange(value string, min, max int) (int, int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, 0, false
+	}
+	parts := strings.SplitN(value, "-", 2)
+	from, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return 0, 0, false
+	}
+	to := from
+	if len(parts) == 2 {
+		to, err = strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return 0, 0, false
+		}
+	}
+	if from > to {
+		from, to = to, from
+	}
+	if from < min || to > max {
+		return 0, 0, false
+	}
+	return from, to, true
 }
 
 // ProxyState describes the running local proxy process.

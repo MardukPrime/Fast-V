@@ -1204,3 +1204,180 @@ func TestBuildLoadBalanceConfigOverrideApplies(t *testing.T) {
 		t.Fatalf("generated rules must keep targeting the balancer: %+v", last)
 	}
 }
+
+// firstStreamSettings returns the streamSettings block of the proxy outbound for
+// tests that only care about the transport surface.
+func firstStreamSettings(t *testing.T, settings model.Settings, raw string) map[string]any {
+	t.Helper()
+	document, err := BuildConfig(model.Node{Protocol: "vless", Raw: raw}, settings)
+	if err != nil {
+		t.Fatalf("build config: %v", err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(document, &config); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	outbounds, _ := config["outbounds"].([]any)
+	if len(outbounds) == 0 {
+		t.Fatal("config has no outbounds")
+	}
+	outbound, _ := outbounds[0].(map[string]any)
+	stream, _ := outbound["streamSettings"].(map[string]any)
+	if stream == nil {
+		t.Fatalf("outbound has no streamSettings: %+v", outbound)
+	}
+	return stream
+}
+
+const tlsWSLink = "vless://00000000-0000-0000-0000-000000000002@vless.example.com:443?security=tls&type=ws&path=%2Fws&host=vless.example.com&sni=vless.example.com#VLESS"
+
+// TestFragmentMaskIsGenerated covers the first-class TLS splitter: enabling it
+// must produce the finalmask block Xray expects, with the configured ranges.
+func TestFragmentMaskIsGenerated(t *testing.T) {
+	settings := testSettings()
+	settings.XrayFragmentEnabled = true
+	settings.XrayFragmentPackets = ""
+	settings.XrayFragmentLength = "100-200"
+	settings.XrayFragmentDelay = "10-20"
+	settings.XrayTLSFingerprint = "chrome"
+
+	stream := firstStreamSettings(t, settings, tlsWSLink)
+
+	finalmask, _ := stream["finalmask"].(map[string]any)
+	if finalmask == nil {
+		t.Fatalf("finalmask missing from stream settings: %+v", stream)
+	}
+	tcp, _ := finalmask["tcp"].([]any)
+	if len(tcp) != 1 {
+		t.Fatalf("expected one tcp mask, got %+v", finalmask)
+	}
+	mask, _ := tcp[0].(map[string]any)
+	if mask["type"] != "fragment" {
+		t.Fatalf("unexpected mask type: %+v", mask)
+	}
+	fragment, _ := mask["settings"].(map[string]any)
+	if fragment["packets"] != "tlshello" || fragment["length"] != "100-200" || fragment["delay"] != "10-20" {
+		t.Fatalf("unexpected fragment settings: %+v", fragment)
+	}
+
+	tls, _ := stream["tlsSettings"].(map[string]any)
+	if tls["fingerprint"] != "chrome" {
+		t.Fatalf("expected the default fingerprint to be applied: %+v", tls)
+	}
+}
+
+// TestFragmentMaskPrecedence pins the rules around the generated mask: the node's
+// own fingerprint wins, the hand-written finalmask wins field by field, and a
+// disabled switch emits nothing.
+func TestFragmentMaskPrecedence(t *testing.T) {
+	withNodeFingerprint := strings.Replace(tlsWSLink, "#VLESS", "&fp=firefox#VLESS", 1)
+	settings := testSettings()
+	settings.XrayTLSFingerprint = "chrome"
+	stream := firstStreamSettings(t, settings, withNodeFingerprint)
+	if tls, _ := stream["tlsSettings"].(map[string]any); tls["fingerprint"] != "firefox" {
+		t.Fatalf("node fingerprint must win over the default: %+v", tls)
+	}
+	if _, ok := stream["finalmask"]; ok {
+		t.Fatalf("disabled fragment must not emit a mask: %+v", stream)
+	}
+
+	settings.XrayFragmentEnabled = true
+	settings.XrayFinalMaskJSON = `{"udp":[{"type":"noise","settings":{"noise":"rand:8"}}]}`
+	stream = firstStreamSettings(t, settings, tlsWSLink)
+	finalmask, _ := stream["finalmask"].(map[string]any)
+	if _, ok := finalmask["tcp"]; !ok {
+		t.Fatalf("generated tcp mask lost when merging advanced JSON: %+v", finalmask)
+	}
+	if _, ok := finalmask["udp"]; !ok {
+		t.Fatalf("advanced udp mask not merged: %+v", finalmask)
+	}
+
+	settings.XrayFinalMaskJSON = `{"tcp":[{"type":"fragment","settings":{"packets":"1-3","length":"1-10"}}]}`
+	stream = firstStreamSettings(t, settings, tlsWSLink)
+	finalmask, _ = stream["finalmask"].(map[string]any)
+	tcp, _ := finalmask["tcp"].([]any)
+	mask, _ := tcp[0].(map[string]any)
+	fragment, _ := mask["settings"].(map[string]any)
+	if fragment["packets"] != "1-3" || fragment["length"] != "1-10" {
+		t.Fatalf("hand-written mask must replace the generated one: %+v", fragment)
+	}
+}
+
+// TestFragmentMaskFallsBackOnInvalidRange keeps an unparseable range from
+// reaching Xray, which would refuse to start.
+func TestFragmentMaskFallsBackOnInvalidRange(t *testing.T) {
+	settings := testSettings()
+	settings.XrayFragmentEnabled = true
+	settings.XrayFragmentLength = "not-a-range"
+	settings.XrayFragmentDelay = ""
+
+	stream := firstStreamSettings(t, settings, tlsWSLink)
+	finalmask, _ := stream["finalmask"].(map[string]any)
+	tcp, _ := finalmask["tcp"].([]any)
+	mask, _ := tcp[0].(map[string]any)
+	fragment, _ := mask["settings"].(map[string]any)
+	if fragment["length"] != defaultFragmentLength {
+		t.Fatalf("expected the default length, got %+v", fragment)
+	}
+	if _, ok := fragment["delay"]; ok {
+		t.Fatalf("empty delay must be omitted: %+v", fragment)
+	}
+}
+
+// TestAntiDPIConfigPassesXrayValidation feeds the generated anti-DPI config to a
+// real Xray binary: finalmask/fragment is only useful if the core actually loads
+// the block, and a typo there fails at startup rather than at connect time.
+// Set FASTV_XRAY_BINARY to validate against a core outside the repo data dir.
+func TestAntiDPIConfigPassesXrayValidation(t *testing.T) {
+	binary := os.Getenv("FASTV_XRAY_BINARY")
+	if binary == "" {
+		binary = filepath.Join("..", "..", ".fastv-data", "cores", "xray", "xray.exe")
+	}
+	if _, err := os.Stat(binary); err != nil {
+		t.Skip("local Xray binary not available")
+	}
+
+	nodes := []model.Node{
+		{
+			Protocol: "vless",
+			Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls&type=ws&path=%2Fws&host=example.com&sni=example.com#Fragment",
+		},
+		{
+			Protocol: "vless",
+			Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=reality&type=tcp&sni=www.microsoft.com&pbk=jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0&sid=0123&flow=xtls-rprx-vision#Reality",
+		},
+		{
+			Protocol: "vless",
+			Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls&type=grpc&serviceName=gun&sni=example.com#GRPC",
+		},
+		{
+			Protocol: "vless",
+			Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls&type=xhttp&path=%2Fx&host=example.com&sni=example.com#XHTTP",
+		},
+		{
+			Protocol: "vless",
+			Raw:      "vless://00000000-0000-0000-0000-000000000002@example.com:443?security=tls&type=kcp&headerType=none&seed=fastv&sni=example.com#KCP",
+		},
+	}
+	for _, node := range nodes {
+		settings := testSettings()
+		settings.XrayFragmentEnabled = true
+		settings.XrayFragmentPackets = "tlshello"
+		settings.XrayFragmentLength = "100-200"
+		settings.XrayFragmentDelay = "10-20"
+		settings.XrayTLSFingerprint = "chrome"
+
+		raw, err := BuildConfig(node, settings)
+		if err != nil {
+			t.Fatalf("%s: build config: %v", node.Protocol, err)
+		}
+		configPath := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		output, err := exec.Command(binary, "run", "-test", "-config", configPath).CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s: xray rejected the anti-DPI config: %v\n%s\n%s", node.Protocol, err, output, raw)
+		}
+	}
+}

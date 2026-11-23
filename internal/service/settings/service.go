@@ -225,6 +225,13 @@ func normalizeSettings(input model.Settings) (model.Settings, error) {
 	if input.XrayMuxConcurrency < 1 || input.XrayMuxConcurrency > 128 {
 		return model.Settings{}, fmt.Errorf("Xray mux concurrency must be between 1 and 128")
 	}
+	input.XrayFragmentPackets = strings.TrimSpace(input.XrayFragmentPackets)
+	input.XrayFragmentLength = strings.TrimSpace(input.XrayFragmentLength)
+	input.XrayFragmentDelay = strings.TrimSpace(input.XrayFragmentDelay)
+	input.XrayTLSFingerprint = strings.ToLower(strings.TrimSpace(input.XrayTLSFingerprint))
+	if err := validateFragmentSettings(input); err != nil {
+		return model.Settings{}, err
+	}
 	if input.UpdateIntervalMinutes < 15 || input.UpdateIntervalMinutes > 1440 {
 		return model.Settings{}, fmt.Errorf("update interval must be between 15 and 1440 minutes")
 	}
@@ -276,6 +283,40 @@ func emitSettingsChanged(settings model.Settings) {
 		return
 	}
 	app.Event.Emit("settings:changed", settings)
+}
+
+// utlsFingerprints lists the client fingerprints Xray can imitate. An empty
+// value means "keep whatever the node link specifies".
+var utlsFingerprints = map[string]struct{}{
+	"chrome": {}, "firefox": {}, "safari": {}, "ios": {}, "android": {},
+	"edge": {}, "360": {}, "qq": {}, "random": {}, "randomized": {},
+}
+
+// validateFragmentSettings keeps unparseable ranges out of the Xray config: the
+// core refuses to start on an invalid range, which would look like a proxy
+// failure rather than a settings mistake.
+func validateFragmentSettings(input model.Settings) error {
+	if packets := input.XrayFragmentPackets; packets != "" && !strings.EqualFold(packets, "tlshello") {
+		if _, _, ok := model.ParseIntRange(packets, 1, 128); !ok {
+			return errors.New("TLS 分片包序号必须是 tlshello 或 1-128 之间的范围，例如 1-3")
+		}
+	}
+	if input.XrayFragmentLength != "" {
+		if _, _, ok := model.ParseIntRange(input.XrayFragmentLength, 1, 65535); !ok {
+			return errors.New("TLS 分片长度必须是 1-65535 之间的范围，例如 100-200")
+		}
+	}
+	if input.XrayFragmentDelay != "" {
+		if _, _, ok := model.ParseIntRange(input.XrayFragmentDelay, 0, 1000); !ok {
+			return errors.New("TLS 分片延迟必须是 0-1000 毫秒之间的范围，例如 10-20")
+		}
+	}
+	if input.XrayTLSFingerprint != "" {
+		if _, ok := utlsFingerprints[input.XrayTLSFingerprint]; !ok {
+			return errors.New("不支持的 TLS 指纹，可选 chrome、firefox、safari、ios、android、edge、360、qq、random、randomized")
+		}
+	}
+	return nil
 }
 
 func validateJSONObject(value string) error {

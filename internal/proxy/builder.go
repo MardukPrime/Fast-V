@@ -377,6 +377,79 @@ func buildLoadBalanceRouting(proxyMode string, customRules []model.RoutingRule, 
 	return routingConfig
 }
 
+// Fragment masking defaults. The mask splits the opening TCP segments so that
+// SNI-based blocking and simple DPI cannot match a stable byte pattern; the
+// values mirror the ranges Xray itself documents.
+const (
+	defaultFragmentPackets = "tlshello"
+	defaultFragmentLength  = "100-200"
+	defaultFragmentDelay   = "10-20"
+)
+
+// fragmentMask builds the streamSettings.finalmask block for the TLS splitter.
+// Invalid or empty ranges fall back to the defaults instead of handing Xray a
+// value it cannot parse, which would keep the core from starting at all.
+func fragmentMask(settings model.Settings) map[string]any {
+	if !settings.XrayFragmentEnabled {
+		return nil
+	}
+	packets := strings.TrimSpace(settings.XrayFragmentPackets)
+	if packets == "" {
+		packets = defaultFragmentPackets
+	}
+	fragment := map[string]any{
+		"packets": packets,
+		"length":  normalizedRange(settings.XrayFragmentLength, 1, 65535, defaultFragmentLength),
+	}
+	if delay := normalizedRange(settings.XrayFragmentDelay, 0, 1000, ""); delay != "" {
+		fragment["delay"] = delay
+	}
+	return map[string]any{
+		"tcp": []any{map[string]any{"type": "fragment", "settings": fragment}},
+	}
+}
+
+// normalizedRange returns value when it is a range Xray can parse, and fallback
+// otherwise.
+func normalizedRange(value string, min, max int, fallback string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fallback
+	}
+	if _, _, ok := model.ParseIntRange(value, min, max); !ok {
+		return fallback
+	}
+	return value
+}
+
+// applyTLSFingerprintDefault fills in the uTLS fingerprint for TLS/REALITY nodes
+// that do not carry one of their own. A node-level fingerprint always wins: the
+// setting is a default for links that do not specify one, not an override.
+func applyTLSFingerprintDefault(stream map[string]any, settings model.Settings) {
+	fingerprint := strings.TrimSpace(settings.XrayTLSFingerprint)
+	if fingerprint == "" {
+		return
+	}
+	var key string
+	switch strings.ToLower(strings.TrimSpace(fmt.Sprint(stream["security"]))) {
+	case "tls":
+		key = "tlsSettings"
+	case "reality":
+		key = "realitySettings"
+	default:
+		return
+	}
+	section, _ := stream[key].(map[string]any)
+	if section == nil {
+		section = map[string]any{}
+	}
+	if existing, ok := section["fingerprint"].(string); ok && strings.TrimSpace(existing) != "" {
+		return
+	}
+	section["fingerprint"] = fingerprint
+	stream[key] = section
+}
+
 func applyStreamOverrides(outbound map[string]any, settings model.Settings) error {
 	stream, _ := outbound["streamSettings"].(map[string]any)
 	if stream == nil {
@@ -386,16 +459,27 @@ func applyStreamOverrides(outbound map[string]any, settings model.Settings) erro
 	if len(sockopt) > 0 {
 		stream["sockopt"] = sockopt
 	}
+	finalmask := fragmentMask(settings)
 	if settings.XrayFinalMaskJSON != "" {
-		var finalmask map[string]any
-		if err := json.Unmarshal([]byte(settings.XrayFinalMaskJSON), &finalmask); err != nil {
+		var advanced map[string]any
+		if err := json.Unmarshal([]byte(settings.XrayFinalMaskJSON), &advanced); err != nil {
 			return fmt.Errorf("invalid finalmask JSON: %w", err)
 		}
-		if finalmask == nil {
+		if advanced == nil {
 			return errors.New("finalmask JSON must be an object")
 		}
+		if finalmask == nil {
+			finalmask = advanced
+		} else {
+			// The hand-written mask is the escape hatch, so it wins over the
+			// generated one field by field.
+			mergeConfigDocument(finalmask, advanced)
+		}
+	}
+	if len(finalmask) > 0 {
 		stream["finalmask"] = finalmask
 	}
+	applyTLSFingerprintDefault(stream, settings)
 	if len(stream) > 0 {
 		outbound["streamSettings"] = stream
 	}

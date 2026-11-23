@@ -45,6 +45,49 @@ func validSettings() model.Settings {
 	}
 }
 
+// TestFragmentAndFingerprintSettings pins the anti-DPI knobs: valid ranges are
+// accepted (and normalized), unparseable ones are rejected instead of producing
+// a config Xray refuses to load.
+func TestFragmentAndFingerprintSettings(t *testing.T) {
+	service := newService(t)
+
+	accepted := validSettings()
+	accepted.XrayFragmentEnabled = true
+	accepted.XrayFragmentPackets = " TLSHELLO "
+	accepted.XrayFragmentLength = "100-200"
+	accepted.XrayFragmentDelay = "10-20"
+	accepted.XrayTLSFingerprint = " Chrome "
+	saved, err := service.Save(accepted)
+	if err != nil {
+		t.Fatalf("valid anti-DPI settings rejected: %v", err)
+	}
+	if saved.XrayFragmentPackets != "TLSHELLO" {
+		t.Fatalf("packets not trimmed: %q", saved.XrayFragmentPackets)
+	}
+	if saved.XrayTLSFingerprint != "chrome" {
+		t.Fatalf("fingerprint not normalized: %q", saved.XrayTLSFingerprint)
+	}
+
+	rejected := []struct {
+		name   string
+		mutate func(*model.Settings)
+	}{
+		{"packets out of range", func(s *model.Settings) { s.XrayFragmentPackets = "0-1" }},
+		{"packets not numeric", func(s *model.Settings) { s.XrayFragmentPackets = "hello" }},
+		{"length not numeric", func(s *model.Settings) { s.XrayFragmentLength = "abc" }},
+		{"length too large", func(s *model.Settings) { s.XrayFragmentLength = "1-70000" }},
+		{"delay too large", func(s *model.Settings) { s.XrayFragmentDelay = "0-5000" }},
+		{"unknown fingerprint", func(s *model.Settings) { s.XrayTLSFingerprint = "netscape" }},
+	}
+	for _, testCase := range rejected {
+		input := accepted
+		testCase.mutate(&input)
+		if _, err := service.Save(input); err == nil {
+			t.Fatalf("%s: expected a validation error", testCase.name)
+		}
+	}
+}
+
 func TestSaveAndReset(t *testing.T) {
 	service := newService(t)
 

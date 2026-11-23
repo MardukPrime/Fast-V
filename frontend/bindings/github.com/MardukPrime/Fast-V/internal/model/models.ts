@@ -391,6 +391,11 @@ export interface Settings {
     "xraySockoptDomainStrategy": string;
     "xraySockoptJson": string;
     "xrayFinalMaskJson": string;
+    "xrayFragmentEnabled": boolean;
+    "xrayFragmentPackets": string;
+    "xrayFragmentLength": string;
+    "xrayFragmentDelay": string;
+    "xrayTlsFingerprint": string;
     "systemProxyMode": string;
     "tunMode": boolean;
     "allowLan": boolean;

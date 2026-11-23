@@ -8,11 +8,13 @@ All notable changes to FastV are documented here.
 
 - Android 系统级代理（Phase 2 / M3）：VpnService 建立 tun 接口后把描述符交给 Go 数据面，由 gVisor netstack 终结 TCP/UDP 流并经内嵌 Xray 的本地 SOCKS5 入站转发；连接时自动申请 VPN 授权，通知栏提供常驻状态与断开操作。
 - 网络诊断页把「出口检测」与「救援与工具」拆成两个分区，测量结果与救援项不再混排。
+- 设置页新增「抗审查与伪装」：可开关 TLS 分片（写入 Xray `streamSettings.finalmask`，把连接开头的 TCP 段切碎，使 SNI 无法被整段匹配），并可为没有自带 `fp` 的节点设置默认 uTLS 指纹（chrome/firefox/safari/ios/android/edge/360/qq/random/randomized）。节点链接自带的指纹优先，填写的非法范围会被拒绝保存而不是让内核启动失败。
 
 ### Internal
 
 - 新增 `internal/vpn`（不依赖 Wails、不依赖 cgo），配套端到端测试用内存 veth + 双 netstack 覆盖 TCP/UDP 转发路径。
 - 新增 `android_vpn_jni.go` 承接 `WailsBridge.nativeVpnStart/nativeVpnStop`，tun fd 由 Go 侧持有并负责关闭。
+- 分片与指纹配置在单节点与负载均衡两条构建路径上都生效；`TestAntiDPIConfigPassesXrayValidation` 会用真实 Xray 内核校验 ws / REALITY+Vision / gRPC / XHTTP 四种传输生成的配置。
 
 ## [1.15.0-pre.1] - 2026-11-21
 

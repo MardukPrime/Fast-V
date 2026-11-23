@@ -42,6 +42,11 @@ const defaults: Settings = {
   xrayLogLevel: "warning",
   xrayMuxEnabled: false,
   xrayMuxConcurrency: 8,
+  xrayFragmentEnabled: false,
+  xrayFragmentPackets: "tlshello",
+  xrayFragmentLength: "100-200",
+  xrayFragmentDelay: "10-20",
+  xrayTlsFingerprint: "",
   xraySniffing: true,
   xrayDnsStrategy: "UseIP",
   xrayDnsServers: "1.1.1.1,8.8.8.8",
@@ -275,6 +280,22 @@ const domainStrategies = () => [
   { value: "IPIfNonMatch", label: "IPIfNonMatch", hint: t("set.domainIpIfNonMatchHint") },
   { value: "IPOnDemand", label: "IPOnDemand", hint: t("set.domainIpOnDemandHint") },
   { value: "AsIs", label: "AsIs", hint: t("set.domainAsIsHint") },
+];
+
+// uTLS fingerprints Xray can imitate. An empty value keeps whatever the node
+// link itself specifies, which is the safe default.
+const tlsFingerprints = () => [
+  { value: "", label: t("set.fingerprintNode") },
+  { value: "chrome", label: "Chrome" },
+  { value: "firefox", label: "Firefox" },
+  { value: "safari", label: "Safari" },
+  { value: "ios", label: "iOS" },
+  { value: "android", label: "Android" },
+  { value: "edge", label: "Edge" },
+  { value: "360", label: "360" },
+  { value: "qq", label: "QQ" },
+  { value: "random", label: t("set.fingerprintRandom") },
+  { value: "randomized", label: t("set.fingerprintRandomized") },
 ];
 
 const logLevels = [
@@ -1290,6 +1311,7 @@ export default function SettingsPage(props: SettingsProps) {
       if (!core()?.installed) warnings.push(t("set.coreWarnSingboxMissing"));
       if (current.loadBalanceEnabled) warnings.push(t("set.coreWarnSingboxBalance"));
       if (current.xrayMuxEnabled) warnings.push(t("set.coreWarnSingboxMux"));
+      if (current.xrayFragmentEnabled || current.xrayTlsFingerprint) warnings.push(t("set.coreWarnSingboxAntiDpi"));
     } else if (!core()?.installed) {
       warnings.push(t("set.coreWarnXrayMissing"));
     }
@@ -1977,6 +1999,70 @@ export default function SettingsPage(props: SettingsProps) {
                 <code>{core()?.path || t("set.notInstalled")}</code>
               </div>
             </div>
+            <div class="setting-block anti-dpi-block">
+              <div class="setting-label">
+                <strong>{t("set.antiDpi")}</strong>
+                <small>{t("set.antiDpiHint")}</small>
+              </div>
+
+              <div class="core-switch-grid">
+                <label class="switch-row">
+                  <span>
+                    <strong>{t("set.fragment")}</strong>
+                    <small>{t("set.fragmentHint")}</small>
+                  </span>
+                  <span classList={{ "switch": true, on: settings().xrayFragmentEnabled }}>
+                    <input
+                      type="checkbox"
+                      checked={settings().xrayFragmentEnabled}
+                      onChange={(event) => update("xrayFragmentEnabled", event.currentTarget.checked)}
+                    />
+                    <span class="switch-track"><span class="switch-thumb" /></span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="core-param-grid">
+                <label>
+                  <span>{t("set.fragmentPackets")}</span>
+                  <input
+                    value={settings().xrayFragmentPackets}
+                    disabled={!settings().xrayFragmentEnabled}
+                    onInput={(event) => update("xrayFragmentPackets", event.currentTarget.value)}
+                    placeholder="tlshello"
+                  />
+                  <small>{t("set.fragmentPacketsHint")}</small>
+                </label>
+                <label>
+                  <span>{t("set.fragmentLength")}</span>
+                  <input
+                    value={settings().xrayFragmentLength}
+                    disabled={!settings().xrayFragmentEnabled}
+                    onInput={(event) => update("xrayFragmentLength", event.currentTarget.value)}
+                    placeholder="100-200"
+                  />
+                  <small>{t("set.fragmentLengthHint")}</small>
+                </label>
+                <label>
+                  <span>{t("set.fragmentDelay")}</span>
+                  <input
+                    value={settings().xrayFragmentDelay}
+                    disabled={!settings().xrayFragmentEnabled}
+                    onInput={(event) => update("xrayFragmentDelay", event.currentTarget.value)}
+                    placeholder="10-20"
+                  />
+                  <small>{t("set.fragmentDelayHint")}</small>
+                </label>
+                <label>
+                  <span>{t("set.tlsFingerprint")}</span>
+                  <select value={settings().xrayTlsFingerprint} onChange={(event) => update("xrayTlsFingerprint", event.currentTarget.value)}>
+                    {tlsFingerprints().map((item) => <option value={item.value}>{item.label}</option>)}
+                  </select>
+                  <small>{t("set.tlsFingerprintHint")}</small>
+                </label>
+              </div>
+            </div>
+
             <div class="setting-block transport-advanced-block">
               <div class="setting-label">
                 <strong>{t("set.transportAdvanced")}</strong>
