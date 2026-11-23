@@ -180,16 +180,13 @@ jobs:
           echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)" >> "$GITHUB_ENV"
 
       - name: Install Wails CLI
+        # CGO off is what lets the CLI build on a runner without GTK4/WebKitGTK
+        # headers; release.yml sets the same flag workflow-wide.
+        env:
+          CGO_ENABLED: "0"
         run: |
           set -euo pipefail
-          # Build the CLI from the module this repo already pins instead of
-          # `go install ...@v3.1.0`: that form re-resolves the module through the
-          # proxy and fails when the proxy is flaky or the deprecation lookup is
-          # unavailable. `go list -m` reuses the cached module.
-          go mod download github.com/wailsapp/wails/v3
-          wails_dir="$(go list -m -f '{{.Dir}}' github.com/wailsapp/wails/v3)"
-          mkdir -p "$HOME/go/bin"
-          ( cd "$wails_dir" && GOBIN="$HOME/go/bin" go build -o "$HOME/go/bin/wails3" ./cmd/wails3 )
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
           "$HOME/go/bin/wails3" generate bindings -help >/dev/null
           echo "wails3 CLI ready"
