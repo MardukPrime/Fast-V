@@ -2,6 +2,9 @@
 export const zh: Record<string, string> = {
   "net.eyebrow": "IP & NETWORK QUALITY",
   "net.heroTitle": "出口质量",
+  "net.tabsAria": "网络诊断分区",
+  "net.tab.quality": "出口检测",
+  "net.tab.tools": "救援与工具",
   "net.title": "网络诊断",
   "net.subtitle": "检测直连出口和本地代理出口的公网 IP、归属地、ASN、Cloudflare 节点、延迟与下载速度。",
   "net.includeSpeed": "包含下载测速",
@@ -202,6 +205,9 @@ export const zh: Record<string, string> = {
 export const en: Record<string, string> = {
   "net.eyebrow": "IP & NETWORK QUALITY",
   "net.heroTitle": "Exit quality",
+  "net.tabsAria": "Network diagnostics sections",
+  "net.tab.quality": "Exit quality",
+  "net.tab.tools": "Rescue & tools",
   "net.title": "Network diagnostics",
   "net.subtitle": "Check the public IP, location, ASN, Cloudflare node, latency, and download speed of the direct and local proxy exits.",
   "net.includeSpeed": "Include download test",

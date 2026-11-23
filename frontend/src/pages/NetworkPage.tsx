@@ -199,6 +199,7 @@ export default function NetworkPage(props: NetworkPageProps) {
   const [selfCheckBusy, setSelfCheckBusy] = createSignal(false);
   const [selfCheckError, setSelfCheckError] = createSignal("");
   const [selfCheckAt, setSelfCheckAt] = createSignal("");
+  const [netTab, setNetTab] = createSignal<"quality" | "tools">("quality");
   const [rescueReport, setRescueReport] = createSignal<RescueReport | null>(null);
   const [rescueLoading, setRescueLoading] = createSignal(false);
   const [rescueError, setRescueError] = createSignal("");
@@ -540,6 +541,15 @@ export default function NetworkPage(props: NetworkPageProps) {
         </div>
       </section>
 
+      <div class="network-tabs" role="tablist" aria-label={t("net.tabsAria")}>
+        <button type="button" role="tab" aria-selected={netTab() === "quality"} classList={{ "network-tab": true, active: netTab() === "quality" }} onClick={() => setNetTab("quality")}>
+          {t("net.tab.quality")}
+        </button>
+        <button type="button" role="tab" aria-selected={netTab() === "tools"} classList={{ "network-tab": true, active: netTab() === "tools" }} onClick={() => setNetTab("tools")}>
+          {t("net.tab.tools")}
+        </button>
+      </div>
+
       <Show when={error()}>
         <div class="alert error">
           <span class="alert-message"><Icon name="alert" size={15} /> {error()}</span>
@@ -547,6 +557,7 @@ export default function NetworkPage(props: NetworkPageProps) {
         </div>
       </Show>
 
+      <Show when={netTab() === "quality"}>
       <div class="network-grid">
         <ProbeCard mode="direct" probe={direct()} loading={directLoading()} available onRefresh={() => checkMode("direct")} />
         <ProbeCard mode="proxy" probe={proxied()} loading={proxyLoading()} available={proxyAvailable()} onRefresh={() => checkMode("proxy")} />
@@ -573,7 +584,9 @@ export default function NetworkPage(props: NetworkPageProps) {
           </Show>
         </section>
       </Show>
+      </Show>
 
+      <Show when={netTab() === "tools"}>
       <section class="glass-panel selfcheck-panel">
         <div class="panel-heading">
           <div>
@@ -1225,6 +1238,7 @@ export default function NetworkPage(props: NetworkPageProps) {
           {t("net.tools.disclaimer")}
         </p>
       </section>
+      </Show>
     </div>
   );
 }
