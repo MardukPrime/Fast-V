@@ -321,6 +321,109 @@
   background: rgba(44, 67, 90, 0.12);
 }
 
+/* ================================================================
+   Empty and idle states
+
+   A fresh install has no node yet: that is "not set up", not a failure, so the
+   hero switches to a neutral look, the live chart is replaced by a one-line
+   hint, and the error, when there is one, is a headline plus a collapsible
+   technical detail instead of a raw backend string.
+   ================================================================ */
+
+.dashboard-page .connection-hero.empty {
+  border-color: var(--glass-border);
+}
+
+.dashboard-page .connection-hero.empty .connection-orb {
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.14);
+  box-shadow: none;
+}
+
+.dashboard-page .connection-hero.empty h2 {
+  font-size: clamp(20px, 5.4vw, 23px);
+  letter-spacing: -0.01em;
+}
+
+.dash-idle-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Empty state: one row with the primary action and the import shortcut, so the
+   card does not stack two full-width buttons with a dead gap between them. */
+.dash-empty-actions {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.dash-empty-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.dash-empty-actions .btn.ghost {
+  flex: 0 0 auto;
+}
+
+.dash-error {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.08);
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dash-error > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.dash-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dash-error-body strong {
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.dash-error-detail summary {
+  cursor: pointer;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.dash-error-detail code {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.35);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 860px) {
   .dashboard-page .connection-hero {
     gap: var(--space-3);
@@ -329,6 +432,11 @@
 
   .dashboard-page .dash-hero-actions {
     width: 100%;
+  }
+
+  /* Primary action first, full width; secondary actions share the next row. */
+  .dashboard-page .dash-hero-actions .btn {
+    justify-content: center;
   }
 }
 

@@ -9552,6 +9552,26 @@ textarea:focus {
     min-height: 0;
   }
 
+  /* Pin the shell to the viewport: without this the page can grow to the
+     min-content width of a card row (measured 492px on a 412px phone) and every
+     card ends up clipped on the right. */
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .app-root,
+  .app-shell,
+  main.content,
+  .page-stack {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
   .content {
     padding: 14px 12px 12px;
   }
@@ -11168,4 +11188,11 @@ textarea:focus {
   background: rgba(251, 191, 36, 0.12);
   color: #fbbf24;
   gap: 4px;
+}
+
+/* Android scroll container: the 62px bottom nav and the FAB (84px from the
+   bottom, 56px tall) both float over the page, but the host rule only reserved
+   10px of bottom padding, so the last card was covered. Reserve both. */
+.app-root.platform-android .content {
+  padding-bottom: calc(150px + env(safe-area-inset-bottom));
 }

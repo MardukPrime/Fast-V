@@ -24,7 +24,8 @@ export type IconName =
   | "play"
   | "stop"
   | "more"
-  | "globe";
+  | "globe"
+  | "download";
 
 const iconPaths: Record<IconName, string[]> = {
   dashboard: ["M3 3h7v7H3z", "M14 3h7v7h-7z", "M3 14h7v7H3z", "M14 14h7v7h-7z"],
@@ -51,6 +52,7 @@ const iconPaths: Record<IconName, string[]> = {
   stop: ["M6 6h12v12H6z"],
   more: ["M5 12h.01", "M12 12h.01", "M19 12h.01"],
   globe: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", "M3 12h18", "M12 3c2.5 2.4 2.5 15.6 0 18", "M12 3c-2.5 2.4-2.5 15.6 0 18"],
+  download: ["M12 4v10", "M8 10l4 4 4-4", "M5 19h14"],
 };
 
 type IconProps = {

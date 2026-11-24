@@ -8,6 +8,7 @@ import { ProxyService } from "../../bindings/github.com/MardukPrime/Fast-V/inter
 import type { AppInfo, DailyTraffic, DashboardSummary, ProxyState, ProxyTestResult, Settings, SubscriptionView, TrafficStats } from "../../bindings/github.com/MardukPrime/Fast-V/internal/model";
 import Icon from "../components/Icon";
 import { language, t } from "../i18n";
+import { coreVersionLabel, presentError } from "../uiText";
 import "./dashboard.css";
 
 type DashboardProps = {
@@ -350,7 +351,12 @@ export default function DashboardPage(props: DashboardProps) {
   // back to the runtime proxy state so the hero never claims "no node" while
   // traffic is flowing.
   const heroHasNode = () => isRunning() || Boolean(activeNode());
-  const heroNodeName = () => (isRunning() ? props.proxyState.nodeName : activeNode()?.name ?? t("dash.noNode"));
+  const heroNodeName = () => (isRunning() ? props.proxyState.nodeName : activeNode()?.name ?? t("dash.emptyTitle"));
+  // "Not configured yet" is a state of its own: it must not be painted as an
+  // error (the app used to show a red "本地代理异常" for a fresh install).
+  const heroNeedsNode = () => !heroHasNode();
+  const presentedError = () => presentError(props.proxyError, t);
+  const presentedPageError = () => presentError(error(), t);
 
   // Live traffic: subscribe to the "proxy:traffic" broadcast while the proxy runs,
   // and poll every second as a fallback because broadcasts can be missed while the
@@ -460,68 +466,79 @@ export default function DashboardPage(props: DashboardProps) {
 
   return (
     <div class="page-stack dashboard-page">
-      <section classList={{ "connection-hero": true, "dash-hero": true, running: isRunning(), error: props.proxyState.status === "error" }}>
+      <section classList={{ "connection-hero": true, "dash-hero": true, empty: heroNeedsNode(), running: isRunning(), error: props.proxyState.status === "error" && !heroNeedsNode() }}>
         <div class="connection-glow" />
         <div class="connection-main">
           <div classList={{ "connection-orb": true, running: isRunning() }}>
-            <Icon name={isRunning() ? "route" : "play"} size={24} />
+            <Icon name={isRunning() ? "route" : heroNeedsNode() ? "server" : "play"} size={24} />
           </div>
           <div class="connection-copy">
             <div class="connection-eyebrow">
               <span classList={{ "status-dot": true, online: isRunning(), idle: !isRunning() }} />
-              <span>{proxyStatusLabel(props.proxyState.status)}</span>
+              <span>{heroNeedsNode() ? t("dash.statusNeedsNode") : proxyStatusLabel(props.proxyState.status)}</span>
               <span class="tag neutral">{proxyModeLabel(props.settings?.proxyMode ?? "rule")}</span>
               <Show when={props.settings?.tunMode}><span class="tag warning">TUN</span></Show>
             </div>
             <h2>{heroNodeName()}</h2>
-            <Show when={heroHasNode()}>
-              <p>
-                {isRunning()
-                  ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
-                  : `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`}
-              </p>
+            <Show when={heroNeedsNode()} fallback={
+              <Show when={heroHasNode()}>
+                <p>
+                  {isRunning()
+                    ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
+                    : `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`}
+                </p>
+              </Show>
+            }>
+              <p>{t("dash.emptyBody")}</p>
             </Show>
             <div class="connection-meta">
-              <span><Icon name="route" size={12} /> {isRunning() ? props.proxyState.localAddr : t("dash.localInboundNotListening")}</span>
-              <Show when={isRunning()}>
+              <Show when={isRunning()} fallback={
+                <span><Icon name="route" size={12} /> {t("dash.inboundIdle")}</span>
+              }>
+                <span><Icon name="route" size={12} /> {props.proxyState.localAddr}</span>
                 <span><Icon name="speed" size={12} /> {t("dash.runningFor", { duration: formatUptime(props.proxyState.startedAt, clock()) })}</span>
               </Show>
-              <span
-                class="dash-hero-traffic"
-                title={t("dash.heroTrafficTitle", {
-                  down: downlinkRateLabel(),
-                  up: uplinkRateLabel(),
-                  downTotal: formatBytes(traffic()?.totalDownlinkBytes ?? 0),
-                  upTotal: formatBytes(traffic()?.totalUplinkBytes ?? 0),
-                })}
-              >
-                <span class="dash-hero-rate">{sessionRateLabel()}</span>
-                <span class="dash-hero-session">{t("dash.sessionTotal", { bytes: sessionTotalLabel() })}</span>
-                <Show when={isRunning() && totalSessionTraffic() > 0}>
-                  <span class="dash-hero-share" aria-hidden="true">
-                    <span class="dash-hero-share-down" style={{ width: `${downlinkShare()}%` }} />
-                    <span class="dash-hero-share-up" style={{ width: `${100 - downlinkShare()}%` }} />
-                  </span>
-                </Show>
-              </span>
-              <Show
-                when={summary()?.coreVersion}
-                fallback={
-                  <span><Icon name="server" size={12} /> {props.settings?.coreType === "singbox" ? "sing-box" : "Xray"} {t("dash.notInstalled")}</span>
-                }
-              >
-                <span><Icon name="server" size={12} /> {props.settings?.coreType === "singbox" ? "sing-box" : "Xray"} {summary()?.coreVersion}</span>
+              <Show when={isRunning() || heroHasNode()}>
+                <span
+                  class="dash-hero-traffic"
+                  title={t("dash.heroTrafficTitle", {
+                    down: downlinkRateLabel(),
+                    up: uplinkRateLabel(),
+                    downTotal: formatBytes(traffic()?.totalDownlinkBytes ?? 0),
+                    upTotal: formatBytes(traffic()?.totalUplinkBytes ?? 0),
+                  })}
+                >
+                  <span class="dash-hero-rate">{sessionRateLabel()}</span>
+                  <span class="dash-hero-session">{t("dash.sessionTotal", { bytes: sessionTotalLabel() })}</span>
+                  <Show when={isRunning() && totalSessionTraffic() > 0}>
+                    <span class="dash-hero-share" aria-hidden="true">
+                      <span class="dash-hero-share-down" style={{ width: `${downlinkShare()}%` }} />
+                      <span class="dash-hero-share-up" style={{ width: `${100 - downlinkShare()}%` }} />
+                    </span>
+                  </Show>
+                </span>
+              </Show>
+              <Show when={summary()?.coreVersion} fallback={
+                <span><Icon name="server" size={12} /> {t("dash.coreNotReady")}</span>
+              }>
+                <span><Icon name="server" size={12} /> {props.settings?.coreType === "singbox" ? "sing-box" : "Xray"} {coreVersionLabel(summary()?.coreVersion, t)}</span>
               </Show>
             </div>
           </div>
         </div>
 
         <div class="connection-actions dash-hero-actions">
-          <Show when={heroHasNode()} fallback={
-            <button class="btn primary connection-toggle dash-hero-cta" onClick={() => props.onNavigate("servers")}>
-              <Icon name="server" size={16} /> {t("dash.selectNode")}
-            </button>
-          }>
+          <Show when={heroNeedsNode()}>
+            <div class="dash-empty-actions">
+              <button class="btn primary connection-toggle" onClick={() => props.onNavigate("servers")}>
+                <Icon name="server" size={16} /> {t("dash.selectNode")}
+              </button>
+              <button class="btn ghost" onClick={() => props.onNavigate("subscriptions")}>
+                <Icon name="download" size={15} /> {t("dash.emptyImport")}
+              </button>
+            </div>
+          </Show>
+          <Show when={!heroNeedsNode()}>
             <Show when={isRunning()} fallback={
               <button class="btn primary connection-toggle" onClick={props.onStartProxy} disabled={props.proxyBusy || !canStart()}>
                 <Icon name="play" size={16} /> {props.proxyBusy ? t("dash.starting") : t("dash.startProxy")}
@@ -540,7 +557,10 @@ export default function DashboardPage(props: DashboardProps) {
           </Show>
         </div>
 
-        <div classList={{ "dash-live-wave": true, active: isRunning(), minimal: waveStyle() === "minimal" }}>
+        <Show when={isRunning()} fallback={
+          <div class="dash-idle-hint"><Icon name="speed" size={13} /> {t("dash.liveTrafficIdle")}</div>
+        }>
+          <div classList={{ "dash-live-wave": true, active: isRunning(), minimal: waveStyle() === "minimal" }}>
           <div class="dash-live-wave-head">
             <span class="dash-live-dot" />
             <span>{isRunning() ? t("dash.liveTraffic") : t("dash.liveTrafficIdle")}</span>
@@ -591,12 +611,12 @@ export default function DashboardPage(props: DashboardProps) {
                 </For>
               </svg>
             </Show>
-            <Show when={isRunning() && waveStyle() !== "minimal" && peakDown()}>
+            <Show when={waveStyle() !== "minimal" && peakDown()}>
               <span class="dash-wave-peak-chip down" style={{ left: `${peakDown()!.xPercent}%`, top: `${peakDown()!.yPercent}%` }}>
                 ↓ {formatCompactRate(peakDown()!.value)}
               </span>
             </Show>
-            <Show when={isRunning() && waveStyle() !== "minimal" && peakUp() && peakUp()!.value >= Math.max(1024, waveMax() * 0.08)}>
+            <Show when={waveStyle() !== "minimal" && peakUp() && peakUp()!.value >= Math.max(1024, waveMax() * 0.08)}>
               <span class="dash-wave-peak-chip up" style={{ left: `${peakUp()!.xPercent}%`, top: `${peakUp()!.yPercent}%` }}>
                 ↑ {formatCompactRate(peakUp()!.value)}
               </span>
@@ -613,10 +633,22 @@ export default function DashboardPage(props: DashboardProps) {
               <span class="dash-wave-stat trough">{t("dash.troughDown", { rate: formatCompactRate(troughDown()) })}</span>
             </Show>
           </div>
-        </div>
+          </div>
+        </Show>
 
-        <Show when={props.proxyError}>
-          <div class="proxy-inline-alert error connection-alert"><Icon name="alert" size={13} /> {props.proxyError}</div>
+        <Show when={presentedError().text}>
+          <div class="dash-error" role="alert">
+            <Icon name="alert" size={14} />
+            <div class="dash-error-body">
+              <strong>{presentedError().text}</strong>
+              <Show when={presentedError().detail}>
+                <details class="dash-error-detail">
+                  <summary>{t("dash.errorDetail")}</summary>
+                  <code>{presentedError().detail}</code>
+                </details>
+              </Show>
+            </div>
+          </div>
         </Show>
         <Show when={props.proxyTest}>
           <div classList={{ "proxy-inline-alert": true, "connection-alert": true, ok: props.proxyTest?.success, error: !props.proxyTest?.success }}>
@@ -671,16 +703,17 @@ export default function DashboardPage(props: DashboardProps) {
         </div>
         <div class="glass-panel dashboard-stat">
           <span class="dashboard-stat-icon amber"><Icon name="server" size={17} /></span>
-          <div><span>{t("dash.statCore")}</span><strong>{coreStatusLabel(summary()?.coreStatus ?? "")}</strong><small>{summary()?.coreVersion || t("dash.notInstalled")}</small></div>
+          <div><span>{t("dash.statCore")}</span><strong>{coreStatusLabel(summary()?.coreStatus ?? "")}</strong><small>{coreVersionLabel(summary()?.coreVersion, t) || t("dash.statCoreHint")}</small></div>
         </div>
       </section>
 
       <Show when={error()}>
-        <div class="alert error"><span class="alert-message"><Icon name="alert" size={15} /> {error()}</span><button class="btn ghost" onClick={load}>{t("dash.retry")}</button></div>
+        <div class="alert error" title={presentedPageError().detail || undefined}><span class="alert-message"><Icon name="alert" size={15} /> {presentedPageError().text}</span><button class="btn ghost" onClick={load}>{t("dash.retry")}</button></div>
       </Show>
 
       <div class="dashboard-main-grid">
         <div class="dashboard-left-column">
+        <Show when={heroHasNode()}>
         <section class="glass-panel node-overview">
           <div class="panel-heading">
             <div>
@@ -714,6 +747,7 @@ export default function DashboardPage(props: DashboardProps) {
             </div>
           </Show>
         </section>
+        </Show>
 
       <section class="glass-panel traffic-history-panel">
         <div class="panel-heading">

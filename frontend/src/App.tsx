@@ -11,6 +11,7 @@ import Icon from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { androidVpnConnect, androidVpnDisconnect, androidVpnSupported, onAndroidVpnResult, socksPortFromLocalAddr } from "./androidVpn";
 import { language, setLanguage, t } from "./i18n";
+import { coreVersionLabel } from "./uiText";
 import DashboardPage from "./pages/DashboardPage";
 import LogsPage from "./pages/LogsPage";
 import NetworkPage from "./pages/NetworkPage";
@@ -660,11 +661,10 @@ export default function App() {
                 <span class="android-appbar-mark" aria-hidden="true">F</span>
                 <div>
                   <strong>{activeMeta().title}</strong>
-                  <small>{core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${core()?.version ?? ""}` : t("shell.coreMissing")}</small>
+                  <small>{core()?.installed ? `${settings()?.coreType === "singbox" ? "sing-box" : "Xray"} ${coreVersionLabel(core()?.version, t)}` : t("shell.coreMissing")}</small>
                 </div>
               </div>
               <div class="android-appbar-actions">
-                <span classList={{ "android-live-dot": true, online: proxy().status === "running" }} aria-hidden="true" />
                 <button type="button" class="android-icon-button" aria-label={t("shell.androidMore")} onClick={() => setAndroidMenuOpen(true)}>
                   <Icon name="more" size={20} />
                 </button>
@@ -685,12 +685,13 @@ export default function App() {
                   </button>
                 )}
               </For>
-              <span classList={{ "android-proxy-chip": true, running: proxy().status === "running", error: proxy().status === "error" }}>
-                {proxy().status === "running" ? t("dash.proxyStatusRunning")
-                  : proxy().status === "starting" ? t("dash.proxyStatusStarting")
-                  : proxy().status === "error" ? t("dash.proxyStatusError")
-                  : t("dash.proxyStatusStopped")}
-              </span>
+              {/* The stopped/error case is explained inside the dashboard card, so the
+                  row keeps a single "is it on?" chip instead of a second red status. */}
+              <Show when={proxy().status === "running" || proxy().status === "starting"}>
+                <span classList={{ "android-proxy-chip": true, running: proxy().status === "running" }}>
+                  {proxy().status === "running" ? t("dash.proxyStatusRunning") : t("dash.proxyStatusStarting")}
+                </span>
+              </Show>
             </div>
           </Show>
           <header class="topbar">
@@ -811,15 +812,19 @@ export default function App() {
             </For>
           </nav>
 
-          <button
-            type="button"
-            classList={{ "android-fab": true, running: proxy().status === "running" }}
-            aria-label={proxy().status === "running" ? t("shell.androidStop") : t("shell.androidStart")}
-            disabled={proxyBusy()}
-            onClick={() => { void (proxy().status === "running" ? handleStopProxy() : handleStartProxy()); }}
-          >
-            <Icon name={proxy().status === "running" ? "stop" : "play"} size={24} />
-          </button>
+          {/* The dashboard hero already carries the primary start/stop action, so the
+              floating button would only duplicate it and cover the chart card. */}
+          <Show when={active() !== "dashboard"}>
+            <button
+              type="button"
+              classList={{ "android-fab": true, running: proxy().status === "running" }}
+              aria-label={proxy().status === "running" ? t("shell.androidStop") : t("shell.androidStart")}
+              disabled={proxyBusy()}
+              onClick={() => { void (proxy().status === "running" ? handleStopProxy() : handleStartProxy()); }}
+            >
+              <Icon name={proxy().status === "running" ? "stop" : "play"} size={24} />
+            </button>
+          </Show>
 
           <Show when={androidMenuOpen()}>
             <div class="android-sheet-backdrop" onClick={() => setAndroidMenuOpen(false)} />
