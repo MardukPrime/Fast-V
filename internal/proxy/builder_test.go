@@ -66,8 +66,13 @@ func TestBuildConfigUsesSettingsAndNode(t *testing.T) {
 		t.Fatalf("unexpected mux config: %+v", mux)
 	}
 	stream := outbound["streamSettings"].(map[string]any)
-	if stream["method"] != "websocket" || stream["security"] != "tls" {
+	if stream["network"] != "websocket" || stream["security"] != "tls" {
 		t.Fatalf("unexpected stream settings: %+v", stream)
+	}
+	// Xray silently ignores unknown stream keys, so a typo here degrades the node
+	// to raw TCP without any error. Keep the old "method" key out for good.
+	if _, bad := stream["method"]; bad {
+		t.Fatalf("stream settings must not use the ignored \"method\" key: %+v", stream)
 	}
 
 	routing := config["routing"].(map[string]any)
@@ -1382,7 +1387,7 @@ func TestAntiDPIConfigPassesXrayValidation(t *testing.T) {
 	}
 }
 
-// TestCdnEndpointOverridesAddress covers the Cloudflare 优选 path: the pinned edge
+// TestCdnEndpointOverridesAddress covers the Cloudflare ä¼˜é€‰ path: the pinned edge
 // replaces the destination IP while the node keeps its domain for Host/SNI.
 func TestCdnEndpointOverridesAddress(t *testing.T) {
 	node := model.Node{
@@ -1406,7 +1411,7 @@ func TestCdnEndpointOverridesAddress(t *testing.T) {
 		t.Fatalf("edge not applied: %+v", settingsMap)
 	}
 	stream, _ := outbound["streamSettings"].(map[string]any)
-	if stream["method"] != "websocket" {
+	if stream["network"] != "websocket" {
 		t.Fatalf("transport changed unexpectedly: %+v", stream)
 	}
 	if wsSettings, _ := stream["wsSettings"].(map[string]any); wsSettings["host"] != "vless.example.com" {

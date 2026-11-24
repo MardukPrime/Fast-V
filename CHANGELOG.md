@@ -12,6 +12,10 @@ All notable changes to FastV are documented here.
 - 服务器页新增「Cloudflare 优选 IP」：从 Cloudflare anycast 网段抽样候选地址，并发测速后只保留**真正服务该节点域名**的边缘 IP（必须完成 TLS 握手并返回 HTTP 响应），一键固定到节点；节点域名与 Host/SNI 保持不变，只替换目标 IP，因此订阅刷新也不会丢失选择。
 - 连续两次探测失败时自动进入抗审查降级：启用 TLS 分片 + 随机指纹并重启代理，顶栏显示「抗审查降级」徽标。降级只作用于本次运行，不会改写用户保存的设置；可在设置中关闭。
 
+### Fixed
+
+- 传输层类型被写进 Xray 不认识的 `streamSettings.method` 键，导致 ws / grpc / xhttp / httpupgrade 节点全部退化成裸 TCP，永远连不上；因为 Xray 会静默忽略未知键，配置校验一直是通过的。现改为正确的 `streamSettings.network`，并在测试中断言不再出现 `method` 键。
+
 ### Internal
 
 - 新增 `internal/vpn`（不依赖 Wails、不依赖 cgo），配套端到端测试用内存 veth + 双 netstack 覆盖 TCP/UDP 转发路径。

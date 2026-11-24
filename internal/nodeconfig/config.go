@@ -342,7 +342,10 @@ func buildStreamSettings(cfg model.NodeConfig) map[string]any {
 	if security == "" {
 		security = "none"
 	}
-	stream := map[string]any{"method": network}
+	// Xray reads the transport from streamSettings.network; any other key is
+	// ignored without an error, which silently degrades ws/grpc/xhttp nodes to
+	// plain TCP and makes them unable to connect.
+	stream := map[string]any{"network": network}
 	if security != "none" {
 		stream["security"] = security
 	}

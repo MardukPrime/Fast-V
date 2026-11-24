@@ -1,4 +1,4 @@
-package nodeconfig
+﻿package nodeconfig
 
 import (
 	"encoding/base64"
@@ -74,7 +74,7 @@ func TestBuildOutboundUsesTransportAndSecurity(t *testing.T) {
 		t.Fatalf("unexpected protocol: %+v", outbound)
 	}
 	stream := outbound["streamSettings"].(map[string]any)
-	if stream["method"] != "websocket" || stream["security"] != "tls" {
+	if stream["network"] != "websocket" || stream["security"] != "tls" {
 		t.Fatalf("unexpected stream: %+v", stream)
 	}
 	ws := stream["wsSettings"].(map[string]any)
