@@ -1015,3 +1015,193 @@
     animation-duration: 0.001ms !important;
   }
 }
+
+/* ── shared page furniture (servers / subscriptions / routing / settings) ── */
+
+/* The 3-4 up stat strip cannot hold readable numbers at 360 px: let it scroll
+   horizontally instead of squeezing each tile. */
+.app-root.platform-android .mini-stats {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(108px, 1fr);
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.app-root.platform-android .mini-stats::-webkit-scrollbar {
+  height: 0;
+}
+
+.app-root.platform-android .mini-stat {
+  padding: 10px 12px;
+  border: 1px solid var(--m-stroke);
+  border-radius: 16px;
+  background: var(--m-glass-1);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  backdrop-filter: blur(16px) saturate(170%);
+  box-shadow: var(--m-shadow-card);
+}
+
+.app-root.platform-android .mini-stat span {
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--m-muted);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.app-root.platform-android .mini-stat strong {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.app-root.platform-android .mini-stat small {
+  font-size: 9.5px;
+  color: var(--m-faint);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Buttons: one consistent height/radius on the phone instead of the desktop
+   scale, and rows wrap instead of pushing each other off-screen. */
+.app-root.platform-android .btn {
+  height: 36px;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.app-root.platform-android .btn.primary,
+.app-root.platform-android .btn.secondary,
+.app-root.platform-android .btn.glass,
+.app-root.platform-android .btn.ghost {
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+.app-root.platform-android .btn.primary {
+  border: 0;
+  background: var(--m-accent-fill);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset, 0 12px 22px -14px color-mix(in srgb, var(--m-accent) 80%, transparent);
+}
+
+.app-root.platform-android .btn.danger-action {
+  border: 0;
+  background: linear-gradient(180deg, #f0a08a 0%, #cf6a4f 100%);
+  color: #fff;
+}
+
+.app-root.platform-android input,
+.app-root.platform-android select,
+.app-root.platform-android textarea {
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+
+.app-root.platform-android input[type="text"],
+.app-root.platform-android input[type="number"],
+.app-root.platform-android input[type="password"],
+.app-root.platform-android input:not([type]),
+.app-root.platform-android select {
+  height: 36px;
+  border: 1px solid var(--m-stroke-soft);
+  background: var(--m-glass-2);
+  color: var(--m-text);
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+/* Long explanatory copy sits behind the raised action button; keep the text
+   narrower than the card so nothing important is covered. */
+.app-root.platform-android .page-stack p,
+.app-root.platform-android .page-stack .hint,
+.app-root.platform-android .page-stack small {
+  line-height: 1.5;
+}
+
+.app-root.platform-android .page-stack .hint {
+  font-size: 11.5px;
+  color: var(--m-muted);
+}
+
+/* ── servers page ────────────────────────────────────────────────────────── */
+
+.app-root.platform-android .srv-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.app-root.platform-android .srv-search {
+  width: 100%;
+}
+
+.app-root.platform-android .srv-search input {
+  width: 100%;
+  height: 38px;
+}
+
+.app-root.platform-android .srv-filters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-root.platform-android .srv-filters::-webkit-scrollbar {
+  height: 0;
+}
+
+.app-root.platform-android .srv-filter-label,
+.app-root.platform-android .srv-filter-sep {
+  display: none;
+}
+
+.app-root.platform-android .srv-select {
+  flex: 0 0 auto;
+  min-width: 96px;
+  height: 32px;
+  font-size: 11.5px;
+}
+
+.app-root.platform-android .srv-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-right: 62px;
+}
+
+.app-root.platform-android .srv-tools .btn {
+  height: 34px;
+  font-size: 12px;
+}
+
+.app-root.platform-android .srv-table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-root.platform-android .srv-table-head,
+.app-root.platform-android .srv-row {
+  min-width: 540px;
+}
+
+.app-root.platform-android .srv-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
