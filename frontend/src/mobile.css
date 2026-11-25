@@ -24,30 +24,30 @@
   --m-nav-h: 58px;
   --m-safe-bottom: env(safe-area-inset-bottom, 0px);
 
-  --m-bg: #e4eaf3;
+  --m-bg: #e2e9f3;
   --m-text: #0e1a26;
   --m-text-soft: #3d4d5e;
   --m-muted: #64748b;
   --m-faint: #8b98a8;
 
-  --m-glass-1: linear-gradient(168deg, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.62) 100%);
-  --m-glass-2: linear-gradient(168deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.72) 100%);
-  --m-glass-flat: rgba(255, 255, 255, 0.55);
-  --m-stroke: rgba(255, 255, 255, 0.9);
-  --m-stroke-soft: rgba(120, 145, 170, 0.14);
-  --m-rim: rgba(255, 255, 255, 0.95);
+  --m-glass-1: linear-gradient(168deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.66) 100%);
+  --m-glass-2: linear-gradient(168deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0.78) 100%);
+  --m-glass-flat: rgba(255, 255, 255, 0.6);
+  --m-stroke: rgba(255, 255, 255, 0.92);
+  --m-stroke-soft: rgba(120, 145, 170, 0.16);
+  --m-rim: rgba(255, 255, 255, 0.96);
 
   --m-accent: #2f6f9f;
   --m-accent-2: #4a97cc;
   --m-accent-fill: linear-gradient(180deg, #4a97cc 0%, #2f6f9f 100%);
-  --m-accent-soft: rgba(47, 111, 159, 0.1);
+  --m-accent-soft: rgba(47, 111, 159, 0.12);
   --m-success: #2f8f63;
   --m-danger: #c0573f;
   --m-warning: #a5763a;
 
-  --m-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 20px 40px -26px rgba(18, 36, 58, 0.55);
-  --m-shadow-raise: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 26px 50px -30px rgba(23, 42, 64, 0.62);
-  --m-shadow-float: 0 10px 24px -10px rgba(23, 42, 64, 0.45);
+  --m-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 22px 44px -28px rgba(18, 36, 58, 0.55);
+  --m-shadow-raise: 0 1px 0 rgba(255, 255, 255, 1) inset, 0 30px 60px -32px rgba(18, 36, 58, 0.65);
+  --m-shadow-float: 0 12px 26px -10px rgba(18, 36, 58, 0.45);
 
   --m-blur: 26px;
   position: relative;
@@ -58,9 +58,9 @@
   letter-spacing: -0.005em;
   background: var(--m-bg);
   background-image:
-    radial-gradient(120% 62% at 6% -10%, rgba(120, 176, 226, 0.42), transparent 62%),
-    radial-gradient(90% 52% at 100% 6%, rgba(126, 205, 178, 0.3), transparent 60%),
-    radial-gradient(110% 60% at 50% 106%, rgba(238, 205, 165, 0.34), transparent 66%);
+    radial-gradient(120% 60% at 4% -12%, rgba(96, 158, 226, 0.55), transparent 62%),
+    radial-gradient(95% 55% at 102% 4%, rgba(96, 205, 170, 0.42), transparent 60%),
+    radial-gradient(110% 62% at 50% 108%, rgba(244, 196, 148, 0.48), transparent 66%);
   background-attachment: fixed;
 }
 
@@ -1340,8 +1340,13 @@
 
 .app-root.platform-android .dashboard-page .connection-hero {
   align-items: center;
-  padding: 16px 16px 14px;
+  padding: 14px 14px 12px;
   border-radius: 28px;
+  /* A soft light source at the top of the sheet; the accent tint is what keeps
+     the panel from reading as flat white paper. */
+  background:
+    radial-gradient(120% 70% at 50% -20%, color-mix(in srgb, var(--m-accent) 16%, transparent), transparent 62%),
+    var(--m-glass-1);
 }
 
 .app-root.platform-android .ah-head {
@@ -1392,12 +1397,13 @@
 }
 
 .app-root.platform-android .ah-orb {
+  --ah-ring-color: color-mix(in srgb, var(--m-accent) 80%, transparent);
   position: relative;
   display: grid;
   place-items: center;
-  width: 156px;
-  height: 156px;
-  margin: 14px 0 8px;
+  width: 138px;
+  height: 138px;
+  margin: 10px 0 6px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1412,18 +1418,22 @@
 
 .app-root.platform-android .ah-ring {
   position: absolute;
-  inset: 0;
+  inset: 1px;
   border-radius: 50%;
   opacity: 0;
   background: conic-gradient(
     from 0deg,
-    transparent 0 48%,
-    color-mix(in srgb, var(--m-accent) 75%, transparent) 74%,
+    transparent 0 40%,
+    var(--ah-ring-color) 68%,
     transparent 100%
   );
-  -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 78%);
-  mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+  -webkit-mask: radial-gradient(closest-side, transparent 93%, #000 94%);
+  mask: radial-gradient(closest-side, transparent 93%, #000 94%);
   transition: opacity 0.3s ease;
+}
+
+.app-root.platform-android .ah-orb.running {
+  --ah-ring-color: rgba(207, 106, 79, 0.85);
 }
 
 .app-root.platform-android .ah-orb.running .ah-ring {
@@ -1433,10 +1443,10 @@
 
 .app-root.platform-android .ah-halo {
   position: absolute;
-  inset: 6px;
+  inset: 8px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--m-accent) 40%, transparent), transparent 70%);
-  filter: blur(8px);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--m-accent) 55%, transparent), transparent 74%);
+  filter: blur(16px);
   opacity: 0.55;
 }
 
@@ -1448,8 +1458,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 112px;
-  height: 112px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
   background: var(--m-accent-fill);
   color: #fff;
@@ -1458,10 +1468,10 @@
 }
 
 .app-root.platform-android .ah-orb.idle .ah-core {
-  border: 1px solid var(--m-stroke);
-  background: var(--m-glass-2);
+  border: 1px solid color-mix(in srgb, var(--m-accent) 26%, transparent);
+  background: linear-gradient(180deg, #f2f8fd 0%, #d9e9f6 100%);
   color: var(--m-accent);
-  box-shadow: 0 1px 0 var(--m-rim) inset, 0 14px 28px -20px rgba(23, 42, 64, 0.7);
+  box-shadow: 0 1px 0 #ffffff inset, 0 16px 30px -18px color-mix(in srgb, var(--m-accent) 55%, transparent);
 }
 
 .app-root.platform-android .ah-orb.running .ah-core {
@@ -1506,12 +1516,12 @@
 .app-root.platform-android .ah-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
   width: 100%;
-  margin: 14px 0 10px;
-  padding: 10px 0;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--m-text) 4%, transparent);
+  margin: 8px 0 8px;
+  padding: 8px 0;
+  border-radius: 15px;
+  border: 1px solid var(--m-stroke-soft);
+  background: color-mix(in srgb, var(--m-text) 3%, transparent);
 }
 
 .app-root.platform-android .ah-metrics > div {
@@ -1520,6 +1530,11 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
+  border-left: 1px solid var(--m-stroke-soft);
+}
+
+.app-root.platform-android .ah-metrics > div:first-child {
+  border-left: 0;
 }
 
 .app-root.platform-android .ah-metrics span {
@@ -1550,7 +1565,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 40px;
+  height: 38px;
   padding: 0 10px;
   border: 1px solid var(--m-stroke-soft);
   border-radius: 13px;
@@ -1578,7 +1593,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-root.platform-android .ah-orb.running .ah-ring {
-    animation: none;
-  }
+  .app-root.platform-android .ah-orb.running {
+  --ah-ring-color: rgba(207, 106, 79, 0.85);
+}
+
+.app-root.platform-android .ah-orb.running .ah-ring {
+  opacity: 1;
+  animation: ah-spin 3.8s linear infinite;
 }
