@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,9 @@ import (
 )
 
 const storeVersion = 12
+
+// utf8BOM is the byte order mark Windows editors like to prepend to UTF-8 JSON.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // History retention limits. Traffic is aggregated per local calendar day and
 // latency samples keep the newest entries; both are exposed by the services so
@@ -96,6 +100,30 @@ type Store struct {
 	mu   sync.RWMutex
 	path string
 	data storeData
+	// loadNotice explains why a freshly loaded store fell back to defaults (for
+	// example an unparsable data file that was quarantined). Empty on a normal
+	// load and meant to be surfaced once in the UI/log.
+	loadNotice string
+}
+
+// LoadNotice returns the warning produced while loading the store, if any.
+func (s *Store) LoadNotice() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.loadNotice
+}
+
+// quarantineCorruptFile moves an unparsable data file aside so the next save
+// starts clean without destroying whatever the user had.
+func (s *Store) quarantineCorruptFile() (string, error) {
+	backup := s.path + ".corrupt-" + time.Now().Format("20060102-150405")
+	if err := os.Rename(s.path, backup); err != nil {
+		return "", err
+	}
+	return backup, nil
 }
 
 func DefaultSettings() Settings {
@@ -211,16 +239,28 @@ func NewStoreAt(path string) (*Store, error) {
 	}
 	raw, err := os.ReadFile(s.path)
 	if err == nil {
+		// Windows editors happily prepend a UTF-8 BOM; encoding/json rejects it,
+		// and a failed load aborts startup, so the app would die without saying
+		// why. Strip it before decoding.
+		raw = bytes.TrimPrefix(raw, utf8BOM)
 		var loaded storeData
 		if err := json.Unmarshal(raw, &loaded); err != nil {
-			return nil, err
+			// A hand-edited or truncated file should never brick the app: keep the
+			// broken file for the user and start from defaults instead.
+			backup, backupErr := s.quarantineCorruptFile()
+			if backupErr != nil {
+				return nil, err
+			}
+			s.loadNotice = fmt.Sprintf("数据文件无法解析（%v），已备份为 %s，本次以默认配置启动", err, filepath.Base(backup))
+			log.Printf("[store] %s", s.loadNotice)
+		} else {
+			// Sensitive settings are persisted protected, so decrypt them before the
+			// normal migration/normalization. The in-memory model always holds
+			// plaintext; a value that cannot be decrypted (foreign Windows user or
+			// machine, corruption) is cleared instead of failing the whole load.
+			loaded.Settings = decryptSettingsSecrets(loaded.Settings)
+			s.data = mergeStoreData(loaded)
 		}
-		// Sensitive settings are persisted protected, so decrypt them before the
-		// normal migration/normalization. The in-memory model always holds
-		// plaintext; a value that cannot be decrypted (foreign Windows user or
-		// machine, corruption) is cleared instead of failing the whole load.
-		loaded.Settings = decryptSettingsSecrets(loaded.Settings)
-		s.data = mergeStoreData(loaded)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}

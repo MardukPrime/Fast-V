@@ -124,6 +124,11 @@ func Run(assets embed.FS) (runErr error) {
 		logger.WriteLine("info", "app", fmt.Sprintf(
 			"FastV 启动: 版本=%s commit=%s 构建时间=%s 平台=%s/%s 数据目录=%s",
 			buildinfo.Version, buildinfo.Commit, buildinfo.BuildDate, runtime.GOOS, runtime.GOARCH, st.DataDir()))
+		// A store that fell back to defaults (unparsable data file) must say so,
+		// otherwise the user silently loses their nodes and settings.
+		if notice := st.LoadNotice(); notice != "" {
+			logger.WriteLine("warning", "store", notice)
+		}
 		proxySvc.SetLogSink(logger.WriteEntry)
 	}
 

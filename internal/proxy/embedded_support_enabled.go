@@ -7,7 +7,10 @@ import (
 )
 
 func init() {
-	embeddedStart = func(config []byte) (embeddedInstance, error) {
-		return embedded.Start(config)
+	embeddedStart = func(config []byte, sink func(level, message string)) (embeddedInstance, error) {
+		if sink == nil {
+			return embedded.Start(config)
+		}
+		return embedded.StartWithSink(config, embedded.Sink(sink))
 	}
 }

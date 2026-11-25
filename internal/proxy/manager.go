@@ -863,7 +863,9 @@ func (m *Manager) startEmbeddedCore(ctx context.Context, config []byte) (model.P
 	if removed > 0 {
 		m.appendLog("warning", "core", fmt.Sprintf("内嵌内核缺少 GeoIP/GeoSite 数据集，已跳过 %d 条 Geo 路由条件", removed))
 	}
-	instance, err := embeddedStart(cleanConfig)
+	instance, err := embeddedStart(cleanConfig, func(level, message string) {
+		m.appendLog(level, "xray", message)
+	})
 	if err != nil {
 		return m.fail(fmt.Sprintf("内嵌 Xray-core 启动失败: %v", err))
 	}

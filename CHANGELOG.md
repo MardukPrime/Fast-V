@@ -15,6 +15,8 @@ All notable changes to FastV are documented here.
 ### Fixed
 
 - 传输层类型被写进 Xray 不认识的 `streamSettings.method` 键，导致 ws / grpc / xhttp / httpupgrade 节点全部退化成裸 TCP，永远连不上；因为 Xray 会静默忽略未知键，配置校验一直是通过的。现改为正确的 `streamSettings.network`，并在测试中断言不再出现 `method` 键。
+- 数据文件带 UTF-8 BOM（Windows 编辑器常见）或内容损坏时，App 会启动即退出且不留任何提示。现在会先剥离 BOM；确实无法解析时把原文件备份为 `data.json.corrupt-<时间戳>`，以默认配置继续启动，并在日志里写明原因和备份文件名。
+- 内嵌 Xray 内核的日志原先写到标准输出，在 Android 上等于丢弃。现在接入 App 日志（来源标记 `xray`），拨号失败、TLS 握手、被拒绝的用户等内核错误都能直接看到。
 
 ### Internal
 
