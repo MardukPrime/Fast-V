@@ -3,6 +3,7 @@ import { render } from "solid-js/web";
 import App from "./App";
 import FloatBall from "./pages/FloatBall";
 import "./styles.css";
+import "./mobile.css";
 
 const root = document.getElementById("root");
 
