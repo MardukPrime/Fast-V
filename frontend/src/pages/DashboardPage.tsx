@@ -23,6 +23,9 @@ type DashboardProps = {
   onTestProxy: () => void;
   onNavigate: (page: string) => void;
   onLiveWaveStyleChange: (style: string) => void;
+  /** True when the shell runs inside the Android WebView; the hero then uses the
+   *  big power-orb layout instead of the desktop card. */
+  android?: boolean;
 };
 
 function proxyModeLabel(mode: string) {
@@ -467,6 +470,8 @@ export default function DashboardPage(props: DashboardProps) {
   return (
     <div class="page-stack dashboard-page">
       <section classList={{ "connection-hero": true, "dash-hero": true, empty: heroNeedsNode(), running: isRunning(), error: props.proxyState.status === "error" && !heroNeedsNode() }}>
+        <Show when={props.android} fallback={
+          <>
         <div class="connection-glow" />
         <div class="connection-main">
           <div classList={{ "connection-orb": true, running: isRunning() }}>
@@ -556,6 +561,74 @@ export default function DashboardPage(props: DashboardProps) {
             </button>
           </Show>
         </div>
+          </>
+        }>
+          {/* Android: one big power control instead of a form-like card. The orb
+              is the only primary action, so the state, node and traffic read as
+              a device panel rather than a settings form. */}
+          <div class="ah-head">
+            <span classList={{ "ah-dot": true, on: isRunning() }} />
+            <span class="ah-state">{heroNeedsNode() ? t("dash.statusNeedsNode") : proxyStatusLabel(props.proxyState.status)}</span>
+            <span class="ah-pill">{proxyModeLabel(props.settings?.proxyMode ?? "rule")}</span>
+            <Show when={props.settings?.tunMode}><span class="ah-pill warn">TUN</span></Show>
+          </div>
+
+          <button
+            type="button"
+            classList={{ "ah-orb": true, running: isRunning(), idle: !isRunning(), empty: heroNeedsNode() }}
+            disabled={props.proxyBusy || heroNeedsNode() || (!isRunning() && !canStart())}
+            aria-label={isRunning() ? t("dash.stopProxy") : t("dash.startProxy")}
+            onClick={() => { void (isRunning() ? props.onStopProxy() : props.onStartProxy()); }}
+          >
+            <span class="ah-ring" aria-hidden="true" />
+            <span class="ah-halo" aria-hidden="true" />
+            <span class="ah-core">
+              <Icon name={isRunning() ? "stop" : "play"} size={40} />
+            </span>
+          </button>
+
+          <div class="ah-caption">
+            <strong>{heroNodeName()}</strong>
+            <Show when={heroHasNode()} fallback={<span class="ah-sub">{t("dash.emptyBody")}</span>}>
+              <span class="ah-sub">
+                {isRunning()
+                  ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
+                  : `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`}
+              </span>
+            </Show>
+            <span class="ah-timer">
+              {isRunning()
+                ? t("dash.runningFor", { duration: formatUptime(props.proxyState.startedAt, clock()) })
+                : t("dash.inboundIdle")}
+            </span>
+          </div>
+
+          <Show when={!heroNeedsNode()}>
+            <div class="ah-metrics">
+              <div><span>↓</span><strong>{downlinkRateLabel()}</strong></div>
+              <div><span>↑</span><strong>{uplinkRateLabel()}</strong></div>
+              <div><span>{t("dash.metricSession")}</span><strong>{sessionTotalLabel()}</strong></div>
+            </div>
+            <div class="ah-chips">
+              <button class="ah-chip" onClick={props.onTestProxy} disabled={props.proxyBusy || !isRunning()}>
+                <Icon name="speed" size={14} /> {t("dash.test")}
+              </button>
+              <button class="ah-chip" onClick={() => props.onNavigate("servers")}>
+                <Icon name="server" size={14} /> {t("dash.switchNode")}
+              </button>
+            </div>
+          </Show>
+          <Show when={heroNeedsNode()}>
+            <div class="ah-chips">
+              <button class="ah-chip accent" onClick={() => props.onNavigate("servers")}>
+                <Icon name="server" size={14} /> {t("dash.selectNode")}
+              </button>
+              <button class="ah-chip" onClick={() => props.onNavigate("subscriptions")}>
+                <Icon name="download" size={14} /> {t("dash.emptyImport")}
+              </button>
+            </div>
+          </Show>
+        </Show>
 
         <Show when={isRunning()} fallback={
           <div class="dash-idle-hint"><Icon name="speed" size={13} /> {t("dash.liveTrafficIdle")}</div>

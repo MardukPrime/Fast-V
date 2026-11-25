@@ -772,6 +772,7 @@ export default function App() {
               onTestProxy={handleTestProxy}
               onNavigate={(page) => setActive(page as PageKey)}
               onLiveWaveStyleChange={(style) => { void handleLiveWaveStyleChange(style); }}
+              android={isAndroidPlatform()}
             />
           </Show>
           <Show when={active() === "servers"}>

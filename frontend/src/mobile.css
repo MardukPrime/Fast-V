@@ -1336,3 +1336,249 @@
 .app-root.platform-android .page-stack {
   padding-bottom: 8px;
 }
+/* ── Android hero: power-orb panel ───────────────────────────────────────── */
+
+.app-root.platform-android .dashboard-page .connection-hero {
+  align-items: center;
+  padding: 16px 16px 14px;
+  border-radius: 28px;
+}
+
+.app-root.platform-android .ah-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+}
+
+.app-root.platform-android .ah-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--m-faint);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.app-root.platform-android .ah-dot.on {
+  background: var(--m-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--m-success) 18%, transparent);
+}
+
+.app-root.platform-android .ah-state {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--m-text-soft);
+}
+
+.app-root.platform-android .ah-pill {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--m-stroke-soft);
+  border-radius: var(--m-radius-pill);
+  background: var(--m-glass-flat);
+  color: var(--m-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.app-root.platform-android .ah-pill.warn {
+  margin-left: 6px;
+  color: var(--m-warning);
+}
+
+.app-root.platform-android .ah-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 156px;
+  height: 156px;
+  margin: 14px 0 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-root.platform-android .ah-orb:active .ah-core {
+  transform: scale(0.97);
+}
+
+.app-root.platform-android .ah-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 48%,
+    color-mix(in srgb, var(--m-accent) 75%, transparent) 74%,
+    transparent 100%
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+  mask: radial-gradient(closest-side, transparent 77%, #000 78%);
+  transition: opacity 0.3s ease;
+}
+
+.app-root.platform-android .ah-orb.running .ah-ring {
+  opacity: 1;
+  animation: ah-spin 3.8s linear infinite;
+}
+
+.app-root.platform-android .ah-halo {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--m-accent) 40%, transparent), transparent 70%);
+  filter: blur(8px);
+  opacity: 0.55;
+}
+
+.app-root.platform-android .ah-orb.idle .ah-halo {
+  opacity: 0.22;
+}
+
+.app-root.platform-android .ah-core {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: var(--m-accent-fill);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 20px 36px -16px color-mix(in srgb, var(--m-accent) 85%, transparent);
+  transition: transform 0.16s ease, background 0.25s ease;
+}
+
+.app-root.platform-android .ah-orb.idle .ah-core {
+  border: 1px solid var(--m-stroke);
+  background: var(--m-glass-2);
+  color: var(--m-accent);
+  box-shadow: 0 1px 0 var(--m-rim) inset, 0 14px 28px -20px rgba(23, 42, 64, 0.7);
+}
+
+.app-root.platform-android .ah-orb.running .ah-core {
+  background: linear-gradient(180deg, #f2a48c 0%, #cf6a4f 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset, 0 20px 36px -16px rgba(207, 106, 79, 0.75);
+}
+
+.app-root.platform-android .ah-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  text-align: center;
+}
+
+.app-root.platform-android .ah-caption strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--m-text);
+}
+
+.app-root.platform-android .ah-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--m-muted);
+}
+
+.app-root.platform-android .ah-timer {
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--m-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-root.platform-android .ah-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  width: 100%;
+  margin: 14px 0 10px;
+  padding: 10px 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--m-text) 4%, transparent);
+}
+
+.app-root.platform-android .ah-metrics > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-root.platform-android .ah-metrics span {
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--m-muted);
+  letter-spacing: 0.01em;
+}
+
+.app-root.platform-android .ah-metrics strong {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--m-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.app-root.platform-android .ah-chips {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-root.platform-android .ah-chip {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--m-stroke-soft);
+  border-radius: 13px;
+  background: var(--m-glass-2);
+  color: var(--m-text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+.app-root.platform-android .ah-chip.accent {
+  border: 0;
+  background: var(--m-accent-fill);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset, 0 14px 26px -16px color-mix(in srgb, var(--m-accent) 80%, transparent);
+}
+
+.app-root.platform-android .ah-chip:disabled {
+  opacity: 0.5;
+}
+
+@keyframes ah-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-root.platform-android .ah-orb.running .ah-ring {
+    animation: none;
+  }
+}
