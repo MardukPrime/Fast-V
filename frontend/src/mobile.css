@@ -65,35 +65,38 @@
 }
 
 :root[data-theme="dark"] .app-root.platform-android {
-  --m-bg: #070b11;
-  --m-text: #eef3f9;
-  --m-text-soft: #c7d2df;
-  --m-muted: #93a2b4;
-  --m-faint: #6d7c8f;
+  --m-bg: #070b14;
+  --m-text: #eaf1fa;
+  --m-text-soft: #c3d0e0;
+  --m-muted: #8d9db2;
+  --m-faint: #6b7b90;
 
-  --m-glass-1: linear-gradient(168deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.055) 100%);
-  --m-glass-2: linear-gradient(168deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.08) 100%);
-  --m-glass-flat: rgba(255, 255, 255, 0.07);
-  --m-stroke: rgba(255, 255, 255, 0.16);
-  --m-stroke-soft: rgba(255, 255, 255, 0.09);
-  --m-rim: rgba(255, 255, 255, 0.24);
+  --m-glass-1: linear-gradient(168deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.06) 100%);
+  --m-glass-2: linear-gradient(168deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.09) 100%);
+  --m-glass-flat: rgba(255, 255, 255, 0.08);
+  --m-stroke: rgba(255, 255, 255, 0.18);
+  --m-stroke-soft: rgba(255, 255, 255, 0.1);
+  --m-rim: rgba(255, 255, 255, 0.3);
 
-  --m-accent: #8cc8ef;
-  --m-accent-2: #b6dcf7;
-  --m-accent-fill: linear-gradient(180deg, #93cdf2 0%, #6aa9d4 100%);
-  --m-accent-soft: rgba(140, 200, 239, 0.14);
-  --m-success: #74d3a4;
+  --m-accent: #8ccbf5;
+  --m-accent-2: #bfe3fb;
+  --m-accent-fill: linear-gradient(180deg, #63b4ea 0%, #2b6ea8 100%);
+  --m-accent-soft: rgba(140, 203, 245, 0.16);
+  --m-success: #6fd6a4;
   --m-danger: #f0a08e;
-  --m-warning: #e2bc82;
+  --m-warning: #e6c088;
 
-  --m-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.12) inset, 0 22px 44px -28px rgba(0, 0, 0, 0.9);
-  --m-shadow-raise: 0 1px 0 rgba(255, 255, 255, 0.16) inset, 0 30px 60px -32px rgba(0, 0, 0, 0.95);
-  --m-shadow-float: 0 12px 26px -12px rgba(0, 0, 0, 0.8);
+  --m-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 24px 48px -30px rgba(0, 0, 0, 0.95);
+  --m-shadow-raise: 0 1px 0 rgba(255, 255, 255, 0.16) inset, 0 32px 64px -34px rgba(0, 0, 0, 1);
+  --m-shadow-float: 0 12px 26px -12px rgba(0, 0, 0, 0.85);
+
+  --ah-idle-top: #1b3752;
+  --ah-idle-bottom: #0d2033;
 
   background-image:
-    radial-gradient(120% 62% at 4% -12%, rgba(38, 92, 158, 0.55), transparent 62%),
-    radial-gradient(90% 54% at 102% 4%, rgba(74, 58, 116, 0.42), transparent 60%),
-    radial-gradient(110% 62% at 50% 108%, rgba(26, 74, 92, 0.5), transparent 66%);
+    radial-gradient(120% 60% at 2% -14%, rgba(58, 102, 220, 0.6), transparent 60%),
+    radial-gradient(95% 55% at 104% 2%, rgba(126, 70, 210, 0.5), transparent 58%),
+    radial-gradient(115% 64% at 52% 110%, rgba(22, 118, 140, 0.55), transparent 66%);
 }
 
 /* The desktop shell paints its own background layers on body; on Android the
@@ -1468,10 +1471,10 @@
 }
 
 .app-root.platform-android .ah-orb.idle .ah-core {
-  border: 1px solid color-mix(in srgb, var(--m-accent) 26%, transparent);
-  background: linear-gradient(180deg, #f2f8fd 0%, #d9e9f6 100%);
+  border: 1px solid color-mix(in srgb, var(--m-accent) 30%, transparent);
+  background: linear-gradient(180deg, var(--ah-idle-top, #f2f8fd) 0%, var(--ah-idle-bottom, #d9e9f6) 100%);
   color: var(--m-accent);
-  box-shadow: 0 1px 0 #ffffff inset, 0 16px 30px -18px color-mix(in srgb, var(--m-accent) 55%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent) inset, 0 16px 30px -18px color-mix(in srgb, var(--m-accent) 55%, transparent);
 }
 
 .app-root.platform-android .ah-orb.running .ah-core {
@@ -1600,4 +1603,218 @@
 .app-root.platform-android .ah-orb.running .ah-ring {
   opacity: 1;
   animation: ah-spin 3.8s linear infinite;
+}
+
+/* ── Android hero: gradient header + light sheet (reference layout) ───────── */
+
+.app-root.platform-android .ah-hero {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 30px;
+  background: var(--m-glass-2);
+  box-shadow: var(--m-shadow-card);
+  overflow: hidden;
+}
+
+.app-root.platform-android .ah-hero-top {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 18px 46px;
+  color: #fff;
+  background: linear-gradient(158deg, #7ea9f7 0%, #5484ea 52%, #3f6cda 100%);
+  /* The reference cuts the header with a shallow arc instead of a straight line. */
+  border-radius: 0 0 50% 50% / 0 0 34px 34px;
+}
+
+:root[data-theme="dark"] .app-root.platform-android .ah-hero-top {
+  background: linear-gradient(158deg, #3a63b8 0%, #2b4a8f 55%, #22376b 100%);
+}
+
+.app-root.platform-android .ah-hero-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.app-root.platform-android .ah-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.app-root.platform-android .ah-dot.on {
+  background: #b9f4d4;
+  box-shadow: 0 0 0 4px rgba(185, 244, 212, 0.22);
+}
+
+.app-root.platform-android .ah-state {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-root.platform-android .ah-mode-pill {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: var(--m-radius-pill);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.app-root.platform-android .ah-proto {
+  margin-top: 10px;
+  padding: 3px 11px;
+  border-radius: var(--m-radius-pill);
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.app-root.platform-android .ah-timer {
+  margin-top: 2px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(28, 54, 110, 0.28);
+}
+
+.app-root.platform-android .ah-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.app-root.platform-android .ah-split > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.app-root.platform-android .ah-split span {
+  font-size: 10px;
+  font-weight: 550;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.01em;
+}
+
+.app-root.platform-android .ah-split strong {
+  font-size: 13.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.app-root.platform-android .ah-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  margin-top: -26px;
+  border-radius: 26px 26px 0 0;
+  background: var(--m-glass-1);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+.app-root.platform-android .ah-node-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--m-stroke-soft);
+  border-radius: 14px;
+  background: var(--m-glass-2);
+  color: var(--m-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+.app-root.platform-android .ah-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-root.platform-android .ah-node-row svg {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+
+.app-root.platform-android .ah-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.app-root.platform-android .ah-btn {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--m-stroke-soft);
+  border-radius: 14px;
+  background: var(--m-glass-2);
+  color: var(--m-text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+.app-root.platform-android .ah-btn.primary {
+  border: 0;
+  background: var(--m-accent-fill);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 14px 26px -16px color-mix(in srgb, var(--m-accent) 80%, transparent);
+}
+
+.app-root.platform-android .ah-btn.primary.stop {
+  background: linear-gradient(180deg, #f2a48c 0%, #cf6a4f 100%);
+}
+
+.app-root.platform-android .ah-btn:disabled {
+  opacity: 0.55;
+}
+
+.app-root.platform-android .ah-icon-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.app-root.platform-android .ah-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--m-stroke-soft);
+  border-radius: 50%;
+  background: var(--m-glass-flat);
+  color: var(--m-text-soft);
+  box-shadow: 0 1px 0 var(--m-rim) inset;
+}
+
+.app-root.platform-android .ah-icon:active {
+  color: var(--m-accent);
 }

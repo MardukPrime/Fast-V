@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+﻿import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 
 import { Events } from "@wailsio/runtime";
 
@@ -563,71 +563,61 @@ export default function DashboardPage(props: DashboardProps) {
         </div>
           </>
         }>
-          {/* Android: one big power control instead of a form-like card. The orb
-              is the only primary action, so the state, node and traffic read as
-              a device panel rather than a settings form. */}
-          <div class="ah-head">
-            <span classList={{ "ah-dot": true, on: isRunning() }} />
-            <span class="ah-state">{heroNeedsNode() ? t("dash.statusNeedsNode") : proxyStatusLabel(props.proxyState.status)}</span>
-            <span class="ah-pill">{proxyModeLabel(props.settings?.proxyMode ?? "rule")}</span>
-            <Show when={props.settings?.tunMode}><span class="ah-pill warn">TUN</span></Show>
-          </div>
-
-          <button
-            type="button"
-            classList={{ "ah-orb": true, running: isRunning(), idle: !isRunning(), empty: heroNeedsNode() }}
-            disabled={props.proxyBusy || heroNeedsNode() || (!isRunning() && !canStart())}
-            aria-label={isRunning() ? t("dash.stopProxy") : t("dash.startProxy")}
-            onClick={() => { void (isRunning() ? props.onStopProxy() : props.onStartProxy()); }}
-          >
-            <span class="ah-ring" aria-hidden="true" />
-            <span class="ah-halo" aria-hidden="true" />
-            <span class="ah-core">
-              <Icon name={isRunning() ? "stop" : "play"} size={40} />
-            </span>
-          </button>
-
-          <div class="ah-caption">
-            <strong>{heroNodeName()}</strong>
-            <Show when={heroHasNode()} fallback={<span class="ah-sub">{t("dash.emptyBody")}</span>}>
-              <span class="ah-sub">
-                {isRunning()
-                  ? `${props.proxyState.nodeProtocol.toUpperCase()} · ${props.proxyState.nodeAddress}:${props.proxyState.nodePort}`
-                  : `${activeNode()!.protocol.toUpperCase()} · ${activeNode()!.address}:${activeNode()!.port}`}
+          {/* Android: the phone shell follows the reference layout the user picked —
+              a gradient header with the timer as the focal number, and a light
+              sheet underneath holding the node and the two actions. */}
+          <div class="ah-hero">
+            <div class="ah-hero-top">
+              <div class="ah-hero-bar">
+                <span classList={{ "ah-dot": true, on: isRunning() }} />
+                <span class="ah-state">{heroNeedsNode() ? t("dash.statusNeedsNode") : proxyStatusLabel(props.proxyState.status)}</span>
+                <span class="ah-mode-pill">{proxyModeLabel(props.settings?.proxyMode ?? "rule")}</span>
+              </div>
+              <span class="ah-proto">
+                {heroHasNode() ? (isRunning() ? props.proxyState.nodeProtocol : activeNode()!.protocol).toUpperCase() : "—"}
               </span>
-            </Show>
-            <span class="ah-timer">
-              {isRunning()
-                ? t("dash.runningFor", { duration: formatUptime(props.proxyState.startedAt, clock()) })
-                : t("dash.inboundIdle")}
-            </span>
+              <strong class="ah-timer">{isRunning() ? formatUptime(props.proxyState.startedAt, clock()) : "00:00:00"}</strong>
+              <div class="ah-split">
+                <div>
+                  <span>↓ {t("dash.downloaded")}</span>
+                  <strong>{formatBytes(traffic()?.totalDownlinkBytes ?? 0)}</strong>
+                </div>
+                <div>
+                  <span>↑ {t("dash.uploaded")}</span>
+                  <strong>{formatBytes(traffic()?.totalUplinkBytes ?? 0)}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="ah-sheet">
+              <button class="ah-node-row" onClick={() => props.onNavigate("servers")}>
+                <span class="ah-node-name">{heroNodeName()}</span>
+                <Icon name="chevron" size={16} />
+              </button>
+              <div class="ah-actions">
+                <Show when={heroNeedsNode()} fallback={
+                  <button
+                    classList={{ "ah-btn": true, primary: true, stop: isRunning() }}
+                    disabled={props.proxyBusy || (!isRunning() && !canStart())}
+                    onClick={() => { void (isRunning() ? props.onStopProxy() : props.onStartProxy()); }}
+                  >
+                    {props.proxyBusy
+                      ? (isRunning() ? t("dash.stopping") : t("dash.starting"))
+                      : (isRunning() ? t("dash.stopProxy") : t("dash.startProxy"))}
+                  </button>
+                }>
+                  <button class="ah-btn primary" onClick={() => props.onNavigate("servers")}>{t("dash.selectNode")}</button>
+                </Show>
+                <button class="ah-btn" disabled={props.proxyBusy || !isRunning()} onClick={props.onTestProxy}>
+                  {t("dash.test")}
+                </button>
+              </div>
+              <div class="ah-icon-row">
+                <button class="ah-icon" aria-label={t("dash.switchNode")} onClick={() => props.onNavigate("servers")}><Icon name="server" size={17} /></button>
+                <button class="ah-icon" aria-label={t("shell.nav.routing")} onClick={() => props.onNavigate("routing")}><Icon name="route" size={17} /></button>
+                <button class="ah-icon" aria-label={t("shell.nav.logs")} onClick={() => props.onNavigate("logs")}><Icon name="logs" size={17} /></button>
+              </div>
+            </div>
           </div>
-
-          <Show when={!heroNeedsNode()}>
-            <div class="ah-metrics">
-              <div><span>↓</span><strong>{downlinkRateLabel()}</strong></div>
-              <div><span>↑</span><strong>{uplinkRateLabel()}</strong></div>
-              <div><span>{t("dash.metricSession")}</span><strong>{sessionTotalLabel()}</strong></div>
-            </div>
-            <div class="ah-chips">
-              <button class="ah-chip" onClick={props.onTestProxy} disabled={props.proxyBusy || !isRunning()}>
-                <Icon name="speed" size={14} /> {t("dash.test")}
-              </button>
-              <button class="ah-chip" onClick={() => props.onNavigate("servers")}>
-                <Icon name="server" size={14} /> {t("dash.switchNode")}
-              </button>
-            </div>
-          </Show>
-          <Show when={heroNeedsNode()}>
-            <div class="ah-chips">
-              <button class="ah-chip accent" onClick={() => props.onNavigate("servers")}>
-                <Icon name="server" size={14} /> {t("dash.selectNode")}
-              </button>
-              <button class="ah-chip" onClick={() => props.onNavigate("subscriptions")}>
-                <Icon name="download" size={14} /> {t("dash.emptyImport")}
-              </button>
-            </div>
-          </Show>
         </Show>
 
         <Show when={isRunning()} fallback={
