@@ -584,11 +584,20 @@
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 7px;
+  gap: 6px;
   font-size: 11.5px;
   font-weight: 550;
   color: var(--m-muted);
   letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Items may not shrink: shrinking is what folded the label and each style
+   button into vertical single-character columns at 360 px. */
+.app-root.platform-android .dashboard-page .dash-live-wave-head > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .app-root.platform-android .dashboard-page .dash-live-dot {
@@ -611,7 +620,7 @@
 
 .app-root.platform-android .dashboard-page .dash-wave-style-btn {
   height: 20px;
-  padding: 0 7px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--m-radius-pill);
   background: transparent;
@@ -619,6 +628,7 @@
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .app-root.platform-android .dashboard-page .dash-wave-style-btn.active {
