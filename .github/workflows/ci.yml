@@ -157,6 +157,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Without a cached keystore every run signs the debug APK with a fresh key,
+      # so installing a newer build over an older one fails with
+      # INSTALL_FAILED_UPDATE_INCOMPATIBLE and silently keeps the old UI.
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Setup Android SDK and NDK
         run: |
           set -euo pipefail
